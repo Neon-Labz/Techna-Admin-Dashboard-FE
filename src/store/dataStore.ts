@@ -27,7 +27,7 @@ const SAMPLE_TEACHERS: Teacher[] = [
 
 const SAMPLE_STUDENTS: Student[] = [
   {
-    id: 's1', studentId: 'May24#0001', name: 'Kasun Perera', email: 'kasun@gmail.com', phone: '+94 77 555 6666',
+    id: 's1', studentId: 'May24#0001', qrToken: 'qr-s1-a1b2c3d4', name: 'Kasun Perera', email: 'kasun@gmail.com', phone: '+94 77 555 6666',
     address: 'Gampaha', dob: '2005-03-15', batch: 'May 2024 Batch', modules: ['m1', 'm2'],
     status: 'approved', enrolledAt: '2024-05-01', approvedAt: '2024-05-02',
     attendance: [
@@ -39,7 +39,7 @@ const SAMPLE_STUDENTS: Student[] = [
     ],
   },
   {
-    id: 's2', studentId: 'May24#0002', name: 'Nimasha Fernando', email: 'nimasha@gmail.com', phone: '+94 76 777 8888',
+    id: 's2', studentId: 'May24#0002', qrToken: 'qr-s2-e5f6g7h8', name: 'Nimasha Fernando', email: 'nimasha@gmail.com', phone: '+94 76 777 8888',
     address: 'Kandy', dob: '2006-07-22', batch: 'May 2024 Batch', modules: ['m1', 'm3'],
     status: 'pending', enrolledAt: '2024-05-10',
     attendance: [],
@@ -63,12 +63,13 @@ interface DataStore {
   updateTeacher: (id: string, t: Partial<Teacher>) => void;
   deleteTeacher: (id: string) => void;
   // Students
-  addStudent: (s: Omit<Student, 'id' | 'studentId' | 'attendance' | 'payments'>) => void;
+  addStudent: (s: Omit<Student, 'id' | 'studentId' | 'qrToken' | 'attendance' | 'payments'>) => void;
   updateStudent: (id: string, s: Partial<Student>) => void;
   deleteStudent: (id: string) => void;
   approveStudent: (id: string) => void;
   updateAttendance: (studentId: string, moduleId: string, date: string, status: 'present' | 'absent') => void;
   addPayment: (studentId: string, payment: Omit<PaymentRecord, 'id'>) => void;
+  updatePayment: (studentId: string, paymentId: string, data: Partial<PaymentRecord>) => void;
   // Modules
   addModule: (m: Omit<Module, 'id' | 'videos'>) => void;
   updateModule: (id: string, m: Partial<Module>) => void;
@@ -97,7 +98,8 @@ export const useDataStore = create<DataStore>()(
       addStudent: (s) => set(state => {
         const id = `s-${uuidv4()}`;
         const studentId = generateStudentId(s.batch);
-        return { students: [...state.students, { ...s, id, studentId, attendance: [], payments: [] }] };
+        const qrToken = `qr-${uuidv4()}`;
+        return { students: [...state.students, { ...s, id, studentId, qrToken, attendance: [], payments: [] }] };
       }),
       updateStudent: (id, s) => set(state => ({ students: state.students.map(x => x.id === id ? { ...x, ...s } : x) })),
       deleteStudent: (id) => set(state => ({ students: state.students.filter(x => x.id !== id) })),
@@ -121,6 +123,12 @@ export const useDataStore = create<DataStore>()(
       })),
       addPayment: (studentId, payment) => set(state => ({
         students: state.students.map(s => s.id === studentId ? { ...s, payments: [...s.payments, { ...payment, id: uuidv4() }] } : s)
+      })),
+      updatePayment: (studentId, paymentId, data) => set(state => ({
+        students: state.students.map(s => s.id === studentId
+          ? { ...s, payments: s.payments.map(p => p.id === paymentId ? { ...p, ...data } : p) }
+          : s
+        )
       })),
 
       addModule: (m) => set(state => ({ modules: [...state.modules, { ...m, id: `m-${uuidv4()}`, videos: [] }] })),

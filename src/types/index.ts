@@ -52,6 +52,7 @@ export interface LectureVideo {
 export interface Student {
   id: string;
   studentId: string;
+  qrToken: string;
   name: string;
   email: string;
   phone: string;
