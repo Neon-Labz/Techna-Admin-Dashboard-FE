@@ -1,3 +1,4 @@
+'use client';
 import { Student } from '../../types';
 import { Eye, Edit2, Trash2, CheckCircle, Clock } from 'lucide-react';
 

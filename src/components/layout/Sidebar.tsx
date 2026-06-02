@@ -1,4 +1,6 @@
-import { NavLink } from 'react-router-dom';
+'use client';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, GraduationCap, CreditCard, BookOpen,
   ClipboardList, Calendar, LogOut, GraduationCap as Logo, UserCircle, X, Menu, QrCode
@@ -25,10 +27,13 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const { user, logout } = useAuthStore();
+  const pathname = usePathname();
+  const router = useRouter();
 
   const handleLogout = () => {
     logout();
     toast.success('Logged out successfully');
+    router.replace('/login');
   };
 
   return (
@@ -46,7 +51,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
               <Logo className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="text-white font-bold text-sm">EduAdmin Pro</p>
+              <p className="text-white font-bold text-sm">Techna</p>
               <p className="text-indigo-300 text-xs">Management System</p>
             </div>
           </div>
@@ -70,21 +75,21 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          {navItems.map(({ path, icon: Icon, label }) => (
-            <NavLink
-              key={path} to={path} end={path === '/dashboard'}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${isActive
-                  ? 'bg-white/15 text-white shadow-sm'
-                  : 'text-indigo-200 hover:bg-white/10 hover:text-white'
-                }`
-              }
-              onClick={() => setIsOpen(false)}
-            >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              {label}
-            </NavLink>
-          ))}
+          {navItems.map(({ path, icon: Icon, label }) => {
+            const isActive = path === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(path);
+            return (
+              <Link
+                key={path} href={path}
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+                  isActive ? 'bg-white/15 text-white shadow-sm' : 'text-indigo-200 hover:bg-white/10 hover:text-white'
+                }`}
+                onClick={() => setIsOpen(false)}
+              >
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                {label}
+              </Link>
+            );
+          })}
         </nav>
 
         {/* Logout */}

@@ -1,3 +1,4 @@
+'use client';
 import { useState } from 'react';
 import { useDataStore } from '../store/dataStore';
 import StudentProfile from '../components/students/StudentProfile';

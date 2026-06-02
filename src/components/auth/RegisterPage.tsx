@@ -1,5 +1,7 @@
+'use client';
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuthStore } from '../../store/authStore';
 import { Eye, EyeOff, GraduationCap, Lock, Mail, User } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -12,7 +14,7 @@ export default function RegisterPage() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const register = useAuthStore(s => s.register);
-  const navigate = useNavigate();
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +25,7 @@ export default function RegisterPage() {
     setLoading(false);
     if (res.success) {
       toast.success('Account created successfully!');
-      navigate('/dashboard');
+      router.replace('/dashboard');
     } else {
       toast.error(res.error || 'Registration failed');
     }
@@ -36,7 +38,7 @@ export default function RegisterPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-white/10 backdrop-blur rounded-2xl mb-4">
             <GraduationCap className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white">EduAdmin Pro</h1>
+          <h1 className="text-3xl font-bold text-white">Techna</h1>
           <p className="text-indigo-300 mt-1">School Management System</p>
         </div>
 
@@ -96,7 +98,7 @@ export default function RegisterPage() {
 
           <p className="text-center text-sm text-gray-500 mt-6">
             Already have an account?{' '}
-            <Link to="/login" className="text-indigo-600 hover:text-indigo-700 font-medium">Sign in</Link>
+            <Link href="/login" className="text-indigo-600 hover:text-indigo-700 font-medium">Sign in</Link>
           </p>
         </div>
       </div>

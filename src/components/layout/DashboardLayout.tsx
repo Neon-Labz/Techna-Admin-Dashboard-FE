@@ -1,7 +1,7 @@
+'use client';
 import { useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { usePathname } from 'next/navigation';
 import Sidebar, { MobileMenuButton } from './Sidebar';
-import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore';
 import { Bell, Search } from 'lucide-react';
 
@@ -17,11 +17,11 @@ const pageNames: Record<string, string> = {
   '/dashboard/profile': 'Profile',
 };
 
-export default function DashboardLayout() {
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuthStore();
-  const location = useLocation();
-  const pageName = pageNames[location.pathname] || 'Dashboard';
+  const pathname = usePathname();
+  const pageName = pageNames[pathname] || 'Dashboard';
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -53,10 +53,9 @@ export default function DashboardLayout() {
           </div>
         </header>
         <main className="flex-1 overflow-y-auto">
-          <Outlet />
+          {children}
         </main>
       </div>
-      <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
     </div>
   );
 }

@@ -1,3 +1,4 @@
+'use client';
 import { useDataStore } from '../store/dataStore';
 import { Users, GraduationCap, CreditCard, BookOpen, ClipboardList, TrendingUp, UserCheck, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';

@@ -1,3 +1,4 @@
+'use client';
 import { useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Student, PaymentRecord } from '../../types';
@@ -169,7 +170,7 @@ export default function StudentProfile({ student, onClose, onPaymentAdd, onAtten
 
               {/* School branding */}
               <div className="bg-indigo-50 px-4 py-2 text-center">
-                <p className="text-xs text-indigo-400">EduAdmin Pro · School Management System</p>
+                <p className="text-xs text-indigo-400">Techna · School Management System</p>
               </div>
             </div>
           </div>

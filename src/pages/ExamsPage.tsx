@@ -1,3 +1,4 @@
+'use client';
 import { useState } from 'react';
 import { useDataStore } from '../store/dataStore';
 import type { Exam } from '../types';
@@ -53,7 +54,7 @@ export default function ExamsPage() {
     pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(16);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('EduAdmin Pro', w / 2, 10, { align: 'center' });
+    pdf.text('Techna', w / 2, 10, { align: 'center' });
     pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
     pdf.text('Examination Timetable', w / 2, 17, { align: 'center' });
@@ -88,7 +89,7 @@ export default function ExamsPage() {
 
     pdf.setTextColor(150, 150, 150);
     pdf.setFontSize(7);
-    pdf.text(`Generated on ${new Date().toLocaleDateString()} · EduAdmin Pro`, w / 2, 287, { align: 'center' });
+    pdf.text(`Generated on ${new Date().toLocaleDateString()} · Techna`, w / 2, 287, { align: 'center' });
 
     pdf.save('exam-timetable.pdf');
     toast.success('Timetable downloaded!');
