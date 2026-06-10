@@ -54,9 +54,7 @@ export default function ExamsPage() {
 
   const fetchExams = async () => {
   try {
-    const result = await examApi.getAll();
-
-    const examsArray = Array.isArray(result) ? result : [];
+    const examsArray = await examApi.getAll();
 
     setExams(
       examsArray.map((exam: any) => ({
@@ -152,8 +150,18 @@ const fetchModules = async () => {
       const mod = modules.find((m) => m.id === form.moduleId);
 
       const payload = {
-        ...form,
+        title: form.title,
+        moduleId: form.moduleId,
         moduleName: mod?.name || form.moduleName,
+        batch: form.batch,
+        date: form.date,
+        startTime: form.startTime,
+        endTime: form.endTime,
+        venue: form.venue,
+        description: form.description || '',
+        totalMarks: Number(form.totalMarks),
+        status: form.status || 'upcoming',
+        isPublished: true,
       };
 
             if (editExam) {
@@ -176,8 +184,7 @@ const fetchModules = async () => {
   if (!deleteConfirm) return;
 
   try {
-    await examApi.delete(deleteConfirm);
-
+await examApi.remove(deleteConfirm);
     toast.success('Exam deleted');
     setDeleteConfirm(null);
     fetchExams();

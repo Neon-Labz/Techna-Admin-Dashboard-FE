@@ -17,27 +17,27 @@ export type ExamPayload = {
 
 export const examApi = {
   async getAll(): Promise<any[]> {
-    const { data } = await api.get('/exam-notices');
-    return data.data || data;
+    const response = await api.get('/exam-notices');
+    return response.data?.data || [];
   },
 
   async getById(id: string): Promise<any> {
-    const { data } = await api.get(`/exam-notices/${id}`);
-    return data.data || data;
+    const response = await api.get(`/exam-notices/${id}`);
+    return response.data?.data || response.data;
   },
 
   async create(payload: ExamPayload): Promise<any> {
-    const { data } = await api.post('/exam-notices', payload);
-    return data.data || data;
+    const response = await api.post('/exam-notices', payload);
+    return response.data?.data || response.data;
   },
 
   async update(id: string, payload: Partial<ExamPayload>): Promise<any> {
-    const { data } = await api.patch(`/exam-notices/${id}`, payload);
-    return data.data || data;
+    const response = await api.patch(`/exam-notices/${id}`, payload);
+    return response.data?.data || response.data;
   },
 
   async remove(id: string): Promise<any> {
-    const { data } = await api.delete(`/exam-notices/${id}`);
-    return data;
+    const response = await api.delete(`/exam-notices/${id}`);
+    return response.data;
   },
 };
