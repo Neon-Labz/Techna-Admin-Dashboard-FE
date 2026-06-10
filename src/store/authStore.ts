@@ -1,78 +1,84 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { jwtDecode } from 'jwt-decode';
+import { authApi } from '../api';
 import type { User } from '../types';
+
+interface JwtPayload {
+  sub: string;
+  email: string;
+  role: string;
+  iat?: number;
+  exp?: number;
+}
 
 interface AuthStore {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   updateProfile: (data: Partial<User>) => void;
-}
-
-// Simple JWT-like token generator (in real app, use backend)
-function generateToken(user: User): string {
-  const payload = { sub: user.id, email: user.email, role: user.role, iat: Date.now() };
-  return btoa(JSON.stringify(payload));
-}
-
-function getStoredAdmins(): Array<{ email: string; password: string; user: User }> {
-  const stored = localStorage.getItem('edu_admins');
-  if (stored) return JSON.parse(stored);
-  // Default admin
-  const defaultAdmin: User = {
-    id: 'admin-1',
-    name: 'Super Admin',
-    email: 'admin@eduadmin.com',
-    role: 'admin',
-    phone: '+94 77 123 4567',
-    createdAt: new Date().toISOString(),
-  };
-  const admins = [{ email: 'admin@eduadmin.com', password: 'Admin@123', user: defaultAdmin }];
-  localStorage.setItem('edu_admins', JSON.stringify(admins));
-  return admins;
+  loadSession: () => Promise<void>;
+  isTokenExpired: () => boolean;
 }
 
 export const useAuthStore = create<AuthStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
       isAuthenticated: false,
 
       login: async (email: string, password: string) => {
-        const admins = getStoredAdmins();
-        const found = admins.find(a => a.email === email && a.password === password);
-        if (!found) {
-          return { success: false, error: 'Invalid email or password' };
+        try {
+          const response = await authApi.login(email, password);
+          const { access_token, role } = response;
+
+          // ADMIN ONLY: Reject non-admin logins
+          if (role !== 'admin') {
+            return {
+              success: false,
+              error: 'Access denied. Only admin users can login to this portal.',
+            };
+          }
+
+          // Decode the JWT to get user info
+          const decoded = jwtDecode<JwtPayload>(access_token);
+
+          // Check if token is already expired
+          if (decoded.exp && decoded.exp * 1000 < Date.now()) {
+            return { success: false, error: 'Token expired. Please try again.' };
+          }
+
+          const user: User = {
+            id: decoded.sub,
+            name: decoded.email.split('@')[0] || 'Admin',
+            email: decoded.email,
+            role: 'admin',
+            createdAt: new Date().toISOString(),
+          };
+
+          // Save to state (zustand persist will save to localStorage automatically)
+          set({ user, token: access_token, isAuthenticated: true });
+
+          return { success: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Login failed';
+          return { success: false, error: message };
         }
-        const token = generateToken(found.user);
-        set({ user: found.user, token, isAuthenticated: true });
-        return { success: true };
       },
 
-      register: async (name: string, email: string, password: string) => {
-        const admins = getStoredAdmins();
-        if (admins.find(a => a.email === email)) {
-          return { success: false, error: 'Email already registered' };
+      logout: async () => {
+        const token = get().token;
+        if (token) {
+          try {
+            await authApi.logout();
+          } catch {
+            // Proceed with local logout even if API call fails
+          }
         }
-        const newUser: User = {
-          id: `admin-${Date.now()}`,
-          name,
-          email,
-          role: 'admin',
-          createdAt: new Date().toISOString(),
-        };
-        admins.push({ email, password, user: newUser });
-        localStorage.setItem('edu_admins', JSON.stringify(admins));
-        const token = generateToken(newUser);
-        set({ user: newUser, token, isAuthenticated: true });
-        return { success: true };
-      },
-
-      logout: () => {
+        // Clear state and localStorage
         set({ user: null, token: null, isAuthenticated: false });
       },
 
@@ -80,17 +86,64 @@ export const useAuthStore = create<AuthStore>()(
         set(state => {
           if (!state.user) return state;
           const updatedUser = { ...state.user, ...data };
-          // Update in storage
-          const admins = getStoredAdmins();
-          const idx = admins.findIndex(a => a.user.id === updatedUser.id);
-          if (idx !== -1) {
-            admins[idx].user = updatedUser;
-            localStorage.setItem('edu_admins', JSON.stringify(admins));
-          }
           return { user: updatedUser };
         });
       },
+
+      loadSession: async () => {
+        const { token, isTokenExpired } = get();
+        if (!token) return;
+
+        // Check if token is expired before making API call
+        if (isTokenExpired()) {
+          set({ user: null, token: null, isAuthenticated: false });
+          return;
+        }
+
+        try {
+          const session = await authApi.getSession();
+
+          // Verify this is an admin session
+          if (session.role && session.role !== 'admin') {
+            set({ user: null, token: null, isAuthenticated: false });
+            return;
+          }
+
+          const user: User = {
+            id: session._id || session.userId || 'admin',
+            name: session.name || session.email || 'Admin',
+            email: session.email || '',
+            role: 'admin',
+            phone: session.phone || undefined,
+            createdAt: session.createdAt || new Date().toISOString(),
+          };
+          set({ user, isAuthenticated: true });
+        } catch {
+          // Token expired or invalid — log out
+          set({ user: null, token: null, isAuthenticated: false });
+        }
+      },
+
+      isTokenExpired: () => {
+        const token = get().token;
+        if (!token) return true;
+        try {
+          const decoded = jwtDecode<JwtPayload>(token);
+          if (!decoded.exp) return false;
+          // Add 30 second buffer
+          return decoded.exp * 1000 < Date.now() + 30000;
+        } catch {
+          return true;
+        }
+      },
     }),
-    { name: 'edu-auth' }
+    {
+      name: 'edu-auth', // localStorage key
+      partialize: (state) => ({
+        user: state.user,
+        token: state.token,
+        isAuthenticated: state.isAuthenticated,
+      }),
+    }
   )
 );
