@@ -1,13 +1,13 @@
 import axios from 'axios';
 
-const axiosInstance = axios.create({
+const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api',
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-axiosInstance.interceptors.request.use((config) => {
+api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     const authData = localStorage.getItem('techna-auth');
 
@@ -24,4 +24,4 @@ axiosInstance.interceptors.request.use((config) => {
   return config;
 });
 
-export default axiosInstance;
+export default api;

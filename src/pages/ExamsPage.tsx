@@ -54,13 +54,9 @@ export default function ExamsPage() {
 
   const fetchExams = async () => {
   try {
-    const res = await examApi.getAll();
+    const result = await examApi.getAll();
 
-    const result = res.data;
-
-    const examsArray = Array.isArray(result)
-      ? result
-      : result.data || [];
+    const examsArray = Array.isArray(result) ? result : [];
 
     setExams(
       examsArray.map((exam: any) => ({
