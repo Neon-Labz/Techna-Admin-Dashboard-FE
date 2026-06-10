@@ -1,3 +1,5 @@
+import axios from 'axios';
+import { jwtDecode } from 'jwt-decode';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User } from '../types';
@@ -12,27 +14,17 @@ interface AuthStore {
   updateProfile: (data: Partial<User>) => void;
 }
 
-// Simple JWT-like token generator (in real app, use backend)
-function generateToken(user: User): string {
-  const payload = { sub: user.id, email: user.email, role: user.role, iat: Date.now() };
-  return btoa(JSON.stringify(payload));
+interface JwtPayload {
+  sub: string;
+  email: string;
+  role: string;
+  iat: number;
+  exp?: number;
 }
 
-function getStoredAdmins(): Array<{ email: string; password: string; user: User }> {
-  const stored = localStorage.getItem('edu_admins');
-  if (stored) return JSON.parse(stored);
-  // Default admin
-  const defaultAdmin: User = {
-    id: 'admin-1',
-    name: 'Super Admin',
-    email: 'admin@eduadmin.com',
-    role: 'admin',
-    phone: '+94 77 123 4567',
-    createdAt: new Date().toISOString(),
-  };
-  const admins = [{ email: 'admin@eduadmin.com', password: 'Admin@123', user: defaultAdmin }];
-  localStorage.setItem('edu_admins', JSON.stringify(admins));
-  return admins;
+// Capitalise the first letter of each word for a display name
+function nameFromEmail(email: string): string {
+  return email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -43,54 +35,64 @@ export const useAuthStore = create<AuthStore>()(
       isAuthenticated: false,
 
       login: async (email: string, password: string) => {
-        const admins = getStoredAdmins();
-        const found = admins.find(a => a.email === email && a.password === password);
-        if (!found) {
-          return { success: false, error: 'Invalid email or password' };
+        try {
+          const res = await axios.post<{ access_token: string; role: string }>(
+            'http://localhost:4000/api/auth/login',
+            { email, password },
+          );
+
+          // Techna-BE wraps every response: { success, message, data: <actual> }
+          const payload = (res.data as unknown as { data: { access_token: string; role: string } }).data
+            ?? res.data;
+
+          const token = payload.access_token;
+          if (!token) return { success: false, error: 'No token in response' };
+
+          // Persist token where api.ts interceptor can find it
+          localStorage.setItem('techna_admin_token', token);
+
+          const decoded = jwtDecode<JwtPayload>(token);
+          const user: User = {
+            id: decoded.sub,
+            name: nameFromEmail(decoded.email),
+            email: decoded.email,
+            role: 'admin',
+            createdAt: new Date().toISOString(),
+          };
+
+          set({ user, token, isAuthenticated: true });
+          return { success: true };
+        } catch (err: unknown) {
+          let message = 'Login failed';
+          if (axios.isAxiosError(err)) {
+            const msg = err.response?.data?.message;
+            message = typeof msg === 'string' ? msg : Array.isArray(msg) ? msg[0] : message;
+          }
+          return { success: false, error: message };
         }
-        const token = generateToken(found.user);
-        set({ user: found.user, token, isAuthenticated: true });
-        return { success: true };
       },
 
-      register: async (name: string, email: string, password: string) => {
-        const admins = getStoredAdmins();
-        if (admins.find(a => a.email === email)) {
-          return { success: false, error: 'Email already registered' };
-        }
-        const newUser: User = {
-          id: `admin-${Date.now()}`,
-          name,
-          email,
-          role: 'admin',
-          createdAt: new Date().toISOString(),
+      // Admin accounts are provisioned via server environment variables.
+      // Self-registration is not supported by the backend.
+      register: async (_name: string, _email: string, _password: string) => {
+        return {
+          success: false,
+          error: 'Admin registration is disabled. Contact your system administrator.',
         };
-        admins.push({ email, password, user: newUser });
-        localStorage.setItem('edu_admins', JSON.stringify(admins));
-        const token = generateToken(newUser);
-        set({ user: newUser, token, isAuthenticated: true });
-        return { success: true };
       },
 
       logout: () => {
+        localStorage.removeItem('techna_admin_token');
         set({ user: null, token: null, isAuthenticated: false });
       },
 
       updateProfile: (data: Partial<User>) => {
-        set(state => {
+        set((state) => {
           if (!state.user) return state;
-          const updatedUser = { ...state.user, ...data };
-          // Update in storage
-          const admins = getStoredAdmins();
-          const idx = admins.findIndex(a => a.user.id === updatedUser.id);
-          if (idx !== -1) {
-            admins[idx].user = updatedUser;
-            localStorage.setItem('edu_admins', JSON.stringify(admins));
-          }
-          return { user: updatedUser };
+          return { user: { ...state.user, ...data } };
         });
       },
     }),
-    { name: 'edu-auth' }
-  )
+    { name: 'edu-auth' },
+  ),
 );
