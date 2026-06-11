@@ -1,10 +1,11 @@
 'use client';
-import { useState, useEffect, KeyboardEvent } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useDataStore } from '../store/dataStore';
 import type { Teacher } from '../types';
 import { teacherApi, type TeacherFromApi } from '../api/teacher.api';
+import { getModules, type ApiModule } from '../lib/api';
 import Modal from '../components/ui/Modal';
-import { Plus, Edit2, Trash2, GraduationCap, Phone, Mail, Search, Loader2, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, GraduationCap, Phone, Mail, Search, Loader2, X, ChevronDown, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const emptyTeacher: Omit<Teacher, 'id'> = {
@@ -60,6 +61,7 @@ function getTodayString(): string {
 export default function TeachersPage() {
   const { addTeacher, updateTeacher, deleteTeacher } = useDataStore();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [backendModules, setBackendModules] = useState<ApiModule[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState('');
@@ -68,11 +70,41 @@ export default function TeachersPage() {
   const [form, setForm] = useState<Omit<Teacher, 'id'>>(emptyTeacher);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [subjectInput, setSubjectInput] = useState('');
+  const [subjectDropdownOpen, setSubjectDropdownOpen] = useState(false);
+  const [subjectSearch, setSubjectSearch] = useState('');
+  const subjectDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Get unique module names (case-insensitive, trimmed) from backend modules
+  const uniqueModuleNames = Array.from(
+    new Map(
+      backendModules
+        .map(m => (m.name || '').trim())
+        .filter(name => name.length > 0)
+        .map(name => [name.toLowerCase(), name])
+    ).values()
+  ).sort((a, b) => a.localeCompare(b));
+
+  const filteredModuleNames = uniqueModuleNames.filter(name =>
+    name.toLowerCase().includes(subjectSearch.toLowerCase())
+  );
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (subjectDropdownRef.current && !subjectDropdownRef.current.contains(e.target as Node)) {
+        setSubjectDropdownOpen(false);
+      }
+    };
+    if (subjectDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [subjectDropdownOpen]);
 
   // Fetch teachers from backend on mount
   useEffect(() => {
     fetchTeachers();
+    fetchBackendModules();
   }, []);
 
   const fetchTeachers = async () => {
@@ -87,6 +119,16 @@ export default function TeachersPage() {
     }
   };
 
+  const fetchBackendModules = async () => {
+    try {
+      const data = await getModules();
+      setBackendModules(data);
+    } catch (error: any) {
+      // Silent fail – the dropdown will just show "No modules available"
+      console.error('Failed to load modules:', error);
+    }
+  };
+
   const filtered = teachers.filter(t => {
     const term = search.toLowerCase();
     const subjectStr = Array.isArray(t.subject) ? t.subject.join(' ') : t.subject;
@@ -97,17 +139,34 @@ export default function TeachersPage() {
     );
   });
 
-  const openAdd = () => { setForm(emptyTeacher); setEditTeacher(null); setErrors({}); setSubjectInput(''); setModalOpen(true); };
-  const openEdit = (t: Teacher) => { setForm({ ...t }); setEditTeacher(t); setErrors({}); setSubjectInput(''); setModalOpen(true); };
+  const openAdd = () => { setForm(emptyTeacher); setEditTeacher(null); setErrors({}); setSubjectDropdownOpen(false); setSubjectSearch(''); setModalOpen(true); };
+  const openEdit = (t: Teacher) => { setForm({ ...t }); setEditTeacher(t); setErrors({}); setSubjectDropdownOpen(false); setSubjectSearch(''); setModalOpen(true); };
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
     if (!form.name.trim()) newErrors.name = 'Full name is required';
-    if (!form.email.trim()) newErrors.email = 'Email is required';
+    if (!form.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else {
+      // Check duplicate email (exclude current teacher when editing)
+      const emailExists = teachers.some(
+        t => t.email.toLowerCase() === form.email.trim().toLowerCase() && t.id !== editTeacher?.id
+      );
+      if (emailExists) newErrors.email = 'This email is already used by another teacher';
+    }
 
     const phoneValidation = validateSriLankanPhone(form.phone);
-    if (!phoneValidation.valid) newErrors.phone = phoneValidation.message;
+    if (!phoneValidation.valid) {
+      newErrors.phone = phoneValidation.message;
+    } else {
+      // Check duplicate phone (exclude current teacher when editing)
+      const cleanedPhone = form.phone.replace(/[\s-]/g, '');
+      const phoneExists = teachers.some(
+        t => t.phone.replace(/[\s-]/g, '') === cleanedPhone && t.id !== editTeacher?.id
+      );
+      if (phoneExists) newErrors.phone = 'This phone number is already used by another teacher';
+    }
 
     if (form.subject.length === 0) newErrors.subject = 'At least one subject is required';
 
@@ -190,17 +249,21 @@ export default function TeachersPage() {
     setDeleteConfirm(null);
   };
 
-  /** Add subject when user presses Enter */
-  const handleSubjectKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const value = subjectInput.trim();
-      if (value && !form.subject.includes(value)) {
-        setForm(f => ({ ...f, subject: [...f.subject, value] }));
-        if (errors.subject) setErrors(prev => ({ ...prev, subject: '' }));
+  /** Toggle a subject selection */
+  const toggleSubject = (subject: string) => {
+    setForm(f => {
+      const isSelected = f.subject.includes(subject);
+      if (isSelected) {
+        return { ...f, subject: f.subject.filter(s => s !== subject) };
+      } else {
+        if (f.subject.length >= 6) {
+          toast.error('Maximum 6 subjects can be selected');
+          return f;
+        }
+        return { ...f, subject: [...f.subject, subject] };
       }
-      setSubjectInput('');
-    }
+    });
+    if (errors.subject) setErrors(prev => ({ ...prev, subject: '' }));
   };
 
   /** Remove a subject tag */
@@ -318,11 +381,97 @@ export default function TeachersPage() {
             {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
           </div>
 
-          {/* Subject */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-            <input type="text" value={subjectInput} onChange={e => setSubjectInput(e.target.value)} onKeyDown={handleSubjectKeyDown}
-              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm ${errors.subject ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} />
+          {/* Subject - Module Lookup with Checkboxes */}
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Subjects <span className="text-gray-400 font-normal">(Select from modules, max 6)</span>
+            </label>
+            <div className="relative" ref={subjectDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setSubjectDropdownOpen(!subjectDropdownOpen)}
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-left flex items-center justify-between bg-white ${errors.subject ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+              >
+                <span className={form.subject.length === 0 ? 'text-gray-400' : 'text-gray-700'}>
+                  {form.subject.length === 0
+                    ? 'Select subjects from modules...'
+                    : `${form.subject.length} of 6 subject${form.subject.length > 1 ? 's' : ''} selected`}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${subjectDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {subjectDropdownOpen && (
+                <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+                  {/* Search bar */}
+                  <div className="p-2 border-b border-gray-100">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                      <input
+                        type="text"
+                        value={subjectSearch}
+                        onChange={e => setSubjectSearch(e.target.value)}
+                        autoFocus
+                        className="w-full pl-8 pr-2 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Options list */}
+                  <div className="max-h-48 overflow-y-auto py-1">
+                    {filteredModuleNames.length === 0 ? (
+                      <p className="px-3 py-3 text-sm text-gray-400 text-center">
+                        {uniqueModuleNames.length === 0 ? 'No modules available' : 'No matching modules'}
+                      </p>
+                    ) : (
+                      filteredModuleNames.map(moduleName => {
+                        const isSelected = form.subject.includes(moduleName);
+                        const isDisabled = !isSelected && form.subject.length >= 6;
+                        return (
+                          <button
+                            key={moduleName}
+                            type="button"
+                            onClick={() => toggleSubject(moduleName)}
+                            disabled={isDisabled}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-colors ${
+                              isSelected
+                                ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                                : isDisabled
+                                  ? 'text-gray-300 cursor-not-allowed'
+                                  : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                              isSelected
+                                ? 'bg-indigo-600 border-indigo-600'
+                                : isDisabled
+                                  ? 'border-gray-200'
+                                  : 'border-gray-300'
+                            }`}>
+                              {isSelected && <Check className="w-3 h-3 text-white" />}
+                            </span>
+                            <span className="text-left flex-1">{moduleName}</span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Footer with counter and Done button */}
+                  <div className="flex items-center justify-between px-3 py-2 border-t border-gray-100 bg-gray-50">
+                    <span className="text-xs text-gray-500">{form.subject.length} / 6 selected</span>
+                    <button
+                      type="button"
+                      onClick={() => setSubjectDropdownOpen(false)}
+                      className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Selected subjects as tags */}
             {form.subject.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {form.subject.map(s => (

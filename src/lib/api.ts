@@ -154,9 +154,18 @@ const api: AxiosInstance = axios.create({
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('techna_admin_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Read token from the Zustand persisted auth store ('edu-auth' key)
+    try {
+      const stored = localStorage.getItem('edu-auth');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const token = parsed?.state?.token;
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+    } catch {
+      // Ignore parse errors
     }
   }
   return config;
@@ -182,6 +191,7 @@ api.interceptors.response.use(
       error.response?.status === 401 &&
       typeof window !== 'undefined'
     ) {
+      localStorage.removeItem('edu-auth');
       window.location.href = '/login';
     }
     return Promise.reject(error);
