@@ -1,7 +1,6 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 
-export { apiClient as apiRequest, getStoredToken } from '../api/axiosClient';
-export { authApi } from '../api/auth.api';// ─── Backend response types ────────────────────────────────────────────────────
+// ─── Backend response types ────────────────────────────────────────────────────
 // These reflect the exact MongoDB/Mongoose document shapes returned by Techna-BE.
 // All documents carry _id (Mongo ObjectId serialised as string) plus timestamps.
 
@@ -239,3 +238,6 @@ export const deleteAttendance = (id: string): Promise<{ message: string }> =>
 
 // Re-export for use in components without importing axios directly
 export { isAxiosError } from 'axios';
+
+export { apiClient as apiRequest, getStoredToken } from '../api/axiosClient';
+export { authApi } from '../api/auth.api';
