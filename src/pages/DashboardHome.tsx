@@ -88,8 +88,7 @@ export default function DashboardHome() {
     }));
 
   const upcomingExams =
-    summary?.upcomingExams ||
-    exams.filter((e) => e.status === 'upcoming').slice(0, 3);
+  summary?.upcomingExams || exams.slice(0, 5);
 
   const recentStudents =
     summary?.recentStudents || [...students].slice(-4).reverse();

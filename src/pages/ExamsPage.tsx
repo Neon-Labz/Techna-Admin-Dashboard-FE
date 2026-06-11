@@ -71,9 +71,7 @@ export default function ExamsPage() {
     try {
       const data = await examApi.getAll();
 
-      const list = Array.isArray(data)
-        ? data
-        : data?.data || data?.exams || [];
+const list = Array.isArray(data) ? data : [];
 
       const formatted = list.map((e: any) => ({
         id: e.id || e._id,
@@ -139,8 +137,7 @@ export default function ExamsPage() {
         endTime: form.endTime,
         venue: form.venue,
         description: form.description,
-        totalMarks: 100,
-        status: 'upcoming' as const,
+        isPublished: true,
       };
 
       if (editExam) {
