@@ -11,8 +11,18 @@ import toast from 'react-hot-toast';
 const BATCHES = ['May 2024 Batch', 'September 2024 Batch', 'January 2025 Batch', 'May 2025 Batch'];
 
 const emptyStudent: Omit<Student, 'id' | 'studentId' | 'attendance' | 'payments'> = {
-  name: '', email: '', phone: '', address: '', dob: '', batch: BATCHES[0],
-  modules: [], status: 'pending', enrolledAt: new Date().toISOString(), parentName: '', parentPhone: '', qrToken: '',
+  qrToken: '',
+  name: '',
+  email: '',
+  phone: '',
+  address: '',
+  dob: '',
+  batch: BATCHES[0],
+  modules: [],
+  status: 'pending',
+  enrolledAt: new Date().toISOString(),
+  parentName: '',
+  parentPhone: '',
 };
 
 export default function StudentsPage() {
@@ -37,8 +47,21 @@ export default function StudentsPage() {
 
   const openAdd = () => { setForm(emptyStudent); setEditStudent(null); setModalOpen(true); };
   const openEdit = (s: Student) => {
-    setForm({ name: s.name, email: s.email, phone: s.phone, address: s.address, dob: s.dob, batch: s.batch, modules: s.modules, status: s.status, enrolledAt: s.enrolledAt, parentName: s.parentName || '', parentPhone: s.parentPhone || '', qrToken: s.qrToken || '' });
-    setEditStudent(s);
+setForm({
+  qrToken: s.qrToken || '',
+  name: s.name,
+  email: s.email,
+  phone: s.phone,
+  address: s.address,
+  dob: s.dob,
+  batch: s.batch,
+  modules: s.modules,
+  status: s.status,
+  enrolledAt: s.enrolledAt,
+  parentName: s.parentName || '',
+  parentPhone: s.parentPhone || '',
+});  
+  setEditStudent(s);
     setModalOpen(true);
   };
 
