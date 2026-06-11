@@ -47,21 +47,21 @@ export default function StudentsPage() {
 
   const openAdd = () => { setForm(emptyStudent); setEditStudent(null); setModalOpen(true); };
   const openEdit = (s: Student) => {
-setForm({
-  qrToken: s.qrToken || '',
-  name: s.name,
-  email: s.email,
-  phone: s.phone,
-  address: s.address,
-  dob: s.dob,
-  batch: s.batch,
-  modules: s.modules,
-  status: s.status,
-  enrolledAt: s.enrolledAt,
-  parentName: s.parentName || '',
-  parentPhone: s.parentPhone || '',
-});  
-  setEditStudent(s);
+    setForm({
+      qrToken: s.qrToken || '',
+      name: s.name,
+      email: s.email,
+      phone: s.phone,
+      address: s.address,
+      dob: s.dob,
+      batch: s.batch,
+      modules: s.modules,
+      status: s.status,
+      enrolledAt: s.enrolledAt,
+      parentName: s.parentName || '',
+      parentPhone: s.parentPhone || '',
+    });
+    setEditStudent(s);
     setModalOpen(true);
   };
 
