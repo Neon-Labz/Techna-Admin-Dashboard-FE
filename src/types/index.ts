@@ -68,6 +68,47 @@ export interface Student {
   approvedAt?: string;
   attendance: AttendanceRecord[];
   payments: PaymentRecord[];
+  password?: string;
+  fullNameTamil?: string;
+  fullNameEnglish?: string;
+  nicNo?: string;
+  school?: string;
+  whatsappNo?: string;
+  parentsNo?: string;
+  permanentAddress?: string;
+  administrativeDistrict?: string;
+  fixedTelephone?: string;
+  residingSince?: string;
+  race?: string;
+  religion?: string;
+  citizenByDescent?: string;
+  contactAddress?: string;
+  postalCode?: string;
+  fatherName?: string;
+  motherName?: string;
+  guardianName?: string;
+  contactPerson?: string;
+  guardianAddress?: string;
+  guardianFixedTel?: string;
+  guardianMobile?: string;
+  olCategory?: string;
+  olYear?: string;
+  olIndexNumber?: string;
+  olNameUsed?: string;
+  olAccept?: string;
+  olResults?: OLResult[];
+  subjects?: string[];
+  declarationAccepted?: boolean;
+}
+
+export interface OLResult {
+  year: string;
+  indexNumber: string;
+  english: string;
+  mathematics: string;
+  science: string;
+  sinhala: string;
+  tamil: string;
 }
 
 export interface AttendanceRecord {

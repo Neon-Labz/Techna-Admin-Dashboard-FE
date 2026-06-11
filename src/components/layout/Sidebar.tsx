@@ -27,7 +27,7 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const { user, logout } = useAuthStore();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '/dashboard';
   const router = useRouter();
 
   const handleLogout = () => {
