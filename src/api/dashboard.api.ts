@@ -21,12 +21,17 @@ export const dashboardApi = {
     return data.data || data;
   },
   async getStudents() {
-  const { data } = await api.get('/students');
-  return data.data || data;
-},
-async getPayments() {
-  const { data } = await api.get('/payments');
-  return data.data || data.payments || data;
-},
+    const { data } = await api.get('/students');
+    return data.data || data;
+  },
 
+  async getRevenue() {
+    const { data } = await api.get('/dashboard/revenue');
+    return data.data || data;
+  },
+
+  async getPayments() {
+    const { data } = await api.get('/payments');
+    return data.data || data;
+  },
 };

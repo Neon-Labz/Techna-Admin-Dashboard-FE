@@ -14,14 +14,24 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const login = useAuthStore(s => s.login);
   const isAuthenticated = useAuthStore(s => s.isAuthenticated);
+  const hasHydrated = useAuthStore(s => s._hasHydrated);
   const router = useRouter();
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated (only after hydration)
   useEffect(() => {
-    if (isAuthenticated) {
+    if (hasHydrated && isAuthenticated) {
       router.replace('/dashboard');
     }
-  }, [isAuthenticated, router]);
+  }, [hasHydrated, isAuthenticated, router]);
+
+  // Don't render anything until hydration is complete
+  if (!hasHydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-400 via-blue-500 to-blue-600">
+        <div className="w-8 h-8 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (isAuthenticated) {
     return null;
