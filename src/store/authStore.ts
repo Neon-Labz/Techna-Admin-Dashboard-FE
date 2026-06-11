@@ -1,6 +1,6 @@
+import { jwtDecode } from 'jwt-decode';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { jwtDecode } from 'jwt-decode';
 import { authApi } from '../api';
 import type { User } from '../types';
 
@@ -83,7 +83,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       updateProfile: (data: Partial<User>) => {
-        set(state => {
+        set((state) => {
           if (!state.user) return state;
           const updatedUser = { ...state.user, ...data };
           return { user: updatedUser };

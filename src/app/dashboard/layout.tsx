@@ -13,7 +13,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkAuth = () => {
       if (!isAuthenticated) {
         router.replace('/login');
         return;
@@ -26,9 +26,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Validate session with backend
-      await loadSession();
+      // Token is valid — show dashboard immediately
       setIsReady(true);
+
+      // Refresh session data in the background (non-blocking)
+      loadSession();
     };
 
     checkAuth();
