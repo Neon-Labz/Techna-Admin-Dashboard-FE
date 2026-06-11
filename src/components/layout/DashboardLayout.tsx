@@ -20,8 +20,8 @@ const pageNames: Record<string, string> = {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuthStore();
-  const pathname = usePathname();
-  const pageName = pageNames[pathname] || 'Dashboard';
+  const pathname = usePathname() || '/dashboard';
+const pageName = pageNames[pathname as keyof typeof pageNames] || 'Dashboard';
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
