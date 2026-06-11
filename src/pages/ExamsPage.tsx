@@ -194,38 +194,52 @@ await examApi.remove(deleteConfirm);
   }
 };
 
-  const downloadTimetable = () => {
+ const downloadTimetable = () => {
   if (filtered.length === 0) {
     toast.error('No exams to export');
     return;
   }
 
-  const pdf = new jsPDF({
-    orientation: 'landscape',
-    unit: 'mm',
-    format: 'a4',
-  });
+  const generatePdf = (
+    img: HTMLImageElement | null,
+    imgType: 'PNG' | 'JPEG' | null
+  ) => {
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    });
 
-  const w = pdf.internal.pageSize.getWidth();
-  const h = pdf.internal.pageSize.getHeight();
+    const w = pdf.internal.pageSize.getWidth();
+    const h = pdf.internal.pageSize.getHeight();
 
-  const img = new Image();
-  img.src = '/logo.jpeg';
+    // Techna logo text color
+   const leafBlue = { r: 0, g: 170, b: 230 };
+   const technaBlue = { r: 0, g: 122, b: 204 };
 
-  img.onload = () => {
-    // Page background
     pdf.setFillColor(255, 255, 255);
     pdf.rect(0, 0, w, h, 'F');
 
-    // Top border
-    pdf.setFillColor(79, 70, 229);
+    pdf.setFillColor(leafBlue.r, leafBlue.g, leafBlue.b);
     pdf.rect(0, 0, w, 8, 'F');
+    
+    if (img && imgType) {
+  const imgProps = pdf.getImageProperties(img);
 
-    // Logo - no purple bg
-    pdf.addImage(img, 'JPEG', 14, 14, 20, 20);
+  const logoWidth = 35; // adjust if needed
+  const logoHeight = (imgProps.height * logoWidth) / imgProps.width;
 
-    // Header text
-    pdf.setTextColor(30, 30, 30);
+  pdf.addImage(
+    img,
+    imgType,
+    3, // x
+    10, // y
+    logoWidth,
+    logoHeight
+  );
+}
+
+    pdf.setTextColor(technaBlue.r, technaBlue.g, technaBlue.b);
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(22);
     pdf.text('TECHNA', w / 2, 20, { align: 'center' });
@@ -233,16 +247,18 @@ await examApi.remove(deleteConfirm);
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(9);
     pdf.setTextColor(90, 90, 90);
-    pdf.text('Email: sivasakthy22@gmail.com  |  Contact: +94 77 170 3549', w / 2, 27, {
-      align: 'center',
-    });
+    pdf.text(
+      'Email: sivasakthy22@gmail.com  |  Contact: +94 77 170 3549',
+      w / 2,
+      27,
+      { align: 'center' }
+    );
 
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(13);
-    pdf.setTextColor(79, 70, 229);
+    pdf.setTextColor(technaBlue.r, technaBlue.g, technaBlue.b);
     pdf.text('Examination Timetable', w / 2, 36, { align: 'center' });
 
-    // Divider
     pdf.setDrawColor(220, 220, 230);
     pdf.line(14, 42, w - 14, 42);
 
@@ -259,17 +275,16 @@ await examApi.remove(deleteConfirm);
       'Status',
     ];
 
-    const colW = [50, 40, 25, 30, 35, 45, 20, 25];
-    let x = 14;
+    const colW = [20, 55, 24, 20, 21, 20, 15, 18];
 
-    // Table header
-    pdf.setFillColor(245, 245, 255);
-    pdf.roundedRect(12, y - 7, w - 24, 10, 2, 2, 'F');
+    pdf.setFillColor(240, 250, 255);
+    pdf.roundedRect(10, y - 7, w - 20, 10, 2, 2, 'F');
 
-    pdf.setTextColor(79, 70, 229);
+    pdf.setTextColor(technaBlue.r, technaBlue.g, technaBlue.b);
     pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(8.5);
+    pdf.setFontSize(8.2);
 
+    let x = 12;
     headers.forEach((head, i) => {
       pdf.text(head, x, y);
       x += colW[i];
@@ -277,23 +292,21 @@ await examApi.remove(deleteConfirm);
 
     y += 9;
 
-    const sorted = [...filtered].sort((a, b) => a.date.localeCompare(b.date));
+    const sorted = [...filtered].sort((a, b) =>
+      a.date.localeCompare(b.date)
+    );
 
     sorted.forEach((e, index) => {
-      if (y > 185) {
+      if (y > h - 28) {
         pdf.addPage();
         y = 20;
       }
 
-      x = 14;
+      x = 12;
 
-      if (index % 2 === 0) {
-        pdf.setFillColor(250, 250, 255);
-        pdf.rect(12, y - 5, w - 24, 8, 'F');
-      }
-
+      
       pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(8);
+      pdf.setFontSize(7.8);
       pdf.setTextColor(45, 45, 45);
 
       const row = [
@@ -307,19 +320,20 @@ await examApi.remove(deleteConfirm);
         e.status,
       ];
 
-      row.forEach((cell, i) => {
-        const text = String(cell || '-');
-        pdf.text(text.length > 18 ? text.slice(0, 18) + '...' : text, x, y);
-        x += colW[i];
-      });
+row.forEach((cell, i) => {
+  const text = String(cell || '-');
+
+  pdf.text(text, x, y);
+
+  x += colW[i];
+});
 
       y += 8;
 
       pdf.setDrawColor(235, 235, 235);
-      pdf.line(12, y - 4, w - 12, y - 4);
+      pdf.line(10, y - 4, w - 10, y - 4);
     });
 
-    // Footer
     pdf.setDrawColor(220, 220, 230);
     pdf.line(14, h - 18, w - 14, h - 18);
 
@@ -336,8 +350,19 @@ await examApi.remove(deleteConfirm);
     toast.success('Timetable downloaded!');
   };
 
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.src = '/logo.png';
+
+  img.onload = () => generatePdf(img, 'PNG');
+
   img.onerror = () => {
-    toast.error('Failed to load logo image');
+    const fallback = new Image();
+    fallback.crossOrigin = 'anonymous';
+    fallback.src = '/logo.jpeg';
+
+    fallback.onload = () => generatePdf(fallback, 'JPEG');
+    fallback.onerror = () => generatePdf(null, null);
   };
 };
 const statusColors: Record<string, string> = {
