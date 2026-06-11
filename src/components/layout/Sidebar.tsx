@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, GraduationCap, CreditCard, BookOpen,
-  ClipboardList, Calendar, LogOut, GraduationCap as Logo, UserCircle, X, Menu, QrCode
+  ClipboardList, Calendar, LogOut, GraduationCap as Logo, UserCircle, X, Menu, QrCode, Play
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -13,6 +13,7 @@ const navItems = [
   { path: '/dashboard/teachers', icon: GraduationCap, label: 'Teachers' },
   { path: '/dashboard/students', icon: Users, label: 'Students' },
   { path: '/dashboard/modules', icon: BookOpen, label: 'Modules' },
+  { path: '/dashboard/videos', icon: Play, label: 'Videos' },
   { path: '/dashboard/payments', icon: CreditCard, label: 'Payments' },
   { path: '/dashboard/exams', icon: ClipboardList, label: 'Exams' },
   { path: '/dashboard/attendance', icon: Calendar, label: 'Attendance' },
@@ -27,7 +28,7 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const { user, logout } = useAuthStore();
-const pathname = usePathname() || '/dashboard';
+  const pathname = usePathname() || '/dashboard';
   const router = useRouter();
 
   const handleLogout = () => {
