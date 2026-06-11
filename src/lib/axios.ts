@@ -10,7 +10,7 @@ const axiosInstance = axios.create({
 axiosInstance.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
-      const authData = localStorage.getItem('techna-auth');
+      const authData = localStorage.getItem('edu-auth');
 
       if (authData) {
         try {

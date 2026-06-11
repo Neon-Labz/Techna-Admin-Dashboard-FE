@@ -21,16 +21,17 @@ export const dashboardApi = {
     return data.data || data;
   },
   async getStudents() {
-  const { data } = await api.get('/students');
-  return data.data || data;
-},
-<<<<<<< HEAD
+    const { data } = await api.get('/students');
+    return data.data || data;
+  },
 
-=======
-async getRevenue() {
-  const { data } = await api.get('/dashboard/revenue');
-  return data.data || data;
-},
->>>>>>> 21b080288ba7facd7d2452e17539aea4791ffc83
+  async getRevenue() {
+    const { data } = await api.get('/dashboard/revenue');
+    return data.data || data;
+  },
 
+  async getPayments() {
+    const { data } = await api.get('/payments');
+    return data.data || data;
+  },
 };

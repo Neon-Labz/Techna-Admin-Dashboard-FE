@@ -76,7 +76,7 @@ const pathname = usePathname() || '/dashboard';
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
           {navItems.map(({ path, icon: Icon, label }) => {
-            const isActive = path === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(path);
+            const isActive = path === '/dashboard' ? pathname === '/dashboard' : (pathname ?? '').startsWith(path);
             return (
               <Link
                 key={path} href={path}
