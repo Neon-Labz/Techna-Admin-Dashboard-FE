@@ -7,8 +7,8 @@ import { Eye, EyeOff, GraduationCap, Lock, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('admin@eduadmin.com');
-  const [password, setPassword] = useState('Admin@123');
+  const [email, setEmail] = useState('admin@gmail.com');
+  const [password, setPassword] = useState('admin123');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const login = useAuthStore(s => s.login);
@@ -83,7 +83,7 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-4 p-3 bg-indigo-50 rounded-lg text-xs text-indigo-600">
-            <strong>Demo:</strong> admin@eduadmin.com / Admin@123
+            <strong>Demo:</strong> admin@gmail.com / admin123
           </div>
 
           <p className="text-center text-sm text-gray-500 mt-6">
