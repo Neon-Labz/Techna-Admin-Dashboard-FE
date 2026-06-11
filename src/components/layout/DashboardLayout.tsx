@@ -25,8 +25,9 @@ export default function DashboardLayout({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuthStore();
-  const pathname = usePathname();
-  const pageName = pageNames[pathname ?? '/dashboard'] || 'Dashboard';
+
+  const pathname = usePathname() || '/dashboard';
+  const pageName = pageNames[pathname] || 'Dashboard';
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -57,10 +58,10 @@ export default function DashboardLayout({
 
             <div className="flex items-center gap-2 pl-2 border-l border-gray-200">
               <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">
-                {user?.name?.charAt(0).toUpperCase()}
+                {user?.name?.charAt(0).toUpperCase() || 'U'}
               </div>
               <span className="text-sm font-medium text-gray-700 hidden sm:block">
-                {user?.name}
+                {user?.name || 'User'}
               </span>
             </div>
           </div>

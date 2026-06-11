@@ -13,7 +13,7 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
     try {
-      const authStorage = JSON.parse(localStorage.getItem('edu-auth') || '{}');
+      const authStorage = JSON.parse(localStorage.getItem('techna-auth') || '{}');
       const token = authStorage?.state?.token;
 
       if (token) {

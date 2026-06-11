@@ -260,100 +260,102 @@ export default function StudentsPage() {
             onSubmit={handleWizardSubmit}
           />
         ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(
-              [
-                'name',
-                'email',
-                'phone',
-                'address',
-                'dob',
-                'parentName',
-                'parentPhone',
-              ] as const
-            ).map((f) => (
-              <div key={f}>
-                <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">
-                  {f === 'dob'
-                    ? 'Date of Birth'
-                    : f === 'parentName'
-                      ? 'Parent Name'
-                      : f === 'parentPhone'
-                        ? 'Parent Phone'
-                        : f.charAt(0).toUpperCase() + f.slice(1)}
-                </label>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(
+                [
+                  'name',
+                  'email',
+                  'phone',
+                  'address',
+                  'dob',
+                  'parentName',
+                  'parentPhone',
+                ] as const
+              ).map((f) => (
+                <div key={f}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">
+                    {f === 'dob'
+                      ? 'Date of Birth'
+                      : f === 'parentName'
+                        ? 'Parent Name'
+                        : f === 'parentPhone'
+                          ? 'Parent Phone'
+                          : f.charAt(0).toUpperCase() + f.slice(1)}
+                  </label>
 
-                <input
-                  type={f === 'dob' ? 'date' : f === 'email' ? 'email' : 'text'}
-                  value={(form as unknown as Record<string, string>)[f] || ''}
+                  <input
+                    type={
+                      f === 'dob' ? 'date' : f === 'email' ? 'email' : 'text'
+                    }
+                    value={(form as unknown as Record<string, string>)[f] || ''}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, [f]: e.target.value }))
+                    }
+                    required={['name', 'email', 'phone'].includes(f)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                  />
+                </div>
+              ))}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Batch
+                </label>
+                <select
+                  value={form.batch}
                   onChange={(e) =>
-                    setForm((prev) => ({ ...prev, [f]: e.target.value }))
+                    setForm((f) => ({ ...f, batch: e.target.value }))
                   }
-                  required={['name', 'email', 'phone'].includes(f)}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                />
+                >
+                  {BATCHES.map((b) => (
+                    <option key={b}>{b}</option>
+                  ))}
+                </select>
               </div>
-            ))}
+            </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Batch
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Enrolled Modules
               </label>
-              <select
-                value={form.batch}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, batch: e.target.value }))
-                }
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-              >
-                {BATCHES.map((b) => (
-                  <option key={b}>{b}</option>
+
+              <div className="flex flex-wrap gap-2">
+                {modules.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => toggleModule(m.id)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                      form.modules.includes(m.id)
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-400'
+                    }`}
+                  >
+                    {m.name}
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Enrolled Modules
-            </label>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
 
-            <div className="flex flex-wrap gap-2">
-              {modules.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => toggleModule(m.id)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                    form.modules.includes(m.id)
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-400'
-                  }`}
-                >
-                  {m.name}
-                </button>
-              ))}
+              <button
+                type="submit"
+                className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700"
+              >
+                Update Student
+              </button>
             </div>
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={() => setModalOpen(false)}
-              className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700"
-            >
-              {editStudent ? 'Update' : 'Add'} Student
-            </button>
-          </div>
-        </form>
+          </form>
         )}
       </Modal>
 
@@ -377,7 +379,9 @@ export default function StudentsPage() {
 
           <button
             onClick={() => {
-              deleteConfirm && deleteStudent(deleteConfirm);
+              if (deleteConfirm) {
+                deleteStudent(deleteConfirm);
+              }
               setDeleteConfirm(null);
               toast.success('Student deleted');
             }}

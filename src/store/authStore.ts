@@ -1,6 +1,7 @@
+import axios from 'axios';
+import { jwtDecode } from 'jwt-decode';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import axios from 'axios';
 import { login as loginRequest } from '../api/authApi';
 import type { User } from '../types';
 
@@ -21,9 +22,24 @@ interface AuthStore {
   updateProfile: (data: Partial<User>) => void;
 }
 
+interface JwtPayload {
+  sub?: string;
+  email?: string;
+  role?: User['role'];
+  iat?: number;
+  exp?: number;
+}
+
+function nameFromEmail(email: string): string {
+  return email
+    .split('@')[0]
+    .replace(/[._-]/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export const useAuthStore = create<AuthStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
       token: null,
       isAuthenticated: false,
@@ -56,10 +72,22 @@ export const useAuthStore = create<AuthStore>()(
             };
           }
 
+          localStorage.setItem('techna_admin_token', token);
+
+          let decoded: JwtPayload = {};
+
+          try {
+            decoded = jwtDecode<JwtPayload>(token);
+          } catch {
+            decoded = {};
+          }
+
+          const userEmail = decoded.email || email;
+
           const user: User = {
-            id: 'admin',
-            name: 'Super Admin',
-            email,
+            id: decoded.sub || 'admin',
+            name: nameFromEmail(userEmail),
+            email: userEmail,
             role,
             createdAt: new Date().toISOString(),
           };
@@ -73,8 +101,8 @@ export const useAuthStore = create<AuthStore>()(
           return { success: true };
         } catch (error) {
           const message = axios.isAxiosError(error)
-            ? (error.response?.data as { message?: string } | undefined)?.message ||
-              'Unable to connect to backend'
+            ? (error.response?.data as { message?: string } | undefined)
+                ?.message || 'Unable to connect to backend'
             : error instanceof Error
               ? error.message
               : 'Unable to connect to backend';
@@ -89,27 +117,28 @@ export const useAuthStore = create<AuthStore>()(
       register: async () => {
         return {
           success: false,
-          error: 'Registration is disabled for admin dashboard',
+          error: 'Admin registration is disabled. Contact your system administrator.',
         };
       },
 
       logout: () => {
+        localStorage.removeItem('techna_admin_token');
         set({ user: null, token: null, isAuthenticated: false });
       },
 
       updateProfile: (data: Partial<User>) => {
-        const currentUser = get().user;
+        set((state) => {
+          if (!state.user) return state;
 
-        if (!currentUser) return;
-
-        set({
-          user: {
-            ...currentUser,
-            ...data,
-          },
+          return {
+            user: {
+              ...state.user,
+              ...data,
+            },
+          };
         });
       },
     }),
-    { name: 'edu-auth' },
+    { name: 'techna-auth' },
   ),
 );
