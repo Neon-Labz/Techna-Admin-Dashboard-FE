@@ -32,7 +32,7 @@ export interface ApiTeacher {
   fullName: string;
   email: string;
   phone: string;
-  subject: string;
+  subject: string | string[];
   qualification: string;
   experience: string;
   address: string;

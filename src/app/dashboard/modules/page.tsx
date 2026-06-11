@@ -144,10 +144,12 @@ export default function ModulesPage() {
     try {
       const mod = await getModuleById(id);
       const teacher = teachers.find((t) => t._id === mod.teacherId);
+      const teacherSubject = teacher?.subject;
+      const subjectStr = Array.isArray(teacherSubject) ? teacherSubject.join(', ') : (teacherSubject ?? '');
       setForm({
         name: mod.name,
         description: mod.description,
-        subject: teacher?.subject ?? '',
+        subject: subjectStr,
         teacherId: mod.teacherId,
         teacherName: mod.teacherName,
         duration: mod.duration,
@@ -173,11 +175,13 @@ export default function ModulesPage() {
 
   const handleTeacherChange = (teacherId: string) => {
     const teacher = teachers.find((t) => t._id === teacherId);
+    const teacherSubject = teacher?.subject;
+    const subjectStr = Array.isArray(teacherSubject) ? teacherSubject.join(', ') : (teacherSubject ?? '');
     setForm((f) => ({
       ...f,
       teacherId,
       teacherName: teacher?.fullName ?? '',
-      subject: teacher?.subject ?? '',
+      subject: subjectStr,
     }));
   };
 

@@ -13,7 +13,7 @@ export interface Teacher {
   name: string;
   email: string;
   phone: string;
-  subject: string;
+  subject: string[];
   qualification: string;
   experience: string;
   address: string;
