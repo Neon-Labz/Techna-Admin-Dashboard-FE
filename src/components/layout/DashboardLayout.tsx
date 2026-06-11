@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { Outlet } from 'react-router-dom';
 import Sidebar, { MobileMenuButton } from './Sidebar';
 import { useAuthStore } from '../../store/authStore';
 import { Bell, Search } from 'lucide-react';
@@ -17,11 +18,11 @@ const pageNames: Record<string, string> = {
   '/dashboard/profile': 'Profile',
 };
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({ children }: { children?: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuthStore();
-  const pathname = usePathname() || '/dashboard';
-const pageName = pageNames[pathname as keyof typeof pageNames] || 'Dashboard';
+  const pathname = usePathname();
+  const pageName = pageNames[pathname ?? '/dashboard'] || 'Dashboard';
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -53,7 +54,7 @@ const pageName = pageNames[pathname as keyof typeof pageNames] || 'Dashboard';
           </div>
         </header>
         <main className="flex-1 overflow-y-auto">
-          {children}
+          {children || <Outlet />}
         </main>
       </div>
     </div>

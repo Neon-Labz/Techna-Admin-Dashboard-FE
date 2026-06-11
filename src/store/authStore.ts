@@ -1,98 +1,149 @@
-import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { authApi } from '../api';
 import type { User } from '../types';
+
+interface JwtPayload {
+  sub: string;
+  email: string;
+  role: string;
+  iat?: number;
+  exp?: number;
+}
 
 interface AuthStore {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   updateProfile: (data: Partial<User>) => void;
-}
-
-interface JwtPayload {
-  sub: string;
-  email: string;
-  role: string;
-  iat: number;
-  exp?: number;
-}
-
-// Capitalise the first letter of each word for a display name
-function nameFromEmail(email: string): string {
-  return email.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  loadSession: () => Promise<void>;
+  isTokenExpired: () => boolean;
 }
 
 export const useAuthStore = create<AuthStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
       isAuthenticated: false,
 
       login: async (email: string, password: string) => {
         try {
-          const res = await axios.post<{ access_token: string; role: string }>(
-            'http://localhost:4000/api/auth/login',
-            { email, password },
-          );
+          const response = await authApi.login(email, password);
+          const { access_token, role } = response;
 
-          // Techna-BE wraps every response: { success, message, data: <actual> }
-          const payload = (res.data as unknown as { data: { access_token: string; role: string } }).data
-            ?? res.data;
+          // ADMIN ONLY: Reject non-admin logins
+          if (role !== 'admin') {
+            return {
+              success: false,
+              error: 'Access denied. Only admin users can login to this portal.',
+            };
+          }
 
-          const token = payload.access_token;
-          if (!token) return { success: false, error: 'No token in response' };
+          // Decode the JWT to get user info
+          const decoded = jwtDecode<JwtPayload>(access_token);
 
-          // Persist token where api.ts interceptor can find it
-          localStorage.setItem('techna_admin_token', token);
+          // Check if token is already expired
+          if (decoded.exp && decoded.exp * 1000 < Date.now()) {
+            return { success: false, error: 'Token expired. Please try again.' };
+          }
 
-          const decoded = jwtDecode<JwtPayload>(token);
           const user: User = {
             id: decoded.sub,
-            name: nameFromEmail(decoded.email),
+            name: decoded.email.split('@')[0] || 'Admin',
             email: decoded.email,
             role: 'admin',
             createdAt: new Date().toISOString(),
           };
 
-          set({ user, token, isAuthenticated: true });
+          // Save to state (zustand persist will save to localStorage automatically)
+          set({ user, token: access_token, isAuthenticated: true });
+
           return { success: true };
-        } catch (err: unknown) {
-          let message = 'Login failed';
-          if (axios.isAxiosError(err)) {
-            const msg = err.response?.data?.message;
-            message = typeof msg === 'string' ? msg : Array.isArray(msg) ? msg[0] : message;
-          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Login failed';
           return { success: false, error: message };
         }
       },
 
-      // Admin accounts are provisioned via server environment variables.
-      // Self-registration is not supported by the backend.
-      register: async (_name: string, _email: string, _password: string) => {
-        return {
-          success: false,
-          error: 'Admin registration is disabled. Contact your system administrator.',
-        };
-      },
-
-      logout: () => {
-        localStorage.removeItem('techna_admin_token');
+      logout: async () => {
+        const token = get().token;
+        if (token) {
+          try {
+            await authApi.logout();
+          } catch {
+            // Proceed with local logout even if API call fails
+          }
+        }
+        // Clear state and localStorage
         set({ user: null, token: null, isAuthenticated: false });
       },
 
       updateProfile: (data: Partial<User>) => {
         set((state) => {
           if (!state.user) return state;
-          return { user: { ...state.user, ...data } };
+          const updatedUser = { ...state.user, ...data };
+          return { user: updatedUser };
         });
       },
+
+      loadSession: async () => {
+        const { token, isTokenExpired } = get();
+        if (!token) return;
+
+        // Check if token is expired before making API call
+        if (isTokenExpired()) {
+          set({ user: null, token: null, isAuthenticated: false });
+          return;
+        }
+
+        try {
+          const session = await authApi.getSession();
+
+          // Verify this is an admin session
+          if (session.role && session.role !== 'admin') {
+            set({ user: null, token: null, isAuthenticated: false });
+            return;
+          }
+
+          const user: User = {
+            id: session._id || session.userId || 'admin',
+            name: session.name || session.email || 'Admin',
+            email: session.email || '',
+            role: 'admin',
+            phone: session.phone || undefined,
+            createdAt: session.createdAt || new Date().toISOString(),
+          };
+          set({ user, isAuthenticated: true });
+        } catch {
+          // Token expired or invalid — log out
+          set({ user: null, token: null, isAuthenticated: false });
+        }
+      },
+
+      isTokenExpired: () => {
+        const token = get().token;
+        if (!token) return true;
+        try {
+          const decoded = jwtDecode<JwtPayload>(token);
+          if (!decoded.exp) return false;
+          // Add 30 second buffer
+          return decoded.exp * 1000 < Date.now() + 30000;
+        } catch {
+          return true;
+        }
+      },
     }),
-    { name: 'edu-auth' },
-  ),
+    {
+      name: 'edu-auth', // localStorage key
+      partialize: (state) => ({
+        user: state.user,
+        token: state.token,
+        isAuthenticated: state.isAuthenticated,
+      }),
+    }
+  )
 );

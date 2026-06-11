@@ -42,13 +42,13 @@ export default function DashboardHome() {
 
   const fetchDashboardData = async () => {
     try {
-      const [summaryData, studentsData, modulesData, examsData,  revenueData] =
+      const [summaryData, studentsData, modulesData, examsData, paymentsData] =
     await Promise.all([
         dashboardApi.getSummary(),
         dashboardApi.getStudents(),
         dashboardApi.getModules(),
         dashboardApi.getExams(),
-        dashboardApi.getRevenue(),
+        dashboardApi.getPayments(),
   ]);
 
 setSummary(summaryData);
@@ -56,10 +56,9 @@ setStudents(Array.isArray(studentsData) ? studentsData : []);
 setTeachers([]);
 setModules(Array.isArray(modulesData) ? modulesData : []);
 setExams(Array.isArray(examsData) ? examsData : []);
+const payments = Array.isArray(paymentsData) ? paymentsData : paymentsData?.payments || [];
 setRevenue(
-  Array.isArray(revenueData)
-    ? revenueData.reduce((sum, item) => sum + (item.value || 0), 0)
-    : revenueData?.totalRevenue || 0
+  payments.reduce((sum: number, item: any) => sum + (item.amount || 0), 0)
 );    } catch (error) {
       console.error('Failed to load dashboard data:', error);
     }

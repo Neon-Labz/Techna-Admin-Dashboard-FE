@@ -238,3 +238,6 @@ export const deleteAttendance = (id: string): Promise<{ message: string }> =>
 
 // Re-export for use in components without importing axios directly
 export { isAxiosError } from 'axios';
+
+export { apiClient as apiRequest, getStoredToken } from '../api/axiosClient';
+export { authApi } from '../api/auth.api';
