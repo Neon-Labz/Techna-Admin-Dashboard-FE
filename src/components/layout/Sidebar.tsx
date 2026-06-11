@@ -27,7 +27,7 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const { user, logout } = useAuthStore();
-  const pathname = usePathname();
+const pathname = usePathname() || '/dashboard';
   const router = useRouter();
 
   const handleLogout = () => {
@@ -76,7 +76,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
           {navItems.map(({ path, icon: Icon, label }) => {
-            const isActive = path === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(path);
+            const isActive = path === '/dashboard' ? pathname === '/dashboard' : (pathname ?? '').startsWith(path);
             return (
               <Link
                 key={path} href={path}

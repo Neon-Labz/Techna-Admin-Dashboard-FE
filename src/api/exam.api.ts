@@ -10,15 +10,13 @@ export type ExamPayload = {
   endTime: string;
   venue: string;
   description?: string;
-  totalMarks: number;
-  status: string;
   isPublished?: boolean;
 };
 
 export const examApi = {
   async getAll(): Promise<any[]> {
     const response = await api.get('/exam-notices');
-    return response.data?.data || [];
+    return response.data?.data || response.data || [];
   },
 
   async getById(id: string): Promise<any> {
@@ -38,6 +36,11 @@ export const examApi = {
 
   async remove(id: string): Promise<any> {
     const response = await api.delete(`/exam-notices/${id}`);
-    return response.data;
+    return response.data?.data || response.data;
+  },
+
+  async delete(id: string): Promise<any> {
+    const response = await api.delete(`/exam-notices/${id}`);
+    return response.data?.data || response.data;
   },
 };

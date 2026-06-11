@@ -7,21 +7,36 @@ const api = axios.create({
   },
 });
 
-api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const authData = localStorage.getItem('techna-auth');
+api.interceptors.request.use(
+  (config) => {
+    if (typeof window !== 'undefined') {
+      const authData =
+        localStorage.getItem('techna-auth') ||
+        localStorage.getItem('edu-auth') ||
+        localStorage.getItem('auth-storage');
 
-    if (authData) {
-      const parsed = JSON.parse(authData);
-      const token = parsed?.state?.token;
+      if (authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          const token = parsed?.state?.token || parsed?.token;
 
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+          if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+          }
+        } catch (error) {
+          console.error('Error parsing auth data:', error);
+        }
       }
     }
-  }
 
-  return config;
-});
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => Promise.reject(error)
+);
 
 export default api;

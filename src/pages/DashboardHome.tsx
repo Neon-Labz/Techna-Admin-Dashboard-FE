@@ -29,70 +29,115 @@ import { dashboardApi } from '@/api/dashboard.api';
 const COLORS = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'];
 
 export default function DashboardHome() {
+  const [students, setStudents] = useState<any[]>([]);
+  const [modules, setModules] = useState<any[]>([]);
+  const [exams, setExams] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
+  const [paidRevenue, setPaidRevenue] = useState(0);
 
   useEffect(() => {
-    fetchDashboardSummary();
+    fetchDashboardData();
   }, []);
 
-  const fetchDashboardSummary = async () => {
+  const fetchDashboardData = async () => {
     try {
-      const res = await dashboardApi.getSummary();
-      setSummary(res.data?.data || res.data);
+      const [summaryData, studentsData, modulesData, examsData] =
+        await Promise.all([
+          dashboardApi.getSummary(),
+          dashboardApi.getStudents(),
+          dashboardApi.getModules(),
+          dashboardApi.getExams(),
+        ]);
+
+      setSummary(summaryData);
+      setStudents(Array.isArray(studentsData) ? studentsData : []);
+      setModules(Array.isArray(modulesData) ? modulesData : []);
+      setExams(Array.isArray(examsData) ? examsData : []);
+
+      setPaidRevenue(
+        summaryData?.paidRevenue ||
+          summaryData?.totalPaid ||
+          summaryData?.totalRevenue ||
+          0
+      );
     } catch (error) {
-      console.error(error);
+      console.error('Failed to load dashboard data:', error);
     }
   };
+
+  const approved = students.filter((s) => s.status === 'approved').length;
+  const pending = students.filter((s) => s.status === 'pending').length;
+
+  const moduleChartData =
+    summary?.studentsPerModule ||
+    modules.map((m) => ({
+      name: m.name || m.moduleName || 'Module',
+      students: students.filter((s) =>
+        (Array.isArray(s.modules) ? s.modules : []).some((moduleId: any) => {
+          const id = typeof moduleId === 'string' ? moduleId : moduleId?._id;
+          return id === m._id || id === m.id;
+        })
+      ).length,
+    }));
+
+  const paymentByModule =
+    summary?.revenueByModule ||
+    modules.map((m) => ({
+      name: m.name || m.moduleName || 'Module',
+      value: m.fee || 0,
+    }));
+
+  const upcomingExams =
+    summary?.upcomingExams ||
+    exams.filter((e) => e.status === 'upcoming').slice(0, 3);
+
+  const recentStudents =
+    summary?.recentStudents || [...students].slice(-4).reverse();
 
   const stats = [
     {
       label: 'Total Students',
-      value: summary?.totalStudents || 0,
+      value: summary?.totalStudents ?? students.length,
       icon: Users,
       color: 'bg-indigo-500',
       change: '+12%',
     },
     {
       label: 'Approved',
-      value: summary?.approvedStudents || 0,
+      value: summary?.approvedStudents ?? approved,
       icon: UserCheck,
       color: 'bg-emerald-500',
       change: '+5%',
     },
     {
       label: 'Pending',
-      value: summary?.pendingStudents || 0,
+      value: summary?.pendingStudents ?? pending,
       icon: Clock,
       color: 'bg-amber-500',
       change: '-2%',
     },
     {
       label: 'Teachers',
-      value: summary?.totalTeachers || 0,
+      value: summary?.totalTeachers ?? 0,
       icon: GraduationCap,
       color: 'bg-purple-500',
       change: '+1%',
     },
     {
       label: 'Modules',
-      value: summary?.totalModules || 0,
+      value: summary?.totalModules ?? modules.length,
       icon: BookOpen,
       color: 'bg-cyan-500',
       change: '+3%',
     },
     {
-      label: 'Revenue (LKR)',
-      value: `${((summary?.totalRevenue || 0) / 1000).toFixed(0)}K`,
+      label: 'Paid Payments',
+      value: `${Math.round(paidRevenue / 1000)}K`,
       icon: CreditCard,
       color: 'bg-rose-500',
       change: '+18%',
     },
   ];
-
-  const moduleChartData = summary?.studentsPerModule || [];
-  const paymentByModule = summary?.revenueByModule || [];
-  const upcomingExams = summary?.upcomingExams || [];
-  const recentStudents = summary?.recentStudents || [];
 
   return (
     <div className="p-6 space-y-6">
@@ -116,8 +161,10 @@ export default function DashboardHome() {
             >
               <Icon className="w-5 h-5 text-white" />
             </div>
+
             <p className="text-2xl font-bold text-gray-800">{value}</p>
             <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+
             <span
               className={`text-xs font-medium ${
                 change.startsWith('+') ? 'text-emerald-600' : 'text-red-500'
@@ -140,7 +187,7 @@ export default function DashboardHome() {
             <BarChart data={moduleChartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
               <Tooltip />
               <Bar dataKey="students" fill="#6366f1" radius={[6, 6, 0, 0]} />
             </BarChart>
@@ -156,22 +203,18 @@ export default function DashboardHome() {
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie
-                data={paymentByModule}
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                dataKey="value"
-                label={({ name, percent }) =>
-                  `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
-                }
-              >
+  data={paymentByModule}
+  cx="50%"
+  cy="50%"
+  outerRadius={80}
+  dataKey="value"
+>
                 {paymentByModule.map((_: any, i: number) => (
                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip
-                formatter={(v) => `LKR ${Number(v).toLocaleString()}`}
-              />
+
+              <Tooltip formatter={(v) => `LKR ${Number(v).toLocaleString()}`} />
               <Legend />
             </PieChart>
           </ResponsiveContainer>
@@ -198,7 +241,7 @@ export default function DashboardHome() {
 
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-800 truncate">
-                    {s.name || s.fullNameEnglish}
+                    {s.name || s.fullNameEnglish || 'Unnamed Student'}
                   </p>
                   <p className="text-xs text-gray-500">
                     {s.batch || '-'} · {s.studentId || s.admissionNumber || '-'}
