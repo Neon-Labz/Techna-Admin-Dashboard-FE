@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useAuthStore } from '../../store/authStore';
 import { Eye, EyeOff, Lock, Mail, ArrowRight, ShieldCheck } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { useToast } from '@/hooks/useToast';
+import Toast from '@/pages/Toast';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -12,6 +13,7 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { toasts, addToast, removeToast } = useToast();
   const login = useAuthStore(s => s.login);
   const isAuthenticated = useAuthStore(s => s.isAuthenticated);
   const hasHydrated = useAuthStore(s => s._hasHydrated);
@@ -41,7 +43,7 @@ export default function LoginPage() {
     e.preventDefault();
 
     if (!email.trim() || !password.trim()) {
-      toast.error('Please fill in all fields');
+      addToast('Please fill in all fields', 'error');
       return;
     }
 
@@ -50,15 +52,18 @@ export default function LoginPage() {
     setLoading(false);
 
     if (res.success) {
-      toast.success('Welcome back, Admin!');
-      router.replace('/dashboard');
+      addToast('Welcome back, Admin!', 'success');
+      setTimeout(() => {
+        router.replace('/dashboard');
+      }, 800);
     } else {
-      toast.error(res.error || 'Login failed');
+      addToast(res.error || 'Login failed', 'error');
     }
   };
 
   return (
     <div className="min-h-screen relative flex items-center justify-center p-4 bg-gradient-to-br from-sky-400 via-blue-500 to-blue-600 overflow-hidden">
+      <Toast toasts={toasts} removeToast={removeToast} />
       {/* Decorative background shapes */}
       <div className="absolute inset-0 opacity-10 pointer-events-none">
         <svg className="absolute top-10 left-10 w-72 h-72 text-white" fill="currentColor" viewBox="0 0 24 24">
