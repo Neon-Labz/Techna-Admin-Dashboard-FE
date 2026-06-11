@@ -24,6 +24,13 @@ export const dashboardApi = {
   const { data } = await api.get('/students');
   return data.data || data;
 },
+<<<<<<< HEAD
 
+=======
+async getRevenue() {
+  const { data } = await api.get('/dashboard/revenue');
+  return data.data || data;
+},
+>>>>>>> 21b080288ba7facd7d2452e17539aea4791ffc83
 
 };
