@@ -1,5 +1,5 @@
-import { ToastMessage, ToastType } from '@/pages/Toast';
-import { useState, useCallback } from 'react';
+import { useState, useCallback } from "react";
+import { ToastMessage, ToastType } from "@/components/common/Toast";
 
 export function useToast() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
