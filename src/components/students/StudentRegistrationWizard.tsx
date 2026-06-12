@@ -24,8 +24,7 @@ const DISTRICTS = [
 
 const RACES = [
   'Sinhala',
-  'Sri Lankan Tamil',
-  'Indian Tamil',
+  'Tamil',
   'Muslim',
   'Burgher',
   'Malay',
@@ -36,12 +35,11 @@ const RELIGIONS = [
   'Buddhism',
   'Hinduism',
   'Islam',
-  'Christianity',
-  'Catholicism',
+  'Christianity(RC/Non.RC)',
   'Other',
 ];
 
-const GRADES = ['A', 'B', 'C', 'S', 'W', 'Absent'];
+const GRADES = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'S', 'F', 'AB'];
 
 const DEFAULT_SUBJECTS = [
   'Engineering Technology',

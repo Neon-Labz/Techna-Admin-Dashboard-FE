@@ -113,3 +113,12 @@ export async function approveStudent(id: string): Promise<Student> {
 
   return response.data?.data || response.data;
 }
+
+export async function rejectStudent(
+  id: string,
+  reason: string,
+): Promise<Student> {
+  const response = await api.patch(`/students/${id}/reject`, { reason });
+
+  return response.data?.data || response.data;
+}

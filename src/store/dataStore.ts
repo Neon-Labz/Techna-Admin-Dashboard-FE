@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import {
   approveStudent as approveStudentRequest,
+  rejectStudent as rejectStudentRequest,
   createStudent,
   deleteStudent as deleteStudentRequest,
   getStudents,
@@ -179,6 +180,7 @@ interface DataStore {
   updateStudent: (id: string, s: Partial<Student>) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
   approveStudent: (id: string) => Promise<void>;
+  rejectStudent: (id: string, reason: string) => Promise<void>;
   updateAttendance: (
     studentId: string,
     moduleId: string,
@@ -263,6 +265,38 @@ function mapBackendStudent(s: any): Student {
   } as Student;
 }
 
+function mapRaceToBackend(race?: string): string | undefined {
+  if (!race) return undefined;
+  const raceMap: Record<string, string> = {
+    'Sri Lankan Tamil': 'Tamil',
+    'Indian Tamil': 'Tamil',
+  };
+  return raceMap[race] || race;
+}
+
+function mapReligionToBackend(religion?: string): string | undefined {
+  if (!religion) return undefined;
+  const religionMap: Record<string, string> = {
+    'Christianity': 'Christianity(RC/Non.RC)',
+    'Catholicism': 'Christianity(RC/Non.RC)',
+  };
+  return religionMap[religion] || religion;
+}
+
+function cleanOlResults(results: any[]): any[] {
+  return results
+    .filter((row) => row.year?.trim() || row.indexNumber?.trim())
+    .map((row) => ({
+      year: row.year?.trim() || '',
+      indexNumber: row.indexNumber?.trim() || '',
+      english: row.english?.trim() || null,
+      mathematics: row.mathematics?.trim() || null,
+      science: row.science?.trim() || null,
+      sinhala: row.sinhala?.trim() || null,
+      tamil: row.tamil?.trim() || null,
+    }));
+}
+
 function mapStudentToCreatePayload(
   s: Omit<Student, 'id' | 'studentId' | 'qrToken' | 'attendance' | 'payments'>,
   modules: Module[],
@@ -321,8 +355,8 @@ function mapStudentToCreatePayload(
   fixedTelephone: s.fixedTelephone?.trim(),
   residingSince: s.residingSince?.trim(),
 
-  race: s.race,
-  religion: s.religion,
+  race: mapRaceToBackend(s.race),
+  religion: mapReligionToBackend(s.religion),
   citizenByDescent: s.citizenByDescent,
 
   contactPerson: s.contactPerson,
@@ -332,7 +366,7 @@ function mapStudentToCreatePayload(
   olIndexNumber: s.olIndexNumber,
   olNameUsed: s.olNameUsed,
   olAccept: s.olAccept,
-  olResults: s.olResults || [],
+  olResults: cleanOlResults(s.olResults || []),
 
   password: s.password?.trim() || '',
 } as CreateStudentRequestPayload;
@@ -453,24 +487,75 @@ export const useDataStore = create<DataStore>()(
 
       approveStudent: async (id) => {
         try {
+          // Fix invalid enum fields before approving to prevent backend validation errors
+          const student = get().students.find((x) => x.id === id);
+          if (student) {
+            const fixPayload: Record<string, any> = {};
+
+            // Fix race if it has an invalid value
+            const validRaces = ['Sinhala', 'Tamil', 'Muslim', 'Burgher', 'Malay', 'Other'];
+            if (student.race && !validRaces.includes(student.race)) {
+              fixPayload.race = mapRaceToBackend(student.race);
+            }
+
+            // Fix religion if it has an invalid value
+            const validReligions = ['Buddhism', 'Hinduism', 'Islam', 'Christianity(RC/Non.RC)', 'Other'];
+            if (student.religion && !validReligions.includes(student.religion)) {
+              fixPayload.religion = mapReligionToBackend(student.religion);
+            }
+
+            // Fix olResults - replace empty strings with null
+            if (student.olResults && student.olResults.length > 0) {
+              fixPayload.olResults = cleanOlResults(student.olResults);
+            }
+
+            if (Object.keys(fixPayload).length > 0) {
+              await updateStudentRequest(id, fixPayload);
+            }
+          }
+
           const approved = await approveStudentRequest(id);
 
           set((state) => ({
-            students: state.students.map((x) =>
-              x.id === id
-                ? mapBackendStudent(
-                    approved || {
-                      ...x,
-                      _id: id,
-                      status: 'approved',
-                      approvedAt: new Date().toISOString(),
-                    },
-                  )
-                : x,
-            ),
+            students: state.students.map((x) => {
+              if (x.id !== id) return x;
+              if (approved) {
+                return mapBackendStudent(approved);
+              }
+              return {
+                ...x,
+                status: 'approved' as const,
+                approvedAt: new Date().toISOString(),
+              };
+            }),
           }));
         } catch (error) {
           console.error('Failed to approve student:', error);
+          const msg = getApiErrorMessage(error, 'Failed to approve student');
+          throw new Error(msg);
+        }
+      },
+
+      rejectStudent: async (id, reason) => {
+        try {
+          const rejected = await rejectStudentRequest(id, reason);
+
+          set((state) => ({
+            students: state.students.map((x) => {
+              if (x.id !== id) return x;
+              if (rejected) {
+                return mapBackendStudent(rejected);
+              }
+              return {
+                ...x,
+                status: 'rejected' as const,
+              };
+            }),
+          }));
+        } catch (error) {
+          console.error('Failed to reject student:', error);
+          const msg = getApiErrorMessage(error, 'Failed to reject student');
+          throw new Error(msg);
         }
       },
 
