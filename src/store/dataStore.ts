@@ -365,13 +365,25 @@ export const useDataStore = create<DataStore>()(
       exams: SAMPLE_EXAMS,
 
       fetchStudents: async () => {
-        try {
-          const students = await getStudents();
-          set({ students: students.map(mapBackendStudent) });
-        } catch (error) {
-          console.error('Failed to fetch students:', error);
-        }
-      },
+  try {
+    const response = await getStudents();
+
+    const studentsArray = Array.isArray(response)
+      ? response
+      : Array.isArray((response as any)?.data)
+        ? (response as any).data
+        : Array.isArray((response as any)?.students)
+          ? (response as any).students
+          : Array.isArray((response as any)?.data?.students)
+            ? (response as any).data.students
+            : [];
+
+    set({ students: studentsArray.map(mapBackendStudent) });
+  } catch (error) {
+    console.error('Failed to fetch students:', error);
+    set({ students: [] });
+  }
+},
 
       addTeacher: (t) =>
         set((state) => ({
@@ -582,6 +594,13 @@ export const useDataStore = create<DataStore>()(
           exams: state.exams.filter((x) => x.id !== id),
         })),
     }),
-    { name: 'edu-data' },
-  ),
+{
+  name: 'edu-data',
+  partialize: (state) => ({
+    teachers: state.teachers,
+    modules: state.modules,
+    videos: state.videos,
+    exams: state.exams,
+  }),
+},  ),
 );
