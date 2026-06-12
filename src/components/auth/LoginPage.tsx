@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { useAuthStore } from '../../store/authStore';
 import { Eye, EyeOff, Lock, Mail, ArrowRight, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
-import Toast from '@/pages/Toast';
+import Toast from '@/components/common/Toast';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -63,7 +63,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen relative flex items-center justify-center p-4 bg-gradient-to-br from-sky-400 via-blue-500 to-blue-600 overflow-hidden">
-      <Toast toasts={toasts} removeToast={removeToast} />
+      <Toast toasts={toasts} onRemove={removeToast} />
       {/* Decorative background shapes */}
       <div className="absolute inset-0 opacity-10 pointer-events-none">
         <svg className="absolute top-10 left-10 w-72 h-72 text-white" fill="currentColor" viewBox="0 0 24 24">
