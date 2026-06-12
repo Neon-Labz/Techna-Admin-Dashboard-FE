@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { BookOpen, Edit2, Loader2, Plus, Search, Trash2 } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { useToast } from '@/hooks/useToast';
+import Toast from '@/components/common/Toast';
 
 import type { ApiModule, ApiTeacher, CreateModuleDto, UpdateModuleDto } from '@/lib/api';
 import {
@@ -91,6 +92,7 @@ function SkeletonCard() {
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ModulesPage() {
+  const { toasts, addToast, removeToast } = useToast();
   const [modules, setModules] = useState<ApiModule[]>([]);
   const [teachers, setTeachers] = useState<ApiTeacher[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,7 +123,7 @@ export default function ModulesPage() {
           getTeachers().then(setTeachers),
         ]);
       } catch (err) {
-        toast.error(extractErrorMessage(err));
+        addToast(extractErrorMessage(err), 'error');
       } finally {
         setLoading(false);
       }
@@ -156,7 +158,7 @@ export default function ModulesPage() {
         status: mod.status,
       });
     } catch (err) {
-      toast.error(extractErrorMessage(err));
+      addToast(extractErrorMessage(err), 'error');
       setModalOpen(false);
     } finally {
       setFormLoading(false);
@@ -199,15 +201,15 @@ export default function ModulesPage() {
       if (editId) {
         const patch: UpdateModuleDto = { ...base };
         await updateModule(editId, patch);
-        toast.success('Module updated!');
+        addToast('Module updated!', 'success');
       } else {
         await createModule(base);
-        toast.success('Module created!');
+        addToast('Module created!', 'success');
       }
       closeModal();
       await fetchModules();
     } catch (err) {
-      toast.error(extractErrorMessage(err));
+      addToast(extractErrorMessage(err), 'error');
     } finally {
       setSubmitting(false);
     }
@@ -221,10 +223,10 @@ export default function ModulesPage() {
     try {
       await deleteModule(deleteId);
       setModules((prev) => prev.filter((m) => m._id !== deleteId));
-      toast.success('Module deleted');
+      addToast('Module deleted', 'success');
       setDeleteId(null);
     } catch (err) {
-      toast.error(extractErrorMessage(err));
+      addToast(extractErrorMessage(err), 'error');
     } finally {
       setDeleting(false);
     }
@@ -480,6 +482,7 @@ export default function ModulesPage() {
         onCancel={() => setDeleteId(null)}
         onConfirm={handleDelete}
       />
+      <Toast toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

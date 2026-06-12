@@ -16,6 +16,7 @@ import {
   X,
   Menu,
   QrCode,
+  Play,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -25,6 +26,7 @@ const navItems = [
   { path: '/dashboard/teachers', icon: GraduationCap, label: 'Teachers' },
   { path: '/dashboard/students', icon: Users, label: 'Students' },
   { path: '/dashboard/modules', icon: BookOpen, label: 'Modules' },
+  { path: '/dashboard/videos', icon: Play, label: 'Videos' },
   { path: '/dashboard/payments', icon: CreditCard, label: 'Payments' },
   { path: '/dashboard/exams', icon: ClipboardList, label: 'Exams' },
   { path: '/dashboard/attendance', icon: Calendar, label: 'Attendance' },
@@ -69,9 +71,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
             </div>
             <div>
               <p className="text-white font-bold text-sm">Techna</p>
-              <p className="text-indigo-300 text-xs">
-                Management System
-              </p>
+              <p className="text-indigo-300 text-xs">Management System</p>
             </div>
           </div>
 
@@ -139,11 +139,7 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   );
 }
 
-export function MobileMenuButton({
-  onClick,
-}: {
-  onClick: () => void;
-}) {
+export function MobileMenuButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}

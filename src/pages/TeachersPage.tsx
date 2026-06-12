@@ -1,9 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useDataStore } from '../store/dataStore';
 import type { Teacher } from '../types';
+import { teacherApi, type TeacherFromApi } from '../api/teacher.api';
 import Modal from '../components/ui/Modal';
-import { Plus, Edit2, Trash2, GraduationCap, Phone, Mail, Search } from 'lucide-react';
+import { Plus, Edit2, Trash2, GraduationCap, Phone, Mail, Search, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const emptyTeacher: Omit<Teacher, 'id'> = {
@@ -11,19 +12,57 @@ const emptyTeacher: Omit<Teacher, 'id'> = {
   experience: '', address: '', joinDate: '', status: 'active',
 };
 
+/** Map backend response to frontend Teacher type */
+function mapApiTeacher(t: TeacherFromApi): Teacher {
+  return {
+    id: t._id,
+    name: t.fullName,
+    email: t.email,
+    phone: t.phone,
+    subject: t.subject,
+    qualification: t.qualification,
+    experience: t.experience,
+    address: t.address,
+    joinDate: t.joinDate,
+    status: t.status,
+  };
+}
+
 export default function TeachersPage() {
-  const { teachers, addTeacher, updateTeacher, deleteTeacher } = useDataStore();
+  const { addTeacher, updateTeacher, deleteTeacher } = useDataStore();
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editTeacher, setEditTeacher] = useState<Teacher | null>(null);
   const [form, setForm] = useState<Omit<Teacher, 'id'>>(emptyTeacher);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  const filtered = teachers.filter(t =>
-    t.name.toLowerCase().includes(search.toLowerCase()) ||
-    t.email.toLowerCase().includes(search.toLowerCase()) ||
-    t.subject.toLowerCase().includes(search.toLowerCase())
-  );
+  // Fetch teachers from backend on mount
+  useEffect(() => {
+    fetchTeachers();
+  }, []);
+
+  const fetchTeachers = async () => {
+    try {
+      setLoading(true);
+      const data = await teacherApi.getAll();
+      setTeachers(data.map(mapApiTeacher));
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to load teachers');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filtered = teachers.filter(t => {
+    const term = search.toLowerCase();
+    return (
+      (t.name || '').toLowerCase().includes(term) ||
+      (t.email || '').toLowerCase().includes(term) ||
+      (t.subject || '').toLowerCase().includes(term)
+    );
+  });
 
   const openAdd = () => { setForm(emptyTeacher); setEditTeacher(null); setModalOpen(true); };
   const openEdit = (t: Teacher) => { setForm({ ...t }); setEditTeacher(t); setModalOpen(true); };
@@ -80,7 +119,15 @@ export default function TeachersPage() {
           className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white" />
       </div>
 
+      {/* Loading */}
+      {loading && (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        </div>
+      )}
+
       {/* Grid */}
+      {!loading && (
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         {filtered.map(t => (
           <div key={t.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
@@ -116,8 +163,9 @@ export default function TeachersPage() {
           </div>
         ))}
       </div>
+      )}
 
-      {filtered.length === 0 && (
+      {!loading && filtered.length === 0 && (
         <div className="text-center py-16 text-gray-400">
           <GraduationCap className="w-12 h-12 mx-auto mb-3 opacity-30" />
           <p>No teachers found</p>

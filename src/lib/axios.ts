@@ -10,24 +10,31 @@ const api = axios.create({
   },
 });
 
-api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    try {
-      const authStorage = JSON.parse(localStorage.getItem('techna-auth') || '{}');
-      const token = authStorage?.state?.token;
+api.interceptors.request.use(
+  (config) => {
+    if (typeof window !== 'undefined') {
+      try {
+        const authStorage = JSON.parse(
+          localStorage.getItem('techna-auth') || '{}'
+        );
+        const token = authStorage?.state?.token;
 
-      if (token) {
-        config.headers = config.headers || {};
-        (config.headers as Record<string, string>).Authorization = `Bearer ${token}`;
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } catch {
+        // Ignore malformed persisted auth data.
       }
-    } catch {
-      // Ignore malformed persisted auth data.
     }
-  }
 
-  return config;
-});
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-api.interceptors.response.use((response) => response.data?.data ?? response.data);
+api.interceptors.response.use(
+  (response) => response.data?.data ?? response.data,
+  (error) => Promise.reject(error)
+);
 
 export default api;

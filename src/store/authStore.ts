@@ -1,111 +1,82 @@
-import axios from 'axios';
 import { jwtDecode } from 'jwt-decode';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { login as loginRequest } from '../api/authApi';
+import { authApi } from '../api';
 import type { User } from '../types';
+
+interface JwtPayload {
+  sub: string;
+  email: string;
+  role: string;
+  iat?: number;
+  exp?: number;
+}
 
 interface AuthStore {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  _hasHydrated: boolean;
+  setHasHydrated: (state: boolean) => void;
   login: (
     email: string,
-    password: string,
+    password: string
   ) => Promise<{ success: boolean; error?: string }>;
-  register: (
-    name: string,
-    email: string,
-    password: string,
-  ) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   updateProfile: (data: Partial<User>) => void;
-}
-
-interface JwtPayload {
-  sub?: string;
-  email?: string;
-  role?: User['role'];
-  iat?: number;
-  exp?: number;
-}
-
-function nameFromEmail(email: string): string {
-  return email
-    .split('@')[0]
-    .replace(/[._-]/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  loadSession: () => Promise<void>;
+  isTokenExpired: () => boolean;
 }
 
 export const useAuthStore = create<AuthStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
       isAuthenticated: false,
+      _hasHydrated: false,
+
+      setHasHydrated: (state: boolean) => set({ _hasHydrated: state }),
 
       login: async (email: string, password: string) => {
         try {
-          const json = (await loginRequest(email, password)) as {
-            access_token?: string;
-            token?: string;
-            role?: User['role'];
-            data?: {
-              access_token?: string;
-              token?: string;
-              role?: User['role'];
-            };
-          };
+          const response = await authApi.login(email, password);
+          const { access_token, role } = response;
 
-          const token =
-            json?.access_token ||
-            json?.data?.access_token ||
-            json?.data?.token ||
-            json?.token;
-
-          const role = json?.role || json?.data?.role || 'admin';
-
-          if (!token) {
+          if (role !== 'admin') {
             return {
               success: false,
-              error: 'Login failed: token not received',
+              error: 'Access denied. Only admin users can login to this portal.',
             };
           }
 
-          localStorage.setItem('techna_admin_token', token);
+          const decoded = jwtDecode<JwtPayload>(access_token);
 
-          let decoded: JwtPayload = {};
-
-          try {
-            decoded = jwtDecode<JwtPayload>(token);
-          } catch {
-            decoded = {};
+          if (decoded.exp && decoded.exp * 1000 < Date.now()) {
+            return {
+              success: false,
+              error: 'Token expired. Please try again.',
+            };
           }
 
-          const userEmail = decoded.email || email;
-
           const user: User = {
-            id: decoded.sub || 'admin',
-            name: nameFromEmail(userEmail),
-            email: userEmail,
-            role,
+            id: decoded.sub,
+            name: decoded.email.split('@')[0] || 'Admin',
+            email: decoded.email,
+            role: 'admin',
             createdAt: new Date().toISOString(),
           };
 
           set({
             user,
-            token,
+            token: access_token,
             isAuthenticated: true,
           });
 
           return { success: true };
         } catch (error) {
-          const message = axios.isAxiosError(error)
-            ? (error.response?.data as { message?: string } | undefined)
-                ?.message || 'Unable to connect to backend'
-            : error instanceof Error
-              ? error.message
-              : 'Unable to connect to backend';
+          const message =
+            error instanceof Error ? error.message : 'Login failed';
 
           return {
             success: false,
@@ -114,16 +85,22 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      register: async () => {
-        return {
-          success: false,
-          error: 'Admin registration is disabled. Contact your system administrator.',
-        };
-      },
+      logout: async () => {
+        const token = get().token;
 
-      logout: () => {
-        localStorage.removeItem('techna_admin_token');
-        set({ user: null, token: null, isAuthenticated: false });
+        if (token) {
+          try {
+            await authApi.logout();
+          } catch {
+            // Proceed with local logout even if API call fails
+          }
+        }
+
+        set({
+          user: null,
+          token: null,
+          isAuthenticated: false,
+        });
       },
 
       updateProfile: (data: Partial<User>) => {
@@ -138,7 +115,81 @@ export const useAuthStore = create<AuthStore>()(
           };
         });
       },
+
+      loadSession: async () => {
+        const { token, isTokenExpired } = get();
+
+        if (!token) return;
+
+        if (isTokenExpired()) {
+          set({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+          });
+          return;
+        }
+
+        try {
+          const session = await authApi.getSession();
+
+          if (session.role && session.role !== 'admin') {
+            set({
+              user: null,
+              token: null,
+              isAuthenticated: false,
+            });
+            return;
+          }
+
+          const user: User = {
+            id: session._id || session.userId || 'admin',
+            name: session.name || session.email || 'Admin',
+            email: session.email || '',
+            role: 'admin',
+            phone: session.phone || undefined,
+            createdAt: session.createdAt || new Date().toISOString(),
+          };
+
+          set({
+            user,
+            isAuthenticated: true,
+          });
+        } catch {
+          set({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+          });
+        }
+      },
+
+      isTokenExpired: () => {
+        const token = get().token;
+
+        if (!token) return true;
+
+        try {
+          const decoded = jwtDecode<JwtPayload>(token);
+
+          if (!decoded.exp) return false;
+
+          return decoded.exp * 1000 < Date.now() + 30000;
+        } catch {
+          return true;
+        }
+      },
     }),
-    { name: 'techna-auth' },
-  ),
+    {
+      name: 'edu-auth',
+      partialize: (state) => ({
+        user: state.user,
+        token: state.token,
+        isAuthenticated: state.isAuthenticated,
+      }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
+    }
+  )
 );

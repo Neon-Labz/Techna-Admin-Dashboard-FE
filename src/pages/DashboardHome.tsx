@@ -42,25 +42,27 @@ export default function DashboardHome() {
 
   const fetchDashboardData = async () => {
     try {
-      const [summaryData, studentsData, modulesData, examsData,  revenueData] =
-    await Promise.all([
-        dashboardApi.getSummary(),
-        dashboardApi.getStudents(),
-        dashboardApi.getModules(),
-        dashboardApi.getExams(),
-        dashboardApi.getRevenue(),
-  ]);
+      const [summaryData, studentsData, modulesData, examsData, paymentsData] =
+        await Promise.all([
+          dashboardApi.getSummary(),
+          dashboardApi.getStudents(),
+          dashboardApi.getModules(),
+          dashboardApi.getExams(),
+          dashboardApi.getPayments(),
+        ]);
 
-setSummary(summaryData);
-setStudents(Array.isArray(studentsData) ? studentsData : []);
-setTeachers([]);
-setModules(Array.isArray(modulesData) ? modulesData : []);
-setExams(Array.isArray(examsData) ? examsData : []);
-setRevenue(
-  Array.isArray(revenueData)
-    ? revenueData.reduce((sum, item) => sum + (item.value || 0), 0)
-    : revenueData?.totalRevenue || 0
-);    } catch (error) {
+      setSummary(summaryData);
+      setStudents(Array.isArray(studentsData) ? studentsData : []);
+      setTeachers([]);
+      setModules(Array.isArray(modulesData) ? modulesData : []);
+      setExams(Array.isArray(examsData) ? examsData : []);
+      const payments = Array.isArray(paymentsData)
+        ? paymentsData
+        : paymentsData?.payments || [];
+      setRevenue(
+        payments.reduce((sum: number, item: any) => sum + (item.amount || 0), 0)
+      );
+    } catch (error) {
       console.error('Failed to load dashboard data:', error);
     }
   };
@@ -68,12 +70,13 @@ setRevenue(
   const approved = students.filter((s) => s.status === 'approved').length;
   const pending = students.filter((s) => s.status === 'pending').length;
 
-const totalRevenue = revenue;
+  const totalRevenue = revenue;
+
   const moduleChartData = modules.map((m) => ({
     name: m.name || m.moduleName || 'Module',
     students: students.filter((s) =>
-(Array.isArray(s.modules) ? s.modules : []).some((moduleId: any) => {
-          const id = typeof moduleId === 'string' ? moduleId : moduleId?._id;
+      (Array.isArray(s.modules) ? s.modules : []).some((moduleId: any) => {
+        const id = typeof moduleId === 'string' ? moduleId : moduleId?._id;
         return id === m._id || id === m.id;
       })
     ).length,
@@ -115,7 +118,7 @@ const totalRevenue = revenue;
     },
     {
       label: 'Modules',
-  value: summary?.totalModules || modules.length,
+      value: summary?.totalModules || modules.length,
       icon: BookOpen,
       color: 'bg-cyan-500',
       change: '+3%',

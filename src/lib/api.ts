@@ -10,6 +10,11 @@ export interface ApiResource {
   fileType: 'video' | 'image' | 'pdf' | 'file';
   fileUrl: string;
   fileKey: string;
+  url?: string;
+  thumbnailUrl?: string;
+  description?: string;
+  uploadedAt?: string;
+  isPublished?: boolean;
 }
 
 export interface ApiModule {
@@ -236,5 +241,62 @@ export const updateAttendance = (id: string, data: UpdateAttendanceDto): Promise
 export const deleteAttendance = (id: string): Promise<{ message: string }> =>
   api.delete<{ message: string }>(`/api/attendance/${id}`).then((r) => r.data);
 
+// ─── Module Resources ──────────────────────────────────────────────────────────
+
+export const uploadModuleResource = (
+  moduleId: string,
+  formData: FormData
+): Promise<ApiResource> =>
+  api.post<ApiResource>(`/api/modules/${moduleId}/upload-resource`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data);
+
+export const addResourceUrl = (
+  moduleId: string,
+  data: {
+    title: string;
+    url: string;
+    thumbnailUrl?: string;
+    fileType: string;
+    description?: string;
+  }
+): Promise<ApiResource> =>
+  api.post(`/api/modules/${moduleId}/add-resource-url`, data)
+    .then(r => r.data);
+
+export const toggleResourcePublish = (
+  moduleId: string,
+  resourceId: string
+): Promise<{ resourceId: string; isPublished: boolean; message: string }> =>
+  api.patch(`/api/modules/${moduleId}/resources/${resourceId}/toggle-publish`)
+    .then(r => r.data);
+
+// ─── Attendance (create) ───────────────────────────────────────────────────────
+
+export interface CreateAttendanceDto {
+  studentId: string;
+  moduleId: string;
+  moduleName: string;
+  date: string;
+  status: 'present' | 'absent';
+  markedAt: string;
+}
+
+export const createAttendance = (data: CreateAttendanceDto): Promise<ApiAttendance> =>
+  api.post<ApiAttendance>('/api/attendance', data).then(r => r.data);
+
+export const getStudentAttendance = (
+  studentId: string
+): Promise<ApiAttendance[]> =>
+  api.get(`/api/attendance/student/${studentId}`).then(r => r.data);
+
+export function extractErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return 'Something went wrong';
+}
+
 // Re-export for use in components without importing axios directly
 export { isAxiosError } from 'axios';
+
+export { apiClient as apiRequest, getStoredToken } from '../api/axiosClient';
+export { authApi } from '../api/auth.api';
