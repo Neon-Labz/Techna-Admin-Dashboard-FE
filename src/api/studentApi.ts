@@ -63,11 +63,17 @@ export type CreateStudentRequestPayload = {
 };
 
 export async function getStudents(): Promise<Student[]> {
-  return api.get('/students');
+  const response = await api.get('/students');
+
+  console.log('Students API Response:', response.data);
+
+  return response.data?.data || response.data || [];
 }
 
 export async function getStudentById(id: string): Promise<Student> {
-  return api.get(`/students/${id}`);
+  const response = await api.get(`/students/${id}`);
+
+  return response.data?.data || response.data;
 }
 
 export async function createStudent(
@@ -84,20 +90,26 @@ export async function createStudent(
     payload,
   });
 
-  return api.post('/students', payload);
+  const response = await api.post('/students', payload);
+
+  return response.data?.data || response.data;
 }
 
 export async function updateStudent(
   id: string,
   payload: Partial<StudentPayload>,
 ): Promise<Student> {
-  return api.patch(`/students/${id}`, payload);
+  const response = await api.patch(`/students/${id}`, payload);
+
+  return response.data?.data || response.data;
 }
 
 export async function deleteStudent(id: string): Promise<void> {
-  return api.delete(`/students/${id}`);
+  await api.delete(`/students/${id}`);
 }
 
 export async function approveStudent(id: string): Promise<Student> {
-  return api.patch(`/students/${id}/approve`);
+  const response = await api.patch(`/students/${id}/approve`);
+
+  return response.data?.data || response.data;
 }
