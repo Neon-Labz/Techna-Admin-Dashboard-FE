@@ -10,13 +10,6 @@ import StudentRegistrationWizard from '../components/students/StudentRegistratio
 import { Plus, Search, Filter, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const BATCHES = [
-  'May 2024 Batch',
-  'September 2024 Batch',
-  'January 2025 Batch',
-  'May 2025 Batch',
-];
-
 const SUBJECT_OPTIONS = [
   'Engineering Technology',
   'Science for Technology',
@@ -274,6 +267,15 @@ export default function StudentsPage() {
     ? students.find((s) => s.id === viewStudent.id) || viewStudent
     : null;
 
+  const batchOptions = [
+    'All Batches',
+    ...Array.from(
+      new Set(
+        students.map((student: any) => student.batch).filter(Boolean),
+      ),
+    ),
+  ];
+
   const editFields = [
     ['fullNameEnglish', 'Full Name English'],
     ['fullNameTamil', 'Full Name Tamil'],
@@ -337,9 +339,10 @@ export default function StudentsPage() {
             onChange={(e) => setFilterBatch(e.target.value)}
             className="px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
           >
-            <option value="">All Batches</option>
-            {BATCHES.map((b) => (
-              <option key={b}>{b}</option>
+            {batchOptions.map((b) => (
+              <option key={b} value={b === 'All Batches' ? '' : b}>
+                {b}
+              </option>
             ))}
           </select>
 
@@ -441,9 +444,14 @@ export default function StudentsPage() {
                   onChange={(e) => handleChange('batch', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                 >
-                  {BATCHES.map((b) => (
-                    <option key={b}>{b}</option>
-                  ))}
+                  {batchOptions
+                    .filter((b) => b !== 'All Batches')
+                    .map((b) => (
+                      <option key={b}>{b}</option>
+                    ))}
+                  {form.batch && !batchOptions.includes(form.batch) && (
+                    <option value={form.batch}>{form.batch}</option>
+                  )}
                 </select>
               </div>
             </div>

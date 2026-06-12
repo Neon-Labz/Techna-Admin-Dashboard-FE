@@ -50,6 +50,57 @@ const normalizeQrImageUrl = (value?: string) => {
   }
 };
 
+const getStatusBadgeClass = (status: string) => {
+  switch (status?.toLowerCase()) {
+    case 'approved':
+      return 'bg-green-100 text-green-700 border border-green-200';
+    case 'rejected':
+      return 'bg-red-100 text-red-700 border border-red-200';
+    case 'pending':
+      return 'bg-yellow-100 text-yellow-700 border border-yellow-200';
+    default:
+      return 'bg-gray-100 text-gray-700 border border-gray-200';
+  }
+};
+
+const DetailItem = ({
+  label,
+  value,
+  className = '',
+}: {
+  label: string;
+  value: any;
+  className?: string;
+}) => (
+  <div className={className}>
+    <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
+      {label}
+    </p>
+    <p className="mt-1 text-sm font-bold leading-snug text-slate-800 break-words">
+      {getValue(value)}
+    </p>
+  </div>
+);
+
+const ProfileSection = ({
+  title,
+  children,
+  className = '',
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) => (
+  <section
+    className={`rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:p-5 ${className}`}
+  >
+    <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-slate-400">
+      {title}
+    </h3>
+    <div className="mt-4">{children}</div>
+  </section>
+);
+
 export default function StudentProfile({
   student,
   onClose,
@@ -160,7 +211,7 @@ export default function StudentProfile({
 
       pdf.setFontSize(9);
       pdf.setFont('helvetica', 'normal');
-      pdf.text('Techna · School Management System', pageWidth / 2, 20, {
+      pdf.text('Techna - School Management System', pageWidth / 2, 20, {
         align: 'center',
       });
 
@@ -220,33 +271,6 @@ export default function StudentProfile({
     });
   };
 
-  const personalDetails = [
-    ['Full Name English', s.fullNameEnglish || s.name],
-    ['Full Name Tamil', s.fullNameTamil],
-    ['Email', s.email],
-    ['Phone', s.phone || s.whatsappNo],
-    ['WhatsApp No', s.whatsappNo],
-    ['Parents No', s.parentsNo || s.parentPhone],
-    ['Date of Birth', formatDate(s.dateOfBirth || s.dob)],
-    ['NIC No', s.nicNo],
-    ['School', s.school],
-    ['Permanent Address', s.permanentAddress || s.address],
-    ['Contact Address', s.contactAddress],
-    ['District', s.administrativeDistrict],
-    ['Postal Code', s.postalCode],
-    ['Father Name', s.fatherName],
-    ['Mother Name', s.motherName],
-    ['Guardian Name', s.guardianName || s.parentName],
-    ['Guardian Mobile', s.guardianMobile],
-    ['Race', s.race],
-    ['Religion', s.religion],
-    ['Batch', s.batch],
-    ['Status', s.status],
-    ['Modules', studentModules.map((m: any) => m.name).join(', ')],
-    ['Enrolled', formatDate(s.enrolledAt)],
-    ['Approved', s.approvedAt ? formatDate(s.approvedAt) : 'Not yet'],
-  ];
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
@@ -254,195 +278,229 @@ export default function StudentProfile({
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-5xl bg-gray-50 rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 bg-white border-b border-gray-100 rounded-t-2xl sticky top-0 z-10">
-          <h2 className="text-lg font-bold text-gray-800">Student Profile</h2>
+      <div className="relative flex h-[90vh] w-full max-w-[1280px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <button
+          onClick={onClose}
+          className="absolute right-5 top-5 z-20 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          aria-label="Close student profile"
+        >
+          <X className="h-5 w-5" />
+        </button>
 
-          <div className="flex items-center gap-2">
+        <div className="shrink-0 border-b border-slate-100 px-5 py-4 lg:px-8 lg:py-5">
+          <div className="flex flex-col gap-3 pr-10 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+                Student Profile
+              </h2>
+              <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs font-bold uppercase tracking-[0.08em]">
+                <p className="text-slate-400">
+                  Enrolled:{' '}
+                  <span className="text-slate-700">
+                    {formatDate(s.enrolledAt)}
+                  </span>
+                </p>
+                <p className="text-slate-400">
+                  Approved:{' '}
+                  <span className="text-emerald-600">
+                    {s.approvedAt ? formatDate(s.approvedAt) : 'Not yet'}
+                  </span>
+                </p>
+              </div>
+            </div>
+
             <button
               onClick={handleDownloadPDF}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700"
+              className="flex w-fit items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700"
             >
-              <Download className="w-4 h-4" />
+              <Download className="h-4 w-4" />
               Download QR Card
-            </button>
-
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"
-            >
-              <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-600 mb-3 uppercase tracking-wide">
-              Student ID Card
-            </h3>
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 bg-white p-4 lg:grid-cols-[420px_minmax(0,1fr)] lg:p-5">
+          <aside className="h-full overflow-hidden space-y-4">
+            <div>
+              <h3 className="mb-2 text-sm font-bold uppercase tracking-[0.16em] text-slate-400">
+                Student ID Card (PDF Preview)
+              </h3>
 
-            <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
-              <div className="p-5 bg-indigo-600 text-white">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-xl bg-white/20 flex items-center justify-center text-2xl font-bold">
-                    {studentName.charAt(0).toUpperCase()}
-                  </div>
+              <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-md">
+                <div className="rounded-t-2xl bg-gradient-to-r from-indigo-500 to-purple-500 px-4 py-3 text-white">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/30 bg-white/20 text-xl font-bold">
+                      {studentName.charAt(0).toUpperCase()}
+                    </div>
 
-                  <div>
-                    <h2 className="text-lg font-bold">{studentName}</h2>
-                    <p className="text-sm font-mono text-indigo-200">
-                      {s.studentId}
-                    </p>
-                    <p className="text-xs text-indigo-200">{s.batch}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-5 flex gap-4">
-                <div className="flex-1 space-y-2 text-sm">
-                  <div>
-                    <span className="text-xs text-gray-400">Phone</span>
-                    <p className="font-medium text-gray-700">
-                      {getValue(s.phone || s.whatsappNo)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <span className="text-xs text-gray-400">Email</span>
-                    <p className="font-medium text-xs text-gray-700">
-                      {getValue(s.email)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <span className="text-xs text-gray-400">Status</span>
-                    <span className="ml-2 text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700">
-                      {s.status}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="text-xs text-gray-400">Modules</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {studentModules.length > 0 ? (
-                        studentModules.map((m: any) => (
-                          <span
-                            key={m.id || m.name}
-                            className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700"
-                          >
-                            {m.name}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-xs text-gray-400">
-                          No modules selected
-                        </span>
-                      )}
+                    <div>
+                      <h2 className="text-lg font-bold leading-tight">
+                        {studentName}
+                      </h2>
+                      <p className="mt-0.5 text-[12px] text-indigo-100">
+                        {getValue(s.studentId)}
+                      </p>
+                      <p className="text-[12px] text-indigo-100">
+                        {getValue(s.batch)}
+                      </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="shrink-0">
-                  <div className="p-2 bg-white rounded-xl border border-gray-200">
-                    {shouldShowQrImage ? (
-                      <img
-                        src={qrImageUrl}
-                        alt="Student QR"
-                        className="w-[100px] h-[100px] object-contain"
-                        onError={() => setQrImageFailed(true)}
-                      />
-                    ) : (
-                      <QRCodeSVG value={qrData} size={100} level="M" />
-                    )}
+                <div className="grid grid-cols-[1fr_125px] gap-3 p-3">
+                  <div className="space-y-1.5 border-r border-dashed border-slate-200 pr-3">
+                    <div>
+                      <span className="text-[11px] font-bold uppercase text-slate-400">
+                        Phone
+                      </span>
+                      <p className="text-[12px] font-bold leading-tight text-slate-800">
+                        {getValue(s.phone || s.whatsappNo)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-bold uppercase text-slate-400">
+                        Email
+                      </span>
+                      <p className="text-[12px] font-bold leading-tight text-slate-800 break-words">
+                        {getValue(s.email)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-bold uppercase text-slate-400">
+                        Status
+                      </span>
+                      <span
+                        className={`mt-0.5 block w-fit rounded-md px-2 py-0.5 text-[11px] font-bold uppercase ${getStatusBadgeClass(
+                          s.status,
+                        )}`}
+                      >
+                        {s.status || 'N/A'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[11px] font-bold uppercase text-slate-400">
+                        Modules
+                      </span>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {studentModules.length > 0 ? (
+                          studentModules.map((m: any) => (
+                            <span
+                              key={m.id || m.name}
+                            className="rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-600"
+                            >
+                              {m.name}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-400">
+                            No modules selected
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-center text-xs text-gray-400 mt-1">
-                    Scan for details
+
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="bg-white leading-none">
+                      {shouldShowQrImage ? (
+                        <img
+                          src={qrImageUrl}
+                          alt="Student QR"
+                          className="h-[112px] w-[112px] object-contain"
+                          onError={() => setQrImageFailed(true)}
+                        />
+                      ) : (
+                        <QRCodeSVG value={qrData} size={112} level="M" />
+                      )}
+                    </div>
+                    <p className="mt-2 text-center text-[10px] uppercase text-slate-300">
+                      Scan for details
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex h-8 items-center justify-center rounded-b-2xl bg-slate-50 px-4 text-center">
+                  <p className="text-xs text-blue-400">
+                    Techna - School Management System
                   </p>
                 </div>
               </div>
+            </div>
 
-              <div className="p-4 border-t border-gray-200">
-                <p className="text-xs font-semibold uppercase tracking-wide mb-2 text-gray-500">
-                  Attendance Today
-                </p>
+            <div>
+              <h3 className="mb-2 text-sm font-bold uppercase tracking-[0.16em] text-slate-400">
+                Attendance (Today)
+              </h3>
 
-                <div className="space-y-1.5">
-                  {studentModules.length > 0 ? (
-                    studentModules.map((m: any) => {
-                      const att = getAttendanceStatus(m.id);
+              <div className="space-y-1.5">
+                {studentModules.length > 0 ? (
+                  studentModules.map((m: any) => {
+                    const att = getAttendanceStatus(m.id);
 
-                      return (
-                        <div
-                          key={m.id || m.name}
-                          className="flex items-center justify-between"
-                        >
-                          <span className="text-sm text-gray-700">
-                            {m.name}
-                          </span>
+                    return (
+                      <div
+                        key={m.id || m.name}
+                        className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-1.5"
+                      >
+                        <span className="text-[13px] font-medium text-slate-800">
+                          {m.name}
+                        </span>
 
-                          <div className="flex gap-1.5">
-                            <button
-                              onClick={() =>
-                                onAttendanceUpdate(m.id, today, 'present')
-                              }
-                              className={`text-xs px-2.5 py-1 rounded-lg font-medium ${
-                                att === 'present'
-                                  ? 'bg-emerald-500 text-white'
-                                  : 'bg-gray-100 text-gray-500'
-                              }`}
-                            >
-                              Present
-                            </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() =>
+                              onAttendanceUpdate(m.id, today, 'present')
+                            }
+                            className={`rounded-lg border px-2 py-1 text-xs font-bold transition ${
+                              att === 'present'
+                                ? 'border-emerald-100 bg-emerald-100 text-emerald-600'
+                                : 'border-slate-200 bg-white text-slate-400 hover:text-emerald-600'
+                            }`}
+                          >
+                            Present
+                          </button>
 
-                            <button
-                              onClick={() =>
-                                onAttendanceUpdate(m.id, today, 'absent')
-                              }
-                              className={`text-xs px-2.5 py-1 rounded-lg font-medium ${
-                                att === 'absent'
-                                  ? 'bg-red-500 text-white'
-                                  : 'bg-gray-100 text-gray-500'
-                              }`}
-                            >
-                              Absent
-                            </button>
-                          </div>
+                          <button
+                            onClick={() =>
+                              onAttendanceUpdate(m.id, today, 'absent')
+                            }
+                            className={`rounded-lg border px-2 py-1 text-xs font-bold transition ${
+                              att === 'absent'
+                                ? 'border-red-100 bg-red-100 text-red-600'
+                                : 'border-slate-200 bg-white text-slate-400 hover:text-red-600'
+                            }`}
+                          >
+                            Absent
+                          </button>
                         </div>
-                      );
-                    })
-                  ) : (
-                    <p className="text-sm text-gray-400">No modules selected</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="px-4 py-2 text-center bg-indigo-50">
-                <p className="text-xs text-indigo-400">
-                  Techna · School Management System
-                </p>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="rounded-xl bg-slate-50 p-4 text-[13px] text-slate-400">
+                    No modules selected
+                  </p>
+                )}
               </div>
             </div>
-          </div>
+          </aside>
 
-          <div className="space-y-5">
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-indigo-500" />
-                  Payments
-                </h3>
-
+          <main className="h-full min-w-0 space-y-4 overflow-y-auto pr-4">
+            <ProfileSection title="Payments">
+              <div className="-mt-1 mb-3 flex justify-end">
                 <button
                   onClick={() => setShowPayModal(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700"
+                  className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700"
                 >
-                  <Plus className="w-3 h-3" />
+                  <Plus className="h-3.5 w-3.5" />
                   Add Payment
                 </button>
               </div>
 
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 {studentModules.length > 0 ? (
                   studentModules.map((m: any) => {
                     const paid = getModulePayment(m.id);
@@ -450,68 +508,101 @@ export default function StudentProfile({
                     return (
                       <div
                         key={m.id || m.name}
-                        className={`flex items-center justify-between p-3 rounded-xl ${
-                          paid ? 'bg-emerald-50' : 'bg-gray-50'
+                        className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
+                          paid
+                            ? 'border-emerald-200 bg-emerald-50'
+                            : 'border-slate-100 bg-white'
                         }`}
                       >
-                        <span className="text-sm font-medium text-gray-700">
+                        <span className="text-[13px] font-bold text-slate-800">
                           {m.name}
                         </span>
 
                         {paid ? (
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-emerald-600 font-medium">
+                            <span className="text-xs font-bold text-emerald-600">
                               LKR {paid.amount?.toLocaleString()}
                             </span>
-                            <CheckCircle className="w-4 h-4 text-emerald-500" />
+                            <CheckCircle className="h-4 w-4 text-emerald-600" />
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs text-gray-400">Unpaid</span>
-                            <XCircle className="w-4 h-4 text-gray-300" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-400">
+                              Unpaid
+                            </span>
+                            <XCircle className="h-4 w-4 text-slate-400" />
                           </div>
                         )}
                       </div>
                     );
                   })
                 ) : (
-                  <p className="text-sm text-gray-400 text-center py-2">
+                  <p className="rounded-xl bg-slate-50 p-4 text-[13px] text-slate-400">
                     No modules selected
                   </p>
                 )}
+              </div>
 
-                {(s.payments || []).length === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-2">
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <h4 className="mb-3 text-xs font-bold uppercase text-slate-400">
+                  Payment History
+                </h4>
+
+                {(s.payments || []).length === 0 ? (
+                  <p className="text-[13px] text-slate-400">
                     No payment records
                   </p>
+                ) : (
+                  <div className="space-y-2">
+                    {(s.payments || []).map((p: any) => (
+                      <div
+                        key={
+                          p.id || p.receiptNo || `${p.moduleId}-${p.paidDate}`
+                        }
+                        className="grid grid-cols-[1fr_auto_auto] items-center gap-4 text-[13px]"
+                      >
+                        <span className="font-bold text-slate-800">
+                          {getValue(p.moduleName)}
+                        </span>
+                        <span className="text-slate-400">
+                          {formatDate(p.paidDate)}
+                        </span>
+                        <span className="font-bold text-emerald-600">
+                          LKR{' '}
+                          {p.amount?.toLocaleString?.() || getValue(p.amount)}
+                        </span>
+                        <span className="col-span-3 -mt-2 text-right text-xs capitalize text-slate-400">
+                          {getValue(p.method)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
-            </div>
+            </ProfileSection>
 
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-              <h3 className="font-semibold text-gray-800 mb-4">
-                Attendance History
-              </h3>
-
+            <ProfileSection title="Attendance History">
               {(s.attendance || []).length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-4">
+                <p className="text-[13px] text-slate-400">
                   No attendance records
                 </p>
               ) : (
-                <div className="space-y-2 max-h-48 overflow-y-auto">
+                <div className="space-y-3">
                   {[...(s.attendance || [])].map((a: any) => (
                     <div
                       key={a.id || `${a.moduleId}-${a.date}`}
-                      className="flex items-center justify-between text-sm p-2 rounded-lg bg-gray-50"
+                      className="grid grid-cols-[1fr_auto_auto] items-center gap-4 text-[13px]"
                     >
-                      <span className="font-medium text-gray-700">
-                        {a.moduleName}
+                      <span className="font-bold text-slate-800">
+                        {getValue(a.moduleName)}
                       </span>
-                      <span className="text-gray-400 text-xs">{a.date}</span>
+                      <span className="text-slate-400">
+                        {formatDate(a.date)}
+                      </span>
                       <span
-                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        className={`rounded-md px-2.5 py-1 text-xs font-bold uppercase ${
                           a.status === 'present'
-                            ? 'bg-emerald-100 text-emerald-700'
+                            ? 'bg-emerald-100 text-emerald-600'
                             : 'bg-red-100 text-red-600'
                         }`}
                       >
@@ -521,25 +612,55 @@ export default function StudentProfile({
                   ))}
                 </div>
               )}
-            </div>
+            </ProfileSection>
 
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-              <h3 className="font-semibold text-gray-800 mb-4">
-                Personal Details
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                {personalDetails.map(([label, value]) => (
-                  <div key={label} className="bg-gray-50 rounded-xl p-3">
-                    <p className="text-xs text-gray-400">{label}</p>
-                    <p className="font-medium text-gray-700 break-words">
-                      {getValue(value)}
-                    </p>
-                  </div>
-                ))}
+            <ProfileSection title="Personal Details">
+              <div className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-2 xl:grid-cols-3">
+                <DetailItem label="Full Name" value={s.fullNameEnglish || s.name} />
+                <DetailItem label="Email" value={s.email} />
+                <DetailItem label="Phone Number" value={s.phone || s.whatsappNo} />
+                <DetailItem label="WhatsApp Number" value={s.whatsappNo} />
+                <DetailItem
+                  label="Date of Birth"
+                  value={formatDate(s.dateOfBirth || s.dob)}
+                />
+                <DetailItem label="NIC Number" value={s.nicNo} />
+                <DetailItem label="School" value={s.school} />
+                <DetailItem label="Race" value={s.race} />
+                <DetailItem
+                  label="Permanent Address"
+                  value={s.permanentAddress || s.address}
+                  className="border-t border-slate-100 pt-4 md:col-span-2 xl:col-span-3"
+                />
               </div>
-            </div>
-          </div>
+            </ProfileSection>
+
+            <ProfileSection title="Parent/Guardian Details">
+              <div className="grid grid-cols-1 gap-x-10 gap-y-4 md:grid-cols-2 xl:grid-cols-4">
+                <DetailItem label="Father's Name" value={s.fatherName} />
+                <DetailItem label="Mother's Name" value={s.motherName} />
+                <DetailItem
+                  label="Guardian Name"
+                  value={s.guardianName || s.parentName}
+                />
+                <DetailItem label="Guardian Mobile" value={s.guardianMobile} />
+              </div>
+            </ProfileSection>
+
+            <ProfileSection title="Address Details">
+              <div className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-3">
+                <DetailItem
+                  label="Permanent Address"
+                  value={s.permanentAddress || s.address}
+                />
+                <DetailItem
+                  label="District"
+                  value={s.administrativeDistrict || s.district}
+                />
+                <DetailItem label="Postal Code" value={s.postalCode} />
+              </div>
+            </ProfileSection>
+          </main>
         </div>
 
         {showPayModal && (
