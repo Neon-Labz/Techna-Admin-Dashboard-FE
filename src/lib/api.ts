@@ -195,6 +195,28 @@ api.interceptors.response.use(
 
 export default api;
 
+// ─── Payments ─────────────────────────────────────────────────────────────────
+
+export interface ApiPayment {
+  _id: string;
+  studentId: string;
+  studentName?: string;
+  moduleId?: string;
+  moduleName?: string;
+  amount: number;
+  paymentDate: string;
+  paymentMethod: string;
+  status: 'paid' | 'pending' | 'partial';
+  notes?: string;
+  createdAt: string;
+}
+
+export const createPayment = (data: Partial<ApiPayment>): Promise<ApiPayment> =>
+  api.post<ApiPayment>('/api/payments', data).then((r) => r.data);
+
+export const updatePayment = (id: string, data: Partial<ApiPayment>): Promise<ApiPayment> =>
+  api.patch<ApiPayment>(`/api/payments/${id}`, data).then((r) => r.data);
+
 // ─── Modules ───────────────────────────────────────────────────────────────────
 
 export const getModules = (): Promise<ApiModule[]> =>
