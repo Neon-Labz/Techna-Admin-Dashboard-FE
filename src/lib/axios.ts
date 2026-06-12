@@ -1,7 +1,10 @@
 import axios from 'axios';
 
+const baseURL =
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api',
+  baseURL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -10,22 +13,21 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
-      const authData =
-        localStorage.getItem('techna-auth') ||
-        localStorage.getItem('edu-auth') ||
-        localStorage.getItem('auth-storage');
+      try {
+        const authData =
+          localStorage.getItem('techna-auth') ||
+          localStorage.getItem('edu-auth') ||
+          localStorage.getItem('auth-storage') ||
+          '{}';
 
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          const token = parsed?.state?.token || parsed?.token;
+        const parsed = JSON.parse(authData);
+        const token = parsed?.state?.token || parsed?.token;
 
-          if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-          }
-        } catch (error) {
-          console.error('Error parsing auth data:', error);
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
         }
+      } catch {
+        // Ignore malformed persisted auth data.
       }
     }
 
@@ -35,7 +37,7 @@ api.interceptors.request.use(
 );
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => response.data?.data ?? response.data,
   (error) => Promise.reject(error)
 );
 
