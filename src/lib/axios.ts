@@ -4,21 +4,33 @@ const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api',
 });
 
-api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const authData = localStorage.getItem('edu-auth');
-
-    if (authData) {
-      const parsed = JSON.parse(authData);
-      const token = parsed?.state?.token;
-
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+api.interceptors.request.use(
+  (config) => {
+    if (typeof window !== 'undefined') {
+      try {
+        const authData = localStorage.getItem('edu-auth');
+        if (authData) {
+          const parsed = JSON.parse(authData);
+          const token = parsed?.state?.token;
+          if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+          }
+        }
+      } catch {
+        // Ignore malformed auth data
       }
     }
-  }
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
 
-  return config;
-});
+// Unwrap the NestJS global response envelope:
+//   HTTP body: { success, message, data: <controller_return>, timestamp, path }
+// After this interceptor, api.get/post/patch calls resolve with <controller_return> directly.
+api.interceptors.response.use(
+  (response) => response.data?.data ?? response.data,
+  (error) => Promise.reject(error),
+);
 
 export default api;
