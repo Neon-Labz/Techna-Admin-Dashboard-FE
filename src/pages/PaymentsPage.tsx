@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Search, Download, Filter, CreditCard,
   CheckCircle, Clock, AlertCircle, Loader2, RefreshCw, Plus, X,
-  ChevronDown, ChevronUp, Users,
+  ChevronDown, ChevronUp, Users, Edit2,
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
@@ -28,8 +28,14 @@ const MONTHS = [
   { num: '11', label: 'Nov' }, { num: '12', label: 'Dec' },
 ];
 
-interface StudentOption  { studentId: string; name: string; batch: string; }
-interface ModuleOption   { id: string; name: string; }
+interface StudentOption {
+  _id:        string;     // MongoDB ObjectId — used to look up legacy payments
+  studentId:  string;     // display ID e.g. "STU019"
+  name:       string;
+  batch:      string;
+  moduleRefs: string[];
+}
+interface ModuleOption { id: string; name: string; }
 interface StudentTracking {
   studentId: string;
   year: number;
@@ -49,61 +55,116 @@ const statusColor = (s: string) =>
   s === 'pending' ? 'bg-amber-100  text-amber-700'    :
                     'bg-red-100    text-red-700';
 
-// ── Add Payment Modal ─────────────────────────────────────────────────────────
-function AddPaymentModal({
+// ── Payment Modal (Add + Edit) ─────────────────────────────────────────────────
+function PaymentModal({
   onClose,
   onSuccess,
+  initialData,
 }: {
   onClose: () => void;
   onSuccess: (p: PaymentRecord) => void;
+  initialData?: PaymentRecord | null;
 }) {
-  const [students, setStudents] = useState<StudentOption[]>([]);
-  const [modules,  setModules]  = useState<ModuleOption[]>([]);
-  const [saving,   setSaving]   = useState(false);
+  const isEdit = !!initialData;
+  const [students,            setStudents]            = useState<StudentOption[]>([]);
+  const [allModules,          setAllModules]          = useState<ModuleOption[]>([]);
+  const [registeredModuleIds, setRegisteredModuleIds] = useState<string[]>([]);
+  const [fetchingMods,        setFetchingMods]        = useState(false);
+  const [saving,              setSaving]              = useState(false);
 
   const [form, setForm] = useState({
-    studentId: '', moduleId: '', amount: '',
-    paidDate:  new Date().toISOString().split('T')[0],
-    method:    'cash'   as 'cash' | 'bank' | 'online',
-    status:    'paid'   as 'paid' | 'pending' | 'overdue',
-    receiptNo: '', batch: '',
+    studentId: initialData?.studentId ?? '',
+    moduleId:  initialData?.moduleId  ?? '',
+    amount:    initialData?.amount != null ? String(initialData.amount) : '',
+    paidDate:  initialData?.paidDate  ?? new Date().toISOString().split('T')[0],
+    method:    (initialData?.method   ?? 'cash') as 'cash' | 'bank' | 'online',
+    status:    (initialData?.status   ?? 'paid') as 'paid' | 'pending' | 'overdue',
+    receiptNo: initialData?.receiptNo ?? '',
+    batch:     initialData?.batch     ?? '',
+    notes:     initialData?.notes     ?? '',
   });
 
+  // lib/axios interceptor already unwraps the envelope → result IS the array directly
   useEffect(() => {
     (async () => {
       try {
-        const [sRes, mRes] = await Promise.all([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const [sRaw, mRaw]: [any, any] = await Promise.all([
           api.get('/students'),
           api.get('/modules'),
         ]);
-        const sData = sRes.data?.data ?? sRes.data;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sArr: any[] = Array.isArray(sRaw) ? sRaw : (sRaw?.data ?? []);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mArr: any[] = Array.isArray(mRaw) ? mRaw : (mRaw?.data ?? []);
+
         setStudents(
-          Array.isArray(sData)
-            ? sData
-                .filter((s: any) => s.status === 'approved')
-                .map((s: any) => ({
-                  studentId: s.studentId,
-                  name: s.name ?? s.fullNameEnglish ?? s.studentId,
-                  batch: s.batch ?? '',
-                }))
-            : []
+          sArr
+            .filter(s => s.status === 'approved')
+            .map(s => ({
+              _id:        (s._id ?? s.id ?? s.studentId) as string,
+              studentId:  s.studentId as string,
+              name:       (s.fullNameEnglish ?? s.name ?? s.studentId) as string,
+              batch:      (s.batch ?? '') as string,
+              moduleRefs: Array.isArray(s.modules) ? (s.modules as string[]) : [],
+            }))
         );
-        const mData = mRes.data?.data ?? mRes.data;
-        setModules(
-          Array.isArray(mData)
-            ? mData.map((m: any) => ({ id: m._id ?? m.id, name: m.name }))
-            : []
+
+        setAllModules(
+          mArr.map(m => ({
+            id:   (m._id ?? m.id) as string,
+            name: m.name as string,
+          }))
         );
       } catch (err) {
         console.error('Failed to load students/modules:', err);
+        toast.error('Failed to load student/module list');
       }
     })();
   }, []);
 
-  const handleStudentChange = (studentId: string) => {
-    const s = students.find(s => s.studentId === studentId);
-    setForm(f => ({ ...f, studentId, batch: s?.batch ?? f.batch }));
+  // When a student is selected, fetch their payment history using both their
+  // display studentId and their MongoDB _id (old payments store the _id as studentId).
+  // Extract unique moduleIds from those payments — that's the reliable source of
+  // which modules the student is enrolled in.
+  const handleStudentChange = async (studentId: string) => {
+    const s = students.find(x => x.studentId === studentId);
+    setForm(f => ({ ...f, studentId, moduleId: '', batch: s?.batch ?? f.batch }));
+    setRegisteredModuleIds([]);
+
+    if (!studentId || !s) return;
+
+    setFetchingMods(true);
+    try {
+      const results = await Promise.allSettled([
+        paymentApi.getByStudent(s._id),
+        s._id !== s.studentId ? paymentApi.getByStudent(s.studentId) : Promise.resolve<PaymentRecord[]>([]),
+      ]);
+      const merged: PaymentRecord[] = results.flatMap(r =>
+        r.status === 'fulfilled' ? r.value : []
+      );
+      const ids = [...new Set(merged.map(p => p.moduleId).filter(Boolean))];
+      setRegisteredModuleIds(ids);
+    } catch {
+      // leave registeredModuleIds empty → filteredModules falls back to all
+    } finally {
+      setFetchingMods(false);
+    }
   };
+
+  // Show only the modules this student has previously paid for.
+  // Falls back to all modules if no payment history is found (first-time student).
+  const filteredModules = useMemo(() => {
+    if (!form.studentId || registeredModuleIds.length === 0) return allModules;
+    const filtered = allModules.filter(m => registeredModuleIds.includes(m.id));
+    return filtered.length > 0 ? filtered : allModules;
+  }, [form.studentId, registeredModuleIds, allModules]);
+
+  const isFiltered =
+    form.studentId.length > 0 &&
+    !fetchingMods &&
+    filteredModules.length < allModules.length &&
+    filteredModules.length > 0;
 
   const handleSubmit = async () => {
     if (!form.studentId || !form.moduleId || !form.amount || !form.paidDate) {
@@ -111,7 +172,7 @@ function AddPaymentModal({
       return;
     }
     const student   = students.find(s => s.studentId === form.studentId);
-    const moduleRec = modules.find(m => m.id === form.moduleId);
+    const moduleRec = allModules.find(m => m.id === form.moduleId);
     const payload: CreatePaymentPayload = {
       studentId:   form.studentId,
       studentName: student?.name,
@@ -123,16 +184,25 @@ function AddPaymentModal({
       status:      form.status,
       receiptNo:   form.receiptNo || undefined,
       batch:       form.batch || student?.batch || 'N/A',
+      notes:       form.notes || undefined,
     };
     setSaving(true);
     try {
-      const created = await paymentApi.create(payload);
-      toast.success('Payment recorded successfully!');
-      onSuccess(created);
+      let result: PaymentRecord;
+      if (isEdit && initialData) {
+        result = await paymentApi.update(initialData.id, payload);
+        toast.success('Payment updated successfully!');
+      } else {
+        result = await paymentApi.create(payload);
+        toast.success('Payment recorded successfully!');
+      }
+      onSuccess(result);
       onClose();
-    } catch (err: any) {
-      const msg = err?.response?.data?.message ?? 'Failed to save payment';
-      toast.error(Array.isArray(msg) ? msg.join(', ') : msg);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string | string[] } } };
+      const msg = axiosErr?.response?.data?.message
+        ?? (isEdit ? 'Failed to update payment' : 'Failed to save payment');
+      toast.error(Array.isArray(msg) ? msg.join(', ') : (msg as string));
     } finally {
       setSaving(false);
     }
@@ -146,9 +216,11 @@ function AddPaymentModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-800">Record New Payment</h2>
+          <h2 className="text-lg font-bold text-gray-800">
+            {isEdit ? 'Edit Payment' : 'Record New Payment'}
+          </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="w-5 h-5" />
           </button>
@@ -165,11 +237,28 @@ function AddPaymentModal({
             </select>
           </div>
           <div className="col-span-2 flex flex-col gap-1">
-            <Label text="Module" required />
-            <select value={form.moduleId} onChange={e => setForm(f => ({ ...f, moduleId: e.target.value }))}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              <option value="">Select module…</option>
-              {modules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            <div className="flex items-center justify-between">
+              <Label text="Module" required />
+              {fetchingMods && (
+                <span className="text-xs text-gray-400">Loading…</span>
+              )}
+              {isFiltered && (
+                <span className="text-xs text-indigo-500 font-medium">
+                  {filteredModules.length} registered module{filteredModules.length !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+            <select
+              value={form.moduleId}
+              onChange={e => setForm(f => ({ ...f, moduleId: e.target.value }))}
+              disabled={!form.studentId || fetchingMods}
+              className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed">
+              <option value="">
+                {fetchingMods ? 'Loading modules…' : form.studentId ? 'Select module…' : 'Select a student first'}
+              </option>
+              {filteredModules.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
             </select>
           </div>
           <div className="flex flex-col gap-1">
@@ -187,16 +276,16 @@ function AddPaymentModal({
           </div>
           <div className="flex flex-col gap-1">
             <Label text="Method" required />
-            <select value={form.method} onChange={e => setForm(f => ({ ...f, method: e.target.value as any }))}
+            <select value={form.method} onChange={e => setForm(f => ({ ...f, method: e.target.value as 'cash' | 'bank' | 'online' }))}
               className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="cash">Cash</option>
-              <option value="bank">Bank</option>
+              <option value="bank">Bank Transfer</option>
               <option value="online">Online</option>
             </select>
           </div>
           <div className="flex flex-col gap-1">
             <Label text="Status" required />
-            <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as any }))}
+            <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as 'paid' | 'pending' | 'overdue' }))}
               className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="paid">Paid</option>
               <option value="pending">Pending</option>
@@ -214,8 +303,16 @@ function AddPaymentModal({
             <Label text="Batch" />
             <input type="text" value={form.batch}
               onChange={e => setForm(f => ({ ...f, batch: e.target.value }))}
-              placeholder="e.g. 2026"
+              placeholder="e.g. May 2025 Batch"
               className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div className="col-span-2 flex flex-col gap-1">
+            <Label text="Notes" />
+            <textarea value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              rows={2}
+              placeholder="Optional notes…"
+              className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
           </div>
         </div>
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
@@ -225,8 +322,12 @@ function AddPaymentModal({
           </button>
           <button onClick={handleSubmit} disabled={saving}
             className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            {saving ? 'Saving…' : 'Record Payment'}
+            {saving
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : isEdit
+              ? <Edit2 className="w-4 h-4" />
+              : <Plus  className="w-4 h-4" />}
+            {saving ? 'Saving…' : isEdit ? 'Update Payment' : 'Record Payment'}
           </button>
         </div>
       </div>
@@ -243,6 +344,7 @@ function StudentTableRow({
   year,
   token,
   onDownloadSlip,
+  onEditPayment,
 }: {
   studentId: string;
   studentName: string;
@@ -251,18 +353,32 @@ function StudentTableRow({
   year: number;
   token: string | null;
   onDownloadSlip: (p: PaymentRecord) => void;
+  onEditPayment:  (p: PaymentRecord) => void;
 }) {
   const [expanded,     setExpanded]     = useState(false);
   const [tracking,     setTracking]     = useState<StudentTracking | null>(null);
   const [loadingTrack, setLoadingTrack] = useState(false);
 
+  // Earliest payment month across all time → only generate pending from that month
+  const fromMonth = useMemo(() => {
+    if (payments.length === 0) return `${year}-01`;
+    const earliest = [...payments]
+      .sort((a, b) => a.paidDate.localeCompare(b.paidDate))[0]
+      .paidDate.slice(0, 7);               // "YYYY-MM"
+    const [eYear] = earliest.split('-').map(Number);
+    // Student started before this year → all months in view are active
+    if (eYear < year) return `${year}-01`;
+    // Student started after this year → nothing to show
+    if (eYear > year) return `${year}-12`;
+    return earliest;
+  }, [payments, year]);
+
   const toggleTracking = useCallback(async () => {
-    // If already loaded just toggle
     if (tracking) { setExpanded(e => !e); return; }
     setLoadingTrack(true);
     try {
       const res  = await fetch(
-        `http://localhost:4000/api/payments/student/${studentId}/tracking?year=${year}`,
+        `http://localhost:4000/api/payments/student/${studentId}/tracking?year=${year}&from=${fromMonth}&to=${year}-12`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const json = await res.json();
@@ -273,17 +389,16 @@ function StudentTableRow({
     } finally {
       setLoadingTrack(false);
     }
-  }, [studentId, year, token, tracking]);
+  }, [studentId, year, token, tracking, fromMonth]);
 
   const paidSet    = useMemo(() => new Set(tracking?.paidMonths    ?? []), [tracking]);
   const pendingSet = useMemo(() => new Set(tracking?.pendingMonths ?? []), [tracking]);
 
-  // First payment in list (for table row display)
   const firstPayment = payments[0];
 
   return (
     <>
-      {/* ── Main table row — same columns as before ── */}
+      {/* ── Main table row ── */}
       <tr
         className="hover:bg-indigo-50/40 transition-colors cursor-pointer border-t border-gray-100"
         onClick={toggleTracking}
@@ -331,12 +446,20 @@ function StudentTableRow({
         </td>
         <td className="px-4 py-3">
           {firstPayment && (
-            <button
-              onClick={e => { e.stopPropagation(); onDownloadSlip(firstPayment); }}
-              className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
-            >
-              <Download className="w-3 h-3" /> Slip
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={e => { e.stopPropagation(); onDownloadSlip(firstPayment); }}
+                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+              >
+                <Download className="w-3 h-3" /> Slip
+              </button>
+              <button
+                onClick={e => { e.stopPropagation(); onEditPayment(firstPayment); }}
+                className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 font-medium"
+              >
+                <Edit2 className="w-3 h-3" /> Edit
+              </button>
+            </div>
           )}
         </td>
       </tr>
@@ -353,16 +476,20 @@ function StudentTableRow({
               </p>
               <div className="flex gap-2 flex-wrap mb-5">
                 {MONTHS.map(({ num, label }) => {
-                  const key       = `${year}-${num}`;
-                  const isPaid    = paidSet.has(key);
-                  const isPending = pendingSet.has(key);
+                  const key        = `${year}-${num}`;
+                  const isPaid     = paidSet.has(key);
+                  const isPending  = pendingSet.has(key);
+                  // Months before the student's join month — not applicable
+                  const isBeforeJoin = tracking && key < fromMonth;
                   return (
                     <div key={num} className="flex flex-col items-center gap-1">
-                      <span className="text-[10px] text-gray-400 font-medium">{label}</span>
+                      <span className={`text-[10px] font-medium ${isBeforeJoin ? 'text-gray-200' : 'text-gray-400'}`}>{label}</span>
                       {!tracking
                         ? <span className="w-8 h-8 rounded-full bg-gray-100 inline-flex items-center justify-center">
                             <Loader2 className="w-3 h-3 text-gray-300 animate-spin" />
                           </span>
+                        : isBeforeJoin
+                        ? <span className="w-8 h-8 rounded-full bg-gray-50 border border-dashed border-gray-200 inline-flex items-center justify-center text-[10px] text-gray-200" title={`${label} – Before enrollment`}>—</span>
                         : isPaid
                         ? <span className="w-8 h-8 rounded-full bg-emerald-100 inline-flex items-center justify-center" title={`${label} – Paid`}>
                             <CheckCircle className="w-4 h-4 text-emerald-600" />
@@ -376,7 +503,6 @@ function StudentTableRow({
                     </div>
                   );
                 })}
-                {/* Summary counts */}
                 {tracking && (
                   <div className="ml-auto flex items-end gap-3 pb-1">
                     <span className="inline-flex items-center gap-1 text-xs px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-semibold">
@@ -398,7 +524,7 @@ function StudentTableRow({
                   <table className="w-full text-sm bg-white">
                     <thead>
                       <tr className="bg-indigo-50 border-b border-indigo-100">
-                        {['Receipt No', 'Module', 'Amount', 'Method', 'Date', 'Status', 'Action'].map(h => (
+                        {['Receipt No', 'Module', 'Amount', 'Method', 'Date', 'Status', 'Actions'].map(h => (
                           <th key={h} className="px-4 py-2 text-left text-xs font-semibold text-indigo-500 uppercase tracking-wide">
                             {h}
                           </th>
@@ -421,12 +547,20 @@ function StudentTableRow({
                             </span>
                           </td>
                           <td className="px-4 py-2">
-                            <button
-                              onClick={e => { e.stopPropagation(); onDownloadSlip(p); }}
-                              className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
-                            >
-                              <Download className="w-3 h-3" /> Slip
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={e => { e.stopPropagation(); onDownloadSlip(p); }}
+                                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                              >
+                                <Download className="w-3 h-3" /> Slip
+                              </button>
+                              <button
+                                onClick={e => { e.stopPropagation(); onEditPayment(p); }}
+                                className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 font-medium"
+                              >
+                                <Edit2 className="w-3 h-3" /> Edit
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -450,6 +584,7 @@ export default function PaymentsPage() {
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editPayment,  setEditPayment]  = useState<PaymentRecord | null>(null);
   const [trackingYear, setTrackingYear] = useState(new Date().getFullYear());
 
   const [search,       setSearch]       = useState('');
@@ -459,8 +594,8 @@ export default function PaymentsPage() {
 
   const token = useMemo(() => {
     try {
-      const auth = localStorage.getItem('techna-auth');
-      return JSON.parse(auth ?? '')?.state?.token ?? null;
+      const auth = localStorage.getItem('techna-auth') || localStorage.getItem('edu-auth') || '';
+      return JSON.parse(auth)?.state?.token ?? null;
     } catch { return null; }
   }, []);
 
@@ -493,7 +628,6 @@ export default function PaymentsPage() {
     );
   });
 
-  // Group by student — each student = one expandable row
   const studentGroups = useMemo(() => {
     const map = new Map<string, {
       studentId: string; studentName: string;
@@ -516,36 +650,175 @@ export default function PaymentsPage() {
   const totalPending = filtered.filter(p => p.status !== 'paid').reduce((s, p) => s + p.amount, 0);
 
   const generatePaymentSlip = (payment: PaymentRecord) => {
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a6' });
-    const w   = pdf.internal.pageSize.getWidth();
-    pdf.setFillColor(79, 70, 229); pdf.rect(0, 0, w, 20, 'F');
-    pdf.setTextColor(255, 255, 255); pdf.setFontSize(14); pdf.setFont('helvetica', 'bold');
-    pdf.text('Techna', w / 2, 8, { align: 'center' });
-    pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
-    pdf.text('Payment Receipt', w / 2, 14, { align: 'center' });
-    pdf.setTextColor(0, 0, 0); pdf.setFontSize(9);
-    let y = 28;
-    const lines: [string, string][] = [
-      ['Receipt No:',     payment.receiptNo],
-      ['Student Name:',   payment.studentName],
-      ['Student ID:',     payment.studentId],
-      ['Module:',         payment.moduleName],
-      ['Batch:',          payment.batch],
-      ['Amount:',         `LKR ${payment.amount.toLocaleString()}`],
-      ['Payment Method:', payment.method.toUpperCase()],
-      ['Payment Date:',   payment.paidDate],
-      ['Status:',         payment.status.toUpperCase()],
-    ];
-    lines.forEach(([label, value]) => {
-      pdf.setFont('helvetica', 'bold');   pdf.text(label, 10, y);
-      pdf.setFont('helvetica', 'normal'); pdf.text(value, 55, y);
-      y += 8;
-    });
-    pdf.setDrawColor(200, 200, 200); pdf.line(10, y + 2, w - 10, y + 2);
-    pdf.setFontSize(7); pdf.setTextColor(150, 150, 150);
-    pdf.text('Generated by Techna · Thank you for your payment!', w / 2, y + 8, { align: 'center' });
-    pdf.save(`receipt-${payment.receiptNo}.pdf`);
-    toast.success('Receipt downloaded!');
+    const drawPDF = (logoDataUrl?: string) => {
+      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const W   = pdf.internal.pageSize.getWidth();   // 297 mm
+      const H   = pdf.internal.pageSize.getHeight();  // 210 mm
+
+      // ── Top cyan bar ───────────────────────────────────────────────────────
+      pdf.setFillColor(0, 174, 219);
+      pdf.rect(0, 0, W, 8, 'F');
+
+      // ── White header background ────────────────────────────────────────────
+      pdf.setFillColor(255, 255, 255);
+      pdf.rect(0, 8, W, 54, 'F');
+
+      // ── Logo (left side, vertically centred in the header) ────────────────
+      if (logoDataUrl) {
+        try {
+          const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
+          const imgType   = mimeMatch ? mimeMatch[1].toUpperCase() : 'PNG';
+          const imgProps  = pdf.getImageProperties(logoDataUrl);
+          const boxSize   = 40;
+          const ratio     = imgProps.width / imgProps.height;
+          const logoW     = ratio >= 1 ? boxSize : boxSize * ratio;
+          const logoH     = ratio >= 1 ? boxSize / ratio : boxSize;
+          const headerTop    = 8;
+          const headerHeight = 54;
+          const logoX        = 10;
+          const logoY        = headerTop + (headerHeight - logoH) / 2;
+          pdf.addImage(logoDataUrl, imgType, logoX, logoY, logoW, logoH);
+        } catch (err) {
+          console.warn('Logo could not be added to PDF:', err);
+        }
+      }
+
+      // ── TECHNA bold centered ───────────────────────────────────────────────
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(30);
+      pdf.setTextColor(0, 174, 219);
+      pdf.text('TECHNA', W / 2, 32, { align: 'center' });
+
+      // ── Email & Contact line ───────────────────────────────────────────────
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9.5);
+      pdf.setTextColor(80, 80, 80);
+      pdf.text('Email: sivasakthy22@gmail.com  |  Contact: +94 77 170 3549', W / 2, 43, { align: 'center' });
+
+      // ── PAYMENT RECEIPT subtitle ───────────────────────────────────────────
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(14);
+      pdf.setTextColor(0, 174, 219);
+      pdf.text('PAYMENT RECEIPT', W / 2, 55, { align: 'center' });
+
+      // ── Cyan divider line ──────────────────────────────────────────────────
+      pdf.setDrawColor(0, 174, 219);
+      pdf.setLineWidth(0.6);
+      pdf.line(12, 64, W - 12, 64);
+
+      // ── Two-column layout ──────────────────────────────────────────────────
+      const colL     = 14;
+      const colR     = W / 2 + 10;
+      const colWidth = W / 2 - 22;
+      let   yL       = 74;
+      let   yR       = 74;
+
+      const sectionTitle = (title: string, x: number, y: number): number => {
+        pdf.setFillColor(0, 174, 219);
+        pdf.rect(x, y, 3, 8, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(9);
+        pdf.setTextColor(0, 120, 180);
+        pdf.text(title, x + 6, y + 6);
+        return y + 14;
+      };
+
+      const dataRow = (
+        label: string,
+        value: string,
+        x: number,
+        y: number,
+        shade: boolean,
+      ): number => {
+        if (shade) {
+          pdf.setFillColor(240, 250, 255);
+          pdf.rect(x, y - 4, colWidth, 9, 'F');
+        }
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(100, 110, 130);
+        pdf.text(label, x + 3, y + 2);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(30, 30, 30);
+        pdf.text(value, x + 52, y + 2);
+        return y + 10;
+      };
+
+      // ── LEFT column: Student Information ──────────────────────────────────
+      yL = sectionTitle('STUDENT INFORMATION', colL, yL);
+      yL = dataRow('Student Name', payment.studentName,    colL, yL, true);
+      yL = dataRow('Student ID',   payment.studentId,      colL, yL, false);
+      yL = dataRow('Batch',        payment.batch || 'N/A', colL, yL, true);
+      yL = dataRow('Receipt No',   payment.receiptNo,      colL, yL, false);
+
+      // ── RIGHT column: Payment Details ─────────────────────────────────────
+      yR = sectionTitle('PAYMENT DETAILS', colR, yR);
+      yR = dataRow('Module',         payment.moduleName,           colR, yR, true);
+      yR = dataRow('Payment Date',   payment.paidDate,             colR, yR, false);
+      yR = dataRow('Payment Method', payment.method.toUpperCase(), colR, yR, true);
+      yR = dataRow('Status',         payment.status.toUpperCase(), colR, yR, false);
+
+      // ── Amount box (full width) ────────────────────────────────────────────
+      const amtY = Math.max(yL, yR) + 8;
+      pdf.setFillColor(0, 174, 219);
+      pdf.roundedRect(colL, amtY, W - 28, 26, 5, 5, 'F');
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.setTextColor(210, 240, 255);
+      pdf.text('TOTAL AMOUNT PAID', W / 2, amtY + 9, { align: 'center' });
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(20);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text(`LKR ${payment.amount.toLocaleString()}`, W / 2, amtY + 20, { align: 'center' });
+
+      // ── Status badge ───────────────────────────────────────────────────────
+      const badgeY = amtY + 32;
+      const badgeColors: Record<string, [number, number, number]> = {
+        paid:    [16, 185, 129],
+        pending: [245, 158, 11],
+        overdue: [239, 68, 68],
+      };
+      const [sr, sg, sb] = badgeColors[payment.status] ?? [100, 100, 100];
+      pdf.setFillColor(sr, sg, sb);
+      pdf.roundedRect(W / 2 - 20, badgeY, 40, 10, 4, 4, 'F');
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text(payment.status.toUpperCase(), W / 2, badgeY + 7, { align: 'center' });
+
+      // ── Footer cyan bar ────────────────────────────────────────────────────
+      pdf.setFillColor(0, 174, 219);
+      pdf.rect(0, H - 14, W, 14, 'F');
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text('Techna', W / 2, H - 7, { align: 'center' });
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(7);
+      pdf.setTextColor(210, 240, 255);
+      pdf.text('Generated by Techna · Thank you for your payment!', W / 2, H - 2, { align: 'center' });
+
+      pdf.save(`receipt-${payment.receiptNo}.pdf`);
+      toast.success('Receipt downloaded!');
+    };
+
+    fetch('/logo.png')
+      .then(res => {
+        if (!res.ok) throw new Error(`Logo fetch failed: ${res.status}`);
+        return res.blob();
+      })
+      .then(blob => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror  = reject;
+        reader.readAsDataURL(blob);
+      }))
+      .then(dataUrl => drawPDF(dataUrl))
+      .catch(() => {
+        console.warn('Logo not found or failed to load — generating receipt without logo.');
+        drawPDF();
+      });
   };
 
   const generateAllPDF = () => {
@@ -573,6 +846,18 @@ export default function PaymentsPage() {
     toast.success('Report exported!');
   };
 
+  const handlePaymentSuccess = (updated: PaymentRecord) => {
+    setPayments(prev => {
+      const idx = prev.findIndex(p => p.id === updated.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = updated;
+        return next;
+      }
+      return [updated, ...prev];
+    });
+  };
+
   return (
     <div className="p-6">
 
@@ -593,11 +878,11 @@ export default function PaymentsPage() {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
           <button onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
             <Plus className="w-4 h-4" /> Add Payment
           </button>
           <button onClick={generateAllPDF}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-800 border border-gray-200 px-4 py-2 rounded-xl text-sm font-medium transition-colors">
             <Download className="w-4 h-4" /> Export PDF
           </button>
         </div>
@@ -670,7 +955,6 @@ export default function PaymentsPage() {
             <option value="pending">Pending</option>
             <option value="overdue">Overdue</option>
           </select>
-          {/* Year for tracking pills */}
           <select value={trackingYear} onChange={e => setTrackingYear(Number(e.target.value))}
             className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
             {[2024, 2025, 2026, 2027].map(y => (
@@ -680,7 +964,7 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* ── Table — one row per student, click expands 12-month tracking ── */}
+      {/* ── Table ── */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
           <p className="text-xs text-gray-500">
@@ -691,7 +975,7 @@ export default function PaymentsPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100 bg-white">
-                {['Receipt No', 'Student', 'Module', 'Batch', 'Amount', 'Method', 'Date', 'Status', 'Action'].map(h => (
+                {['Receipt No', 'Student', 'Module', 'Batch', 'Amount', 'Method', 'Date', 'Status', 'Actions'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
                     {h}
                   </th>
@@ -709,6 +993,7 @@ export default function PaymentsPage() {
                   year={trackingYear}
                   token={token}
                   onDownloadSlip={generatePaymentSlip}
+                  onEditPayment={setEditPayment}
                 />
               ))}
             </tbody>
@@ -728,9 +1013,18 @@ export default function PaymentsPage() {
 
       {/* ── Add Payment Modal ── */}
       {showAddModal && (
-        <AddPaymentModal
+        <PaymentModal
           onClose={() => setShowAddModal(false)}
-          onSuccess={newPayment => setPayments(prev => [newPayment, ...prev])}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
+
+      {/* ── Edit Payment Modal ── */}
+      {editPayment && (
+        <PaymentModal
+          initialData={editPayment}
+          onClose={() => setEditPayment(null)}
+          onSuccess={handlePaymentSuccess}
         />
       )}
     </div>
