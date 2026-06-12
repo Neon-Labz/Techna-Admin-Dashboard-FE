@@ -59,7 +59,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen relative flex items-center justify-center p-4 bg-gradient-to-br from-sky-400 via-blue-500 to-blue-600 overflow-hidden">
-      <Toast toasts={toasts} onRemove={removeToast} />
+<Toast toasts={toasts} removeToast={removeToast} />
 
       <div className="absolute inset-0 opacity-10 pointer-events-none">
         <svg
