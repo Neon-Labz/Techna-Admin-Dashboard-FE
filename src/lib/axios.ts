@@ -14,10 +14,14 @@ api.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
       try {
-        const authStorage = JSON.parse(
-          localStorage.getItem('techna-auth') || '{}'
-        );
-        const token = authStorage?.state?.token;
+        const authData =
+          localStorage.getItem('techna-auth') ||
+          localStorage.getItem('edu-auth') ||
+          localStorage.getItem('auth-storage') ||
+          '{}';
+
+        const parsed = JSON.parse(authData);
+        const token = parsed?.state?.token || parsed?.token;
 
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;

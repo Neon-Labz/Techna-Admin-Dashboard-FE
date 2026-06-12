@@ -1,17 +1,46 @@
-import axiosInstance from '@/lib/axios';
+import api from '@/lib/axios';
+
+export type ExamPayload = {
+  title: string;
+  moduleId: string;
+  moduleName: string;
+  batch: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  venue: string;
+  description?: string;
+  isPublished?: boolean;
+};
 
 export const examApi = {
-  getAll: () => axiosInstance.get('/exam-notices'),
+  async getAll(): Promise<any[]> {
+    const response = await api.get('/exam-notices');
+    return response.data?.data || response.data || [];
+  },
 
-  getById: (id: string) =>
-    axiosInstance.get(`/exam-notices/${id}`),
+  async getById(id: string): Promise<any> {
+    const response = await api.get(`/exam-notices/${id}`);
+    return response.data?.data || response.data;
+  },
 
-  create: (data: any) =>
-    axiosInstance.post('/exam-notices', data),
+  async create(payload: ExamPayload): Promise<any> {
+    const response = await api.post('/exam-notices', payload);
+    return response.data?.data || response.data;
+  },
 
-  update: (id: string, data: any) =>
-    axiosInstance.patch(`/exam-notices/${id}`, data),
+  async update(id: string, payload: Partial<ExamPayload>): Promise<any> {
+    const response = await api.patch(`/exam-notices/${id}`, payload);
+    return response.data?.data || response.data;
+  },
 
-  delete: (id: string) =>
-    axiosInstance.delete(`/exam-notices/${id}`),
+  async remove(id: string): Promise<any> {
+    const response = await api.delete(`/exam-notices/${id}`);
+    return response.data?.data || response.data;
+  },
+
+  async delete(id: string): Promise<any> {
+    const response = await api.delete(`/exam-notices/${id}`);
+    return response.data?.data || response.data;
+  },
 };

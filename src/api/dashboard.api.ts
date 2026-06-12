@@ -20,6 +20,7 @@ export const dashboardApi = {
     const { data } = await api.get('/exam-notices');
     return data.data || data;
   },
+
   async getStudents() {
     const { data } = await api.get('/students');
     return data.data || data;

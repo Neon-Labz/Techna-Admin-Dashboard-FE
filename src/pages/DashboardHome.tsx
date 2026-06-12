@@ -30,11 +30,10 @@ const COLORS = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'];
 
 export default function DashboardHome() {
   const [students, setStudents] = useState<any[]>([]);
-  const [teachers, setTeachers] = useState<any[]>([]);
   const [modules, setModules] = useState<any[]>([]);
   const [exams, setExams] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
-  const [revenue, setRevenue] = useState(0);
+  const [paidRevenue, setPaidRevenue] = useState(0);
 
   useEffect(() => {
     fetchDashboardData();
@@ -42,25 +41,24 @@ export default function DashboardHome() {
 
   const fetchDashboardData = async () => {
     try {
-      const [summaryData, studentsData, modulesData, examsData, paymentsData] =
+      const [summaryData, studentsData, modulesData, examsData] =
         await Promise.all([
           dashboardApi.getSummary(),
           dashboardApi.getStudents(),
           dashboardApi.getModules(),
           dashboardApi.getExams(),
-          dashboardApi.getPayments(),
         ]);
 
       setSummary(summaryData);
       setStudents(Array.isArray(studentsData) ? studentsData : []);
-      setTeachers([]);
       setModules(Array.isArray(modulesData) ? modulesData : []);
       setExams(Array.isArray(examsData) ? examsData : []);
-      const payments = Array.isArray(paymentsData)
-        ? paymentsData
-        : paymentsData?.payments || [];
-      setRevenue(
-        payments.reduce((sum: number, item: any) => sum + (item.amount || 0), 0)
+
+      setPaidRevenue(
+        summaryData?.paidRevenue ||
+          summaryData?.totalPaid ||
+          summaryData?.totalRevenue ||
+          0
       );
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -70,22 +68,30 @@ export default function DashboardHome() {
   const approved = students.filter((s) => s.status === 'approved').length;
   const pending = students.filter((s) => s.status === 'pending').length;
 
-  const totalRevenue = revenue;
+  const moduleChartData =
+    summary?.studentsPerModule ||
+    modules.map((m) => ({
+      name: m.name || m.moduleName || 'Module',
+      students: students.filter((s) =>
+        (Array.isArray(s.modules) ? s.modules : []).some((moduleId: any) => {
+          const id = typeof moduleId === 'string' ? moduleId : moduleId?._id;
+          return id === m._id || id === m.id;
+        })
+      ).length,
+    }));
 
-  const moduleChartData = modules.map((m) => ({
-    name: m.name || m.moduleName || 'Module',
-    students: students.filter((s) =>
-      (Array.isArray(s.modules) ? s.modules : []).some((moduleId: any) => {
-        const id = typeof moduleId === 'string' ? moduleId : moduleId?._id;
-        return id === m._id || id === m.id;
-      })
-    ).length,
-  }));
+  const paymentByModule =
+    summary?.revenueByModule ||
+    modules.map((m) => ({
+      name: m.name || m.moduleName || 'Module',
+      value: m.fee || 0,
+    }));
 
-  const paymentByModule = modules.map((m) => ({
-    name: m.name || m.moduleName || 'Module',
-    value: m.fee || 0,
-  }));
+  const upcomingExams =
+  summary?.upcomingExams || exams.slice(0, 5);
+
+  const recentStudents =
+    summary?.recentStudents || [...students].slice(-4).reverse();
 
   const stats = [
     {
@@ -97,43 +103,40 @@ export default function DashboardHome() {
     },
     {
       label: 'Approved',
-      value: approved,
+      value: summary?.approvedStudents ?? approved,
       icon: UserCheck,
       color: 'bg-emerald-500',
       change: '+5%',
     },
     {
       label: 'Pending',
-      value: pending,
+      value: summary?.pendingStudents ?? pending,
       icon: Clock,
       color: 'bg-amber-500',
       change: '-2%',
     },
     {
       label: 'Teachers',
-      value: summary?.totalTeachers || 0,
+      value: summary?.totalTeachers ?? 0,
       icon: GraduationCap,
       color: 'bg-purple-500',
       change: '+1%',
     },
     {
       label: 'Modules',
-      value: summary?.totalModules || modules.length,
+      value: summary?.totalModules ?? modules.length,
       icon: BookOpen,
       color: 'bg-cyan-500',
       change: '+3%',
     },
     {
-      label: 'Revenue (LKR)',
-      value: `${(totalRevenue / 1000).toFixed(0)}K`,
+      label: 'Paid Payments',
+      value: `${Math.round(paidRevenue / 1000)}K`,
       icon: CreditCard,
       color: 'bg-rose-500',
       change: '+18%',
     },
   ];
-
-  const upcomingExams = exams.filter((e) => e.status === 'upcoming').slice(0, 3);
-  const recentStudents = [...students].slice(-4).reverse();
 
   return (
     <div className="p-6 space-y-6">
@@ -157,8 +160,10 @@ export default function DashboardHome() {
             >
               <Icon className="w-5 h-5 text-white" />
             </div>
+
             <p className="text-2xl font-bold text-gray-800">{value}</p>
             <p className="text-xs text-gray-500 mt-0.5">{label}</p>
+
             <span
               className={`text-xs font-medium ${
                 change.startsWith('+') ? 'text-emerald-600' : 'text-red-500'
@@ -197,22 +202,18 @@ export default function DashboardHome() {
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie
-                data={paymentByModule}
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                dataKey="value"
-                label={({ name, percent }) =>
-                  `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
-                }
-              >
-                {paymentByModule.map((_, i) => (
+  data={paymentByModule}
+  cx="50%"
+  cy="50%"
+  outerRadius={80}
+  dataKey="value"
+>
+                {paymentByModule.map((_: any, i: number) => (
                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip
-                formatter={(v) => `LKR ${Number(v).toLocaleString()}`}
-              />
+
+              <Tooltip formatter={(v) => `LKR ${Number(v).toLocaleString()}`} />
               <Legend />
             </PieChart>
           </ResponsiveContainer>
@@ -231,7 +232,7 @@ export default function DashboardHome() {
               <p className="text-gray-400 text-sm">No recent students</p>
             )}
 
-            {recentStudents.map((s) => (
+            {recentStudents.map((s: any) => (
               <div key={s.id || s._id} className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">
                   {(s.name || s.fullNameEnglish || 'S').charAt(0)}
@@ -273,7 +274,7 @@ export default function DashboardHome() {
               <p className="text-gray-400 text-sm">No upcoming exams</p>
             )}
 
-            {upcomingExams.map((e) => (
+            {upcomingExams.map((e: any) => (
               <div
                 key={e.id || e._id}
                 className="flex items-start gap-3 p-3 bg-indigo-50 rounded-xl"
