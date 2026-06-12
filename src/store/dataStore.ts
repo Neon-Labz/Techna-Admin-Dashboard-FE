@@ -18,6 +18,18 @@ import {
 } from '../api/studentApi';
 import type { CreateStudentRequestPayload } from '../api/studentApi';
 
+function getSelectedSubjects(s: any): string[] {
+  if (Array.isArray(s.subjects) && s.subjects.length > 0) return s.subjects;
+  if (Array.isArray(s.modules) && s.modules.length > 0) return s.modules;
+  if (
+    Array.isArray(s.subjectSelection?.subjects) &&
+    s.subjectSelection.subjects.length > 0
+  ) {
+    return s.subjectSelection.subjects;
+  }
+  return [];
+}
+
 function generateStudentId(batch: string): string {
   const existing =
     JSON.parse(localStorage.getItem('edu-data') || '{}')?.students || [];
@@ -27,6 +39,23 @@ function generateStudentId(batch: string): string {
   const month = parts[0] || 'Jan';
   const year = parts[1] ? parts[1].slice(2) : '24';
   return `${month}${year}#${num}`;
+}
+
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    const response = (error as { response?: { data?: unknown } }).response;
+    const data = response?.data;
+
+    if (typeof data === 'object' && data !== null && 'message' in data) {
+      const message = (data as { message?: unknown }).message;
+      if (Array.isArray(message)) return message.join(', ');
+      if (typeof message === 'string') return message;
+    }
+  }
+
+  if (error instanceof Error && error.message) return error.message;
+
+  return fallback;
 }
 
 const SAMPLE_MODULES: Module[] = [
@@ -175,7 +204,8 @@ interface DataStore {
 }
 
 function mapBackendStudent(s: any): Student {
-  const displayName = s.name || s.fullNameEnglish || '';
+  const selectedSubjects = getSelectedSubjects(s);
+  const displayName = s.fullNameEnglish || s.name || s.email || '';
 
   return {
     id: s._id || s.id,
@@ -183,20 +213,22 @@ function mapBackendStudent(s: any): Student {
     qrToken: s.qrToken || '',
     name: displayName,
     email: s.email || '',
-    phone: s.phone || '',
-    address: s.address || '',
-    dob: s.dob || '',
+    phone: s.phone || s.whatsappNo || '',
+    address: s.address || s.permanentAddress || '',
+    dob: s.dob || s.dateOfBirth || '',
     batch: s.batch || '',
-    modules: s.modules || [],
+    modules: selectedSubjects,
+    subjects: selectedSubjects,
     status: s.status || 'pending',
     avatar: s.avatar,
-    parentName: s.parentName,
-    parentPhone: s.parentPhone,
+    parentName: s.parentName || s.guardianName,
+    parentPhone: s.parentPhone || s.parentsNo || s.guardianMobile,
     enrolledAt: s.enrolledAt || s.createdAt || new Date().toISOString(),
     approvedAt: s.approvedAt,
-    attendance: [],
-    payments: [],
+    attendance: s.attendance || [],
+    payments: s.payments || [],
     password: s.password,
+
     fullNameTamil: s.fullNameTamil,
     fullNameEnglish: s.fullNameEnglish || s.name || '',
     nicNo: s.nicNo,
@@ -225,43 +257,85 @@ function mapBackendStudent(s: any): Student {
     olNameUsed: s.olNameUsed,
     olAccept: s.olAccept,
     olResults: s.olResults,
-    subjects: s.subjects,
     declarationAccepted: s.declarationAccepted,
-  };
+    qrCodeUrl: s.qrCodeUrl,
+    qrImageKey: s.qrImageKey,
+  } as Student;
 }
 
 function mapStudentToCreatePayload(
   s: Omit<Student, 'id' | 'studentId' | 'qrToken' | 'attendance' | 'payments'>,
   modules: Module[],
 ): CreateStudentRequestPayload {
-  const selectedModules = Array.isArray(s.modules) ? s.modules : [];
-  const selectedSubjects = Array.isArray(s.subjects) ? s.subjects : [];
+  const selectedSubjects = getSelectedSubjects(s);
+  const fullNameEnglish = s.fullNameEnglish?.trim() || s.name.trim();
+  const dob = s.dob?.trim() || s.dateOfBirth?.trim();
 
-  const normalizedModules =
-    selectedModules.length > 0
-      ? selectedModules
-      : selectedSubjects
-          .map((subject) => modules.find((module) => module.name === subject)?.id)
-          .filter((moduleId): moduleId is string => Boolean(moduleId));
+ return {
+  name: fullNameEnglish,
+  fullNameEnglish,
+  fullNameTamil: s.fullNameTamil?.trim(),
 
-  return {
-    name: s.fullNameEnglish?.trim() || s.name.trim(),
-    fullNameEnglish: s.fullNameEnglish?.trim() || s.name.trim(),
-    email: s.email.trim(),
-    phone: s.whatsappNo?.trim() || s.phone.trim(),
-    batch: s.batch.trim(),
-    modules: normalizedModules,
-    address: s.permanentAddress?.trim() || s.address.trim() || undefined,
-    dob: s.dob?.trim() || undefined,
-    parentName:
-      s.parentName?.trim() ||
-      s.motherName?.trim() ||
-      s.fatherName?.trim() ||
-      s.guardianName?.trim() || undefined,
-    parentPhone:
-      s.parentsNo?.trim() || s.guardianMobile?.trim() || s.parentPhone?.trim() || undefined,
-    password: s.password?.trim() || '',
-  };
+  email: s.email.trim(),
+  phone: s.whatsappNo?.trim() || s.phone?.trim(),
+
+  whatsappNo: s.whatsappNo?.trim(),
+  parentsNo: s.parentsNo?.trim(),
+
+  batch: s.batch.trim(),
+
+  modules: selectedSubjects,
+  subjects: selectedSubjects,
+
+  address: s.address?.trim(),
+  permanentAddress: s.permanentAddress?.trim(),
+  contactAddress: s.contactAddress?.trim(),
+
+  administrativeDistrict: s.administrativeDistrict?.trim(),
+  postalCode: s.postalCode?.trim(),
+
+  dob,
+  dateOfBirth: dob,
+
+  nicNo: s.nicNo?.trim(),
+  school: s.school?.trim(),
+
+  parentName:
+    s.motherName?.trim() ||
+    s.fatherName?.trim() ||
+    s.guardianName?.trim() ||
+    s.parentName?.trim(),
+  parentPhone:
+    s.parentsNo?.trim() ||
+    s.guardianMobile?.trim() ||
+    s.parentPhone?.trim(),
+
+  fatherName: s.fatherName?.trim(),
+  motherName: s.motherName?.trim(),
+  guardianName: s.guardianName?.trim(),
+
+  guardianMobile: s.guardianMobile?.trim(),
+  guardianAddress: s.guardianAddress?.trim(),
+  guardianFixedTel: s.guardianFixedTel?.trim(),
+
+  fixedTelephone: s.fixedTelephone?.trim(),
+  residingSince: s.residingSince?.trim(),
+
+  race: s.race,
+  religion: s.religion,
+  citizenByDescent: s.citizenByDescent,
+
+  contactPerson: s.contactPerson,
+
+  olCategory: s.olCategory,
+  olYear: s.olYear,
+  olIndexNumber: s.olIndexNumber,
+  olNameUsed: s.olNameUsed,
+  olAccept: s.olAccept,
+  olResults: s.olResults || [],
+
+  password: s.password?.trim() || '',
+} as CreateStudentRequestPayload;
 }
 
 function buildLocalStudentFallback(
@@ -327,18 +401,24 @@ export const useDataStore = create<DataStore>()(
             students: [...state.students, mapped],
           }));
         } catch (error) {
-          console.error('Failed to add student:', error);
+          throw new Error(getApiErrorMessage(error, 'Failed to add student'));
         }
       },
 
       updateStudent: async (id, s) => {
         try {
-          const updated = await updateStudentRequest(id, s);
+          const payload = {
+            ...s,
+            modules: getSelectedSubjects(s),
+            subjects: getSelectedSubjects(s),
+          };
+
+          const updated = await updateStudentRequest(id, payload);
 
           set((state) => ({
             students: state.students.map((x) =>
               x.id === id
-                ? mapBackendStudent(updated || { ...x, ...s, _id: id })
+                ? mapBackendStudent(updated || { ...x, ...payload, _id: id })
                 : x,
             ),
           }));
@@ -411,7 +491,7 @@ export const useDataStore = create<DataStore>()(
                   id: uuidv4(),
                   studentId,
                   moduleId,
-                  moduleName: module?.name || '',
+                  moduleName: module?.name || moduleId,
                   date,
                   status,
                   markedAt: new Date().toISOString(),

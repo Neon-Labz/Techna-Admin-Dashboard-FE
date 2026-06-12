@@ -8,16 +8,57 @@ export type StudentPayload = Omit<
 
 export type CreateStudentRequestPayload = {
   name: string;
+  fullNameTamil?: string;
   fullNameEnglish?: string;
+
   email: string;
   phone: string;
+  whatsappNo?: string;
+  parentsNo?: string;
+
   batch: string;
+
   modules?: string[];
+  subjects?: string[];
+
   address?: string;
+  permanentAddress?: string;
+  contactAddress?: string;
+  administrativeDistrict?: string;
+  postalCode?: string;
+
   dob?: string;
+  dateOfBirth?: string;
+
+  nicNo?: string;
+  school?: string;
   avatar?: string;
+
   parentName?: string;
   parentPhone?: string;
+
+  fatherName?: string;
+  motherName?: string;
+  guardianName?: string;
+  guardianMobile?: string;
+  guardianAddress?: string;
+  guardianFixedTel?: string;
+
+  fixedTelephone?: string;
+  residingSince?: string;
+
+  race?: string;
+  religion?: string;
+  citizenByDescent?: string;
+  contactPerson?: string;
+
+  olCategory?: string;
+  olYear?: string;
+  olIndexNumber?: string;
+  olNameUsed?: string;
+  olAccept?: string;
+  olResults?: any[];
+
   password: string;
 };
 
@@ -32,6 +73,17 @@ export async function getStudentById(id: string): Promise<Student> {
 export async function createStudent(
   payload: CreateStudentRequestPayload,
 ): Promise<Student> {
+  console.log('[createStudent] payload check', {
+    nicNo: payload.nicNo,
+    school: payload.school,
+    fatherName: payload.fatherName,
+    motherName: payload.motherName,
+    guardianMobile: payload.guardianMobile,
+    race: payload.race,
+    religion: payload.religion,
+    payload,
+  });
+
   return api.post('/students', payload);
 }
 

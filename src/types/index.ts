@@ -53,11 +53,14 @@ export interface Student {
   id: string;
   studentId: string;
   qrToken: string;
+  qrCodeUrl?: string;
+  qrImageKey?: string;
   name: string;
   email: string;
   phone: string;
   address: string;
   dob: string;
+  dateOfBirth?: string;
   batch: string;
   modules: string[];
   status: 'pending' | 'approved' | 'rejected';
