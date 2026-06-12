@@ -17,21 +17,48 @@ const BATCHES = [
   'May 2025 Batch',
 ];
 
-const emptyStudent: Omit<
-  Student,
-  'id' | 'studentId' | 'attendance' | 'payments' | 'qrToken'
-> = {
+const SUBJECT_OPTIONS = [
+  'Engineering Technology',
+  'Science for Technology',
+  'Information & Communication Technology',
+  'Agricultural Technology',
+  'Accounting',
+  'Business Studies',
+  'English',
+  'Science',
+  'Mathematics',
+];
+
+const emptyStudent: any = {
   name: '',
+  fullNameEnglish: '',
+  fullNameTamil: '',
   email: '',
   phone: '',
+  whatsappNo: '',
+  parentsNo: '',
   address: '',
+  permanentAddress: '',
+  contactAddress: '',
+  administrativeDistrict: '',
+  postalCode: '',
   dob: '',
-  batch: BATCHES[0],
-  modules: [],
-  status: 'pending',
-  enrolledAt: new Date().toISOString(),
+  dateOfBirth: '',
+  nicNo: '',
+  school: '',
+  fatherName: '',
+  motherName: '',
+  guardianName: '',
+  guardianMobile: '',
   parentName: '',
   parentPhone: '',
+  race: '',
+  religion: '',
+  batch: '',
+  modules: [],
+  subjects: [],
+  status: 'pending',
+  enrolledAt: new Date().toISOString(),
 };
 
 export default function StudentsPage() {
@@ -51,20 +78,23 @@ export default function StudentsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [viewStudent, setViewStudent] = useState<Student | null>(null);
   const [editStudent, setEditStudent] = useState<Student | null>(null);
-  const [form, setForm] = useState<
-    Omit<Student, 'id' | 'studentId' | 'attendance' | 'payments' | 'qrToken'>
-  >(emptyStudent);
+  const [form, setForm] = useState<any>(emptyStudent);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStudents();
   }, [fetchStudents]);
 
-  const filtered = students.filter((s) => {
+  const getStudentName = (s: any) =>
+    s.name || s.fullNameEnglish || s.fullNameTamil || '';
+
+  const filtered = students.filter((s: any) => {
+    const q = search.toLowerCase();
+
     const matchSearch =
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.studentId.toLowerCase().includes(search.toLowerCase()) ||
-      s.email.toLowerCase().includes(search.toLowerCase());
+      getStudentName(s).toLowerCase().includes(q) ||
+      (s.studentId || '').toLowerCase().includes(q) ||
+      (s.email || '').toLowerCase().includes(q);
 
     const matchBatch = !filterBatch || s.batch === filterBatch;
     const matchStatus = !filterStatus || s.status === filterStatus;
@@ -78,62 +108,135 @@ export default function StudentsPage() {
     setModalOpen(true);
   };
 
- const openEdit = (s: Student) => {
-  setForm({
-    name: s.name,
-    email: s.email,
-    phone: s.phone,
-    address: s.address,
-    dob: s.dob,
-    batch: s.batch,
-    modules: s.modules,
-    status: s.status,
-    enrolledAt: s.enrolledAt,
-    parentName: s.parentName || '',
-    parentPhone: s.parentPhone || '',
-  });
-  setEditStudent(s);
-  setModalOpen(true);
-};
+  const formatDateForInput = (value?: string) => {
+    if (!value) return '';
+    return value.includes('T') ? value.split('T')[0] : value;
+  };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const getSelectedModules = (s: any) => {
+    if (Array.isArray(s.subjects) && s.subjects.length > 0) return s.subjects;
+    if (Array.isArray(s.modules) && s.modules.length > 0) return s.modules;
+    if (
+      Array.isArray(s.subjectSelection?.subjects) &&
+      s.subjectSelection.subjects.length > 0
+    ) {
+      return s.subjectSelection.subjects;
+    }
+    return [];
+  };
+
+  const openEdit = (s: any) => {
+    const selectedModules = getSelectedModules(s);
+
+    setForm({
+      ...emptyStudent,
+      ...s,
+      name: s.name || s.fullNameEnglish || '',
+      fullNameEnglish: s.fullNameEnglish || s.name || '',
+      fullNameTamil: s.fullNameTamil || '',
+      email: s.email || '',
+      phone: s.phone || s.whatsappNo || '',
+      whatsappNo: s.whatsappNo || s.phone || '',
+      parentsNo: s.parentsNo || s.parentPhone || '',
+      address: s.address || s.permanentAddress || '',
+      permanentAddress: s.permanentAddress || s.address || '',
+      contactAddress: s.contactAddress || '',
+      administrativeDistrict: s.administrativeDistrict || '',
+      postalCode: s.postalCode || '',
+      dob: formatDateForInput(s.dob || s.dateOfBirth),
+      dateOfBirth: formatDateForInput(s.dateOfBirth || s.dob),
+      nicNo: s.nicNo || '',
+      school: s.school || '',
+      fatherName: s.fatherName || '',
+      motherName: s.motherName || '',
+      guardianName: s.guardianName || s.parentName || '',
+      guardianMobile: s.guardianMobile || s.parentPhone || '',
+      parentName: s.parentName || s.guardianName || '',
+      parentPhone: s.parentPhone || s.parentsNo || s.guardianMobile || '',
+      race: s.race || '',
+      religion: s.religion || '',
+      batch: s.batch || '',
+      modules: selectedModules,
+      subjects: selectedModules,
+      status: s.status || 'pending',
+      enrolledAt: s.enrolledAt || new Date().toISOString(),
+    });
+
+    setEditStudent(s);
+    setModalOpen(true);
+  };
+
+  const handleChange = (field: string, value: string) => {
+    setForm((prev: any) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const toggleModule = (moduleName: string) => {
+    setForm((prev: any) => {
+      const current = Array.isArray(prev.subjects)
+        ? prev.subjects
+        : Array.isArray(prev.modules)
+          ? prev.modules
+          : [];
+
+      const updated = current.includes(moduleName)
+        ? current.filter((m: string) => m !== moduleName)
+        : [...current, moduleName];
+
+      return {
+        ...prev,
+        subjects: updated,
+        modules: updated,
+      };
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (editStudent) {
-      updateStudent(editStudent.id, form);
-      toast.success('Student updated!');
-    } else {
-      addStudent(form);
+    if (!editStudent) return;
+
+    const selectedModules =
+      form.subjects?.length ? form.subjects : form.modules || [];
+
+    const payload = {
+      ...form,
+      name: form.fullNameEnglish || form.name,
+      phone: form.phone || form.whatsappNo,
+      whatsappNo: form.whatsappNo || form.phone,
+      parentName: form.parentName || form.guardianName,
+      parentPhone: form.parentPhone || form.parentsNo || form.guardianMobile,
+      address: form.address || form.permanentAddress,
+      permanentAddress: form.permanentAddress || form.address,
+      dateOfBirth: form.dateOfBirth || form.dob,
+      dob: form.dob || form.dateOfBirth,
+      subjects: selectedModules,
+      modules: selectedModules,
+    };
+
+    await updateStudent(editStudent.id, payload);
+    toast.success('Student updated!');
+    setModalOpen(false);
+  };
+
+  const handleWizardSubmit = async (payload: any) => {
+    try {
+      await addStudent(payload);
       toast.success('Student added!');
+      setModalOpen(false);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to add student',
+      );
     }
-
-    setModalOpen(false);
   };
 
-  const handleWizardSubmit = async (
-    payload: Omit<
-      Student,
-      'id' | 'studentId' | 'attendance' | 'payments' | 'qrToken'
-    >,
-  ) => {
-    await addStudent(payload);
-    toast.success('Student added!');
-    setModalOpen(false);
-  };
-
-  const handleApprove = (id: string) => {
-    approveStudent(id);
-    const s = students.find((x) => x.id === id);
-    toast.success(`✅ ${s?.name} approved!`);
-  };
-
-  const toggleModule = (mid: string) => {
-    setForm((f) => ({
-      ...f,
-      modules: f.modules.includes(mid)
-        ? f.modules.filter((m) => m !== mid)
-        : [...f.modules, mid],
-    }));
+  const handleApprove = async (id: string) => {
+    await approveStudent(id);
+    const s: any = students.find((x) => x.id === id);
+    toast.success(`✅ ${getStudentName(s)} approved!`);
   };
 
   const handlePaymentAdd = (
@@ -156,6 +259,31 @@ export default function StudentsPage() {
   const currentViewStudent = viewStudent
     ? students.find((s) => s.id === viewStudent.id) || viewStudent
     : null;
+
+  const editFields = [
+    ['fullNameEnglish', 'Full Name English'],
+    ['fullNameTamil', 'Full Name Tamil'],
+    ['email', 'Email'],
+    ['phone', 'Phone'],
+    ['whatsappNo', 'WhatsApp No'],
+    ['parentsNo', 'Parents No'],
+    ['dob', 'Date of Birth'],
+    ['nicNo', 'NIC No'],
+    ['school', 'School'],
+    ['permanentAddress', 'Permanent Address'],
+    ['contactAddress', 'Contact Address'],
+    ['administrativeDistrict', 'Administrative District'],
+    ['postalCode', 'Postal Code'],
+    ['fatherName', 'Father Name'],
+    ['motherName', 'Mother Name'],
+    ['guardianName', 'Guardian Name'],
+    ['guardianMobile', 'Guardian Mobile'],
+    ['race', 'Race'],
+    ['religion', 'Religion'],
+  ] as const;
+
+  const selectedModules =
+    form.subjects?.length ? form.subjects : form.modules || [];
 
   return (
     <div className="p-6">
@@ -260,39 +388,30 @@ export default function StudentsPage() {
             onSubmit={handleWizardSubmit}
           />
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-4 max-h-[75vh] overflow-y-auto pr-2"
+          >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {(
-                [
-                  'name',
-                  'email',
-                  'phone',
-                  'address',
-                  'dob',
-                  'parentName',
-                  'parentPhone',
-                ] as const
-              ).map((f) => (
-                <div key={f}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1 capitalize">
-                    {f === 'dob'
-                      ? 'Date of Birth'
-                      : f === 'parentName'
-                        ? 'Parent Name'
-                        : f === 'parentPhone'
-                          ? 'Parent Phone'
-                          : f.charAt(0).toUpperCase() + f.slice(1)}
+              {editFields.map(([field, label]) => (
+                <div key={field}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {label}
                   </label>
 
                   <input
                     type={
-                      f === 'dob' ? 'date' : f === 'email' ? 'email' : 'text'
+                      field === 'dob'
+                        ? 'date'
+                        : field === 'email'
+                          ? 'email'
+                          : 'text'
                     }
-                    value={(form as unknown as Record<string, string>)[f] || ''}
-                    onChange={(e) =>
-                      setForm((prev) => ({ ...prev, [f]: e.target.value }))
-                    }
-                    required={['name', 'email', 'phone'].includes(f)}
+                    value={form[field] || ''}
+                    onChange={(e) => handleChange(field, e.target.value)}
+                    required={['fullNameEnglish', 'email', 'phone'].includes(
+                      field,
+                    )}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                   />
                 </div>
@@ -304,9 +423,7 @@ export default function StudentsPage() {
                 </label>
                 <select
                   value={form.batch}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, batch: e.target.value }))
-                  }
+                  onChange={(e) => handleChange('batch', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                 >
                   {BATCHES.map((b) => (
@@ -321,25 +438,33 @@ export default function StudentsPage() {
                 Enrolled Modules
               </label>
 
-              <div className="flex flex-wrap gap-2">
-                {modules.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => toggleModule(m.id)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                      form.modules.includes(m.id)
-                        ? 'bg-indigo-600 text-white border-indigo-600'
-                        : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-400'
-                    }`}
-                  >
-                    {m.name}
-                  </button>
-                ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {SUBJECT_OPTIONS.map((moduleName) => {
+                  const checked = selectedModules.includes(moduleName);
+
+                  return (
+                    <label
+                      key={moduleName}
+                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer text-sm ${
+                        checked
+                          ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
+                          : 'bg-white border-gray-200 text-gray-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleModule(moduleName)}
+                        className="rounded border-gray-300"
+                      />
+                      {moduleName}
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-3 pt-2 sticky bottom-0 bg-white">
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
