@@ -1,47 +1,40 @@
 import axios from 'axios';
 
-const axiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api',
+const baseURL =
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+
+const api = axios.create({
+  baseURL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-axiosInstance.interceptors.request.use(
+api.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
-      const authData = localStorage.getItem('edu-auth');
+      try {
+        const authStorage = JSON.parse(
+          localStorage.getItem('techna-auth') || '{}'
+        );
+        const token = authStorage?.state?.token;
 
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          const token = parsed?.state?.token;
-
-          if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-          }
-        } catch (error) {
-          console.error('Error parsing auth data:', error);
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
         }
+      } catch {
+        // Ignore malformed persisted auth data.
       }
     }
 
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-axiosInstance.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      console.error('Unauthorized access');
-    }
-
-    return Promise.reject(error);
-  }
+api.interceptors.response.use(
+  (response) => response.data?.data ?? response.data,
+  (error) => Promise.reject(error)
 );
 
-export default axiosInstance;
+export default api;
