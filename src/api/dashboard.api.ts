@@ -1,80 +1,47 @@
 import api from '@/lib/axios';
 
+const getData = async (url: string, fallback: any) => {
+  try {
+    const res: any = await api.get(url);
+    const payload = res?.data !== undefined ? res.data : res;
+    return payload?.data || payload || fallback;
+  } catch (err: any) {
+    if (err?.response?.status === 401) {
+console.warn(`Unauthorized: ${url}`);
+      return fallback;
+    }
+
+    console.error(`${url} failed:`, err);
+    return fallback;
+  }
+};
+
 export const dashboardApi = {
-  async getSummary() {
-    try {
-      const res: any = await api.get('/dashboard/summary');
-      const payload = res?.data !== undefined ? res.data : res;
-      return payload?.data || payload || {};
-    } catch (err) {
-      console.error('getSummary failed:', err);
-      return {};
-    }
+  getSummary() {
+    return getData('/dashboard/summary', {});
   },
 
-  async getTeachers() {
-    try {
-      const res: any = await api.get('/teachers');
-      const payload = res?.data !== undefined ? res.data : res;
-      return payload?.data || payload || [];
-    } catch (err) {
-      console.error('getTeachers failed:', err);
-      return [];
-    }
+  getTeachers() {
+    return getData('/teachers', []);
   },
 
-  async getModules() {
-    try {
-      const res: any = await api.get('/modules');
-      const payload = res?.data !== undefined ? res.data : res;
-      return payload?.data || payload || [];
-    } catch (err) {
-      console.error('getModules failed:', err);
-      return [];
-    }
+  getModules() {
+    return getData('/modules', []);
   },
 
-  async getExams() {
-    try {
-      const res: any = await api.get('/exam-notices');
-      const payload = res?.data !== undefined ? res.data : res;
-      return payload?.data || payload || [];
-    } catch (err) {
-      console.error('getExams failed:', err);
-      return [];
-    }
+  getExams() {
+    return getData('/exam-notices', []);
   },
 
-  async getStudents() {
-    try {
-      const res: any = await api.get('/students');
-      const payload = res?.data !== undefined ? res.data : res;
-      return payload?.data || payload || [];
-    } catch (err) {
-      console.error('getStudents failed:', err);
-      return [];
-    }
+  getStudents() {
+    return getData('/students', []);
   },
 
-  async getRevenue() {
-    try {
-      const res: any = await api.get('/dashboard/revenue');
-      const payload = res?.data !== undefined ? res.data : res;
-      return payload?.data || payload || [];
-    } catch (err) {
-      console.error('getRevenue failed:', err);
-      return [];
-    }
+  getRevenue() {
+    return getData('/dashboard/revenue', []);
   },
 
-  async getPayments() {
-    try {
-      const res: any = await api.get('/payments');
-      const payload = res?.data !== undefined ? res.data : res;
-      return payload?.data || payload || [];
-    } catch (err) {
-      console.error('getPayments failed:', err);
-      return [];
-    }
+  getPayments() {
+    return getData('/payments', []);
   },
 };

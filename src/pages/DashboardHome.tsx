@@ -28,11 +28,24 @@ import { dashboardApi } from '@/api/dashboard.api';
 
 const COLORS = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'];
 
+const toArray = (data: any) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.teachers)) return data.teachers;
+  if (Array.isArray(data?.students)) return data.students;
+  if (Array.isArray(data?.modules)) return data.modules;
+  if (Array.isArray(data?.payments)) return data.payments;
+  if (Array.isArray(data?.data?.payments)) return data.data.payments;
+  return [];
+};
+
 export default function DashboardHome() {
   const [students, setStudents] = useState<any[]>([]);
+  const [teachers, setTeachers] = useState<any[]>([]);
   const [modules, setModules] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
   const [exams, setExams] = useState<any[]>([]);
-  const [summary, setSummary] = useState<any>(null);
+  const [summary, setSummary] = useState<any>({});
   const [paidRevenue, setPaidRevenue] = useState(0);
 
   useEffect(() => {
@@ -41,57 +54,88 @@ export default function DashboardHome() {
 
   const fetchDashboardData = async () => {
     try {
-      const [summaryData, studentsData, modulesData, examsData] =
-        await Promise.all([
-          dashboardApi.getSummary(),
-          dashboardApi.getStudents(),
-          dashboardApi.getModules(),
-          dashboardApi.getExams(),
-        ]);
+      const [
+        summaryData,
+        studentsData,
+        teachersData,
+        modulesData,
+        paymentsData,
+        examsData,
+      ] = await Promise.all([
+        dashboardApi.getSummary(),
+        dashboardApi.getStudents(),
+        dashboardApi.getTeachers(),
+        dashboardApi.getModules(),
+        dashboardApi.getPayments(),
+        dashboardApi.getExams(),
+      ]);
 
-      setSummary(summaryData);
-      setStudents(Array.isArray(studentsData) ? studentsData : []);
-      setModules(Array.isArray(modulesData) ? modulesData : []);
-      setExams(Array.isArray(examsData) ? examsData : []);
+      const safeStudents = toArray(studentsData);
+      const safeTeachers = toArray(teachersData);
+      const safeModules = toArray(modulesData);
+      const safePayments = toArray(paymentsData);
+      const safeExams = toArray(examsData);
 
-      setPaidRevenue(
-        summaryData?.paidRevenue ||
-          summaryData?.totalPaid ||
-          summaryData?.totalRevenue ||
-          0
+      const revenue = safePayments.reduce(
+        (sum: number, p: any) => sum + Number(p.amount || 0),
+        0,
       );
+
+      setSummary(summaryData || {});
+      setStudents(safeStudents);
+      setTeachers(safeTeachers);
+      setModules(safeModules);
+      setPayments(safePayments);
+      setExams(safeExams);
+      setPaidRevenue(revenue);
     } catch (error) {
-      console.error('Failed to load dashboard data:', error);
+      console.warn('Failed to load dashboard data:', error);
     }
   };
 
   const approved = students.filter((s) => s.status === 'approved').length;
   const pending = students.filter((s) => s.status === 'pending').length;
 
-  const moduleChartData =
-    summary?.studentsPerModule ||
-    modules.map((m) => ({
-      name: m.name || m.moduleName || 'Module',
-      students: students.filter((s) =>
-        (Array.isArray(s.modules) ? s.modules : []).some((moduleId: any) => {
-          const id = typeof moduleId === 'string' ? moduleId : moduleId?._id;
-          return id === m._id || id === m.id;
-        })
-      ).length,
-    }));
+  const moduleChartData = modules.map((m) => {
+    const moduleName = m.name || m.moduleName || 'Module';
 
-  const paymentByModule =
-    summary?.revenueByModule ||
-    modules.map((m) => ({
-      name: m.name || m.moduleName || 'Module',
-      value: m.fee || 0,
-    }));
+    return {
+      name: moduleName,
+      students: students.filter((s) => {
+        const studentModules = Array.isArray(s.modules) ? s.modules : [];
 
-  const upcomingExams =
-  summary?.upcomingExams || exams.slice(0, 5);
+        return studentModules.some((item: any) => {
+          const value =
+            typeof item === 'string'
+              ? item
+              : item?.name || item?.moduleName || item?._id || item?.id;
 
-  const recentStudents =
-    summary?.recentStudents || [...students].slice(-4).reverse();
+          return (
+            value === m._id ||
+            value === m.id ||
+            value === moduleName ||
+            value === m.name ||
+            value === m.moduleName
+          );
+        });
+      }).length,
+    };
+  });
+
+  const paymentByModule = Object.values(
+    payments.reduce((acc: any, payment: any) => {
+      const name = payment.moduleName || 'Unknown Module';
+      const amount = Number(payment.amount || 0);
+
+      if (!acc[name]) acc[name] = { name, value: 0 };
+      acc[name].value += amount;
+
+      return acc;
+    }, {}),
+  ).filter((item: any) => item.value > 0);
+
+  const upcomingExams = exams.slice(0, 5);
+  const recentStudents = [...students].slice(-4).reverse();
 
   const stats = [
     {
@@ -117,7 +161,7 @@ export default function DashboardHome() {
     },
     {
       label: 'Teachers',
-      value: summary?.totalTeachers ?? 0,
+      value: summary?.totalTeachers ?? teachers.length,
       icon: GraduationCap,
       color: 'bg-purple-500',
       change: '+1%',
@@ -131,7 +175,7 @@ export default function DashboardHome() {
     },
     {
       label: 'Paid Payments',
-      value: `${Math.round(paidRevenue / 1000)}K`,
+value: `${(paidRevenue / 1000).toFixed(0)}K`,
       icon: CreditCard,
       color: 'bg-rose-500',
       change: '+18%',
@@ -202,12 +246,12 @@ export default function DashboardHome() {
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie
-  data={paymentByModule}
-  cx="50%"
-  cy="50%"
-  outerRadius={80}
-  dataKey="value"
->
+                data={paymentByModule}
+                cx="50%"
+                cy="50%"
+                outerRadius={80}
+                dataKey="value"
+              >
                 {paymentByModule.map((_: any, i: number) => (
                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
                 ))}
@@ -281,23 +325,26 @@ export default function DashboardHome() {
               >
                 <div className="w-10 h-10 bg-indigo-600 rounded-xl flex flex-col items-center justify-center text-white flex-shrink-0">
                   <span className="text-xs font-bold">
-                    {new Date(e.date).getDate()}
+                    {e.date ? new Date(e.date).getDate() : '-'}
                   </span>
                   <span className="text-xs">
-                    {new Date(e.date).toLocaleString('default', {
-                      month: 'short',
-                    })}
+                    {e.date
+                      ? new Date(e.date).toLocaleString('default', {
+                          month: 'short',
+                        })
+                      : '-'}
                   </span>
                 </div>
 
                 <div>
                   <p className="text-sm font-medium text-gray-800">
-                    {e.title}
+                    {e.title || 'Untitled Exam'}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {e.moduleName} · {e.startTime} - {e.endTime}
+                    {e.moduleName || '-'} · {e.startTime || '-'} -{' '}
+                    {e.endTime || '-'}
                   </p>
-                  <p className="text-xs text-gray-500">{e.venue}</p>
+                  <p className="text-xs text-gray-500">{e.venue || '-'}</p>
                 </div>
               </div>
             ))}

@@ -247,6 +247,20 @@ export default function StudentsPage() {
     toast.success('Payment recorded!');
   };
 
+  const handleStatusChange = async (
+  id: string,
+  status: 'pending' | 'approved' | 'rejected',
+) => {
+  if (status === 'approved') {
+    await approveStudent(id);
+    toast.success('Student approved!');
+    return;
+  }
+
+  await updateStudent(id, { status });
+  toast.success(`Student ${status}!`);
+};
+
   const handleAttendanceUpdate = (
     studentId: string,
     moduleId: string,
@@ -351,6 +365,7 @@ export default function StudentsPage() {
             onEdit={() => openEdit(s)}
             onDelete={() => setDeleteConfirm(s.id)}
             onApprove={() => handleApprove(s.id)}
+            onStatusChange={(status) => handleStatusChange(s.id, status)}
           />
         ))}
       </div>
