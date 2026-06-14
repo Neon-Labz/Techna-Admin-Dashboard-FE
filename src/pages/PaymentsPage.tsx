@@ -44,6 +44,34 @@ interface StudentTracking {
   payments: PaymentRecord[];
 }
 
+function extractArrayResponse(value: unknown): any[] {
+  if (Array.isArray(value)) return value;
+
+  if (!value || typeof value !== 'object') return [];
+
+  const data = (value as { data?: unknown }).data;
+  if (Array.isArray(data)) return data;
+
+  if (data && typeof data === 'object') {
+    const nestedData = (data as { data?: unknown }).data;
+    if (Array.isArray(nestedData)) return nestedData;
+
+    const students = (data as { students?: unknown }).students;
+    if (Array.isArray(students)) return students;
+
+    const modules = (data as { modules?: unknown }).modules;
+    if (Array.isArray(modules)) return modules;
+  }
+
+  const students = (value as { students?: unknown }).students;
+  if (Array.isArray(students)) return students;
+
+  const modules = (value as { modules?: unknown }).modules;
+  if (Array.isArray(modules)) return modules;
+
+  return [];
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 const statusIcon = (s: string) =>
   s === 'paid'    ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> :
@@ -93,10 +121,8 @@ function PaymentModal({
           api.get('/students'),
           api.get('/modules'),
         ]);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sArr: any[] = Array.isArray(sRaw) ? sRaw : (sRaw?.data ?? []);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mArr: any[] = Array.isArray(mRaw) ? mRaw : (mRaw?.data ?? []);
+        const sArr = extractArrayResponse(sRaw);
+        const mArr = extractArrayResponse(mRaw);
 
         setStudents(
           sArr
@@ -862,8 +888,8 @@ export default function PaymentsPage() {
     <div className="p-6">
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
           <h1 className="text-2xl font-bold text-gray-800">Payments</h1>
           <p className="text-gray-500 text-sm">{payments.length} total records</p>
         </div>
@@ -874,11 +900,11 @@ export default function PaymentsPage() {
             </div>
           )}
           <button onClick={fetchPayments} disabled={loading}
-            className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-3 py-2 rounded-xl hover:bg-gray-50 disabled:opacity-50 text-sm">
+            className="flex items-center gap-2 justify-center text-xs sm:text-sm px-3 sm:px-4 bg-white border border-gray-200 text-gray-600 px-3 py-2 rounded-xl hover:bg-gray-50 disabled:opacity-50 text-sm">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
           <button onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+            className="flex items-center gap-2 justify-center text-xs sm:text-sm px-3 sm:px-4 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
             <Plus className="w-4 h-4" /> Add Payment
           </button>
           <button onClick={generateAllPDF}

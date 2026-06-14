@@ -22,7 +22,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend,
 } from 'recharts';
 import { dashboardApi } from '@/api/dashboard.api';
 
@@ -76,10 +75,9 @@ export default function DashboardHome() {
       const safePayments = toArray(paymentsData);
       const safeExams = toArray(examsData);
 
-      const revenue = safePayments.reduce(
-        (sum: number, p: any) => sum + Number(p.amount || 0),
-        0,
-      );
+      const revenue = safePayments
+        .filter((p: any) => p.status === 'paid')
+        .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
 
       setSummary(summaryData || {});
       setStudents(safeStudents);
@@ -134,6 +132,7 @@ export default function DashboardHome() {
     }, {}),
   ).filter((item: any) => item.value > 0);
 
+  const mobileBarHeight = Math.max(220, moduleChartData.length * 48);
   const upcomingExams = exams.slice(0, 5);
   const recentStudents = [...students].slice(-4).reverse();
 
@@ -220,37 +219,87 @@ value: `${(paidRevenue / 1000).toFixed(0)}K`,
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 overflow-hidden">
           <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-indigo-500" />
             Students per Module
           </h3>
 
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={moduleChartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
-              <Tooltip />
-              <Bar dataKey="students" fill="#6366f1" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="md:hidden">
+            <div style={{ height: mobileBarHeight }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={moduleChartData}
+                  layout="vertical"
+                  margin={{ top: 6, right: 18, left: -12, bottom: 6 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 11 }}
+                    allowDecimals={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={78}
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(name) =>
+                      String(name).length > 13
+                        ? `${String(name).slice(0, 13)}...`
+                        : String(name)
+                    }
+                  />
+                  <Tooltip />
+                  <Bar dataKey="students" fill="#6366f1" radius={[0, 6, 6, 0]} barSize={20} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="hidden md:block">
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart
+                data={moduleChartData}
+                margin={{ top: 8, right: 18, left: -12, bottom: 46 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis
+                  dataKey="name"
+                  interval={0}
+                  tick={{ fontSize: 12 }}
+                  tickLine={false}
+                  angle={-20}
+                  textAnchor="end"
+                  height={58}
+                />
+                <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="students" fill="#6366f1" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 overflow-hidden">
           <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
             <CreditCard className="w-4 h-4 text-indigo-500" />
             Revenue by Module
           </h3>
 
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={210}>
             <PieChart>
               <Pie
                 data={paymentByModule}
                 cx="50%"
-                cy="50%"
-                outerRadius={80}
+                cy="48%"
+                outerRadius={82}
+                paddingAngle={1}
                 dataKey="value"
+                stroke="#ffffff"
+                strokeWidth={2}
               >
                 {paymentByModule.map((_: any, i: number) => (
                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
@@ -258,9 +307,20 @@ value: `${(paidRevenue / 1000).toFixed(0)}K`,
               </Pie>
 
               <Tooltip formatter={(v) => `LKR ${Number(v).toLocaleString()}`} />
-              <Legend />
             </PieChart>
           </ResponsiveContainer>
+
+          <div className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+            {paymentByModule.map((item: any, i: number) => (
+              <div key={item.name} className="flex min-w-0 items-center gap-2">
+                <span
+                  className="h-2.5 w-2.5 flex-shrink-0 rounded-sm"
+                  style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                />
+                <span className="truncate text-gray-600">{item.name}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 

@@ -1,12 +1,12 @@
 'use client';
 import { useState, useEffect } from 'react';
-import type { Teacher } from '../types';
+import type { Teacher } from '@/types';
 import {
   teacherApi,
   type TeacherFromApi,
   type TeacherPayload,
-} from '../api/teacher.api';
-import Modal from '../components/ui/Modal';
+} from '@/api/teacher.api';
+import Modal from '@/components/ui/Modal';
 import { Plus, Edit2, Trash2, GraduationCap, Phone, Mail, Search, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 

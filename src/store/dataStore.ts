@@ -17,15 +17,20 @@ import {
   updateStudent as updateStudentRequest,
 } from '../api/studentApi';
 import type { CreateStudentRequestPayload } from '../api/studentApi';
+import { cleanOlResults, normalizeAlSubjects } from '../utils/studentPayload';
 
 function getSelectedSubjects(s: any): string[] {
-  if (Array.isArray(s.subjects) && s.subjects.length > 0) return s.subjects;
-  if (Array.isArray(s.modules) && s.modules.length > 0) return s.modules;
+  if (Array.isArray(s.subjects) && s.subjects.length > 0) {
+    return normalizeAlSubjects(s.subjects);
+  }
+  if (Array.isArray(s.modules) && s.modules.length > 0) {
+    return normalizeAlSubjects(s.modules);
+  }
   if (
     Array.isArray(s.subjectSelection?.subjects) &&
     s.subjectSelection.subjects.length > 0
   ) {
-    return s.subjectSelection.subjects;
+    return normalizeAlSubjects(s.subjectSelection.subjects);
   }
   return [];
 }
@@ -332,7 +337,7 @@ function mapStudentToCreatePayload(
   olIndexNumber: s.olIndexNumber,
   olNameUsed: s.olNameUsed,
   olAccept: s.olAccept,
-  olResults: s.olResults || [],
+  olResults: cleanOlResults(s.olResults || []) as Student['olResults'],
 
   password: s.password?.trim() || '',
 } as CreateStudentRequestPayload;

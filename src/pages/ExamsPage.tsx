@@ -128,15 +128,17 @@ const list = Array.isArray(data) ? data : [];
       );
 
       const payload = {
-        title: form.title,
+        title: form.title.trim(),
         moduleId: form.moduleId,
         moduleName: mod?.name || mod?.moduleName || form.moduleName,
         batch: form.batch,
         date: form.date,
         startTime: form.startTime,
         endTime: form.endTime,
-        venue: form.venue,
-        description: form.description,
+        venue: form.venue.trim(),
+        description: form.description?.trim(),
+        totalMarks: form.totalMarks,
+        status: form.status,
         isPublished: true,
       };
 
@@ -151,8 +153,9 @@ const list = Array.isArray(data) ? data : [];
       setModalOpen(false);
       loadExams();
     } catch (error) {
-      console.error('Save exam error:', error);
-      toast.error('Failed to save exam');
+      const message =
+        error instanceof Error ? error.message : 'Failed to save exam';
+      toast.error(message);
     }
   };
 
@@ -318,24 +321,22 @@ const list = Array.isArray(data) ? data : [];
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
           <h1 className="text-2xl font-bold text-gray-800">Examinations</h1>
           <p className="text-gray-500 text-sm">{exams.length} total exams</p>
         </div>
 
-        <div className="flex gap-2">
-          <button
+        <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
+            <button
             onClick={downloadTimetable}
-            className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium transition-colors"
-          >
+          className="flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors">
             <Download className="w-4 h-4" /> Timetable PDF
           </button>
 
           <button
             onClick={openAdd}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
-          >
+          className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors"          >
             <Plus className="w-4 h-4" /> Publish Exam
           </button>
         </div>
@@ -419,8 +420,8 @@ const list = Array.isArray(data) ? data : [];
         ))}
 
         {filtered.length === 0 && (
-          <div className="col-span-3 text-center py-16 text-gray-400">
-            <ClipboardList className="w-12 h-12 mx-auto mb-3 opacity-30" />
+<div className="col-span-1 md:col-span-2 xl:col-span-3 text-center py-16 text-gray-400">           
+   <ClipboardList className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p>No exams found</p>
           </div>
         )}
@@ -511,6 +512,7 @@ const list = Array.isArray(data) ? data : [];
             </label>
             <input
               type="text"
+              required
               value={form.venue}
               onChange={(e) => setForm((f) => ({ ...f, venue: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"

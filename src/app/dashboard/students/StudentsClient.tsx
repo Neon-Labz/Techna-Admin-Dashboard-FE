@@ -1,18 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useDataStore } from '../store/dataStore';
-import type { Student, PaymentRecord } from '../types';
-import Modal from '../components/ui/Modal';
-import StudentCard from '../components/students/StudentCard';
-import StudentProfile from '../components/students/StudentProfile';
-import StudentRegistrationWizard from '../components/students/StudentRegistrationWizard';
+import { useDataStore } from '@/store/dataStore';
+import type { Student, PaymentRecord } from '@/types';
+import Modal from '@/components/ui/Modal';
+import StudentCard from '@/components/students/StudentCard';
+import StudentProfile from '@/components/students/StudentProfile';
+import StudentRegistrationWizard from '@/components/students/StudentRegistrationWizard';
 import { Plus, Search, Filter, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   AL_SUBJECT_OPTIONS,
   normalizeAlSubjects,
-} from '../utils/studentPayload';
+} from '@/utils/studentPayload';
 
 const emptyStudent: any = {
   name: '',

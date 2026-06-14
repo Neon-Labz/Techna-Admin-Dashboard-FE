@@ -1,6 +1,5 @@
 import { apiClient } from './axiosClient';
 
-// Shape returned by the backend (MongoDB document without password)
 export interface TeacherFromApi {
   _id: string;
   fullName: string;
@@ -16,7 +15,33 @@ export interface TeacherFromApi {
   updatedAt?: string;
 }
 
+export interface TeacherPayload {
+  fullName: string;
+  email: string;
+  phone: string;
+  subject: string;
+  qualification: string;
+  experience: string;
+  address: string;
+  joinDate: string;
+  status?: 'active' | 'inactive';
+  password?: string;
+}
+
 export const teacherApi = {
-  /** GET /api/teachers – fetch all teachers */
   getAll: () => apiClient<TeacherFromApi[]>('/teachers'),
+  create: (payload: TeacherPayload) =>
+    apiClient<TeacherFromApi>('/teachers', {
+      method: 'POST',
+      body: payload,
+    }),
+  update: (id: string, payload: Partial<TeacherPayload>) =>
+    apiClient<TeacherFromApi>(`/teachers/${id}`, {
+      method: 'PATCH',
+      body: payload,
+    }),
+  delete: (id: string) =>
+    apiClient<{ message: string }>(`/teachers/${id}`, {
+      method: 'DELETE',
+    }),
 };

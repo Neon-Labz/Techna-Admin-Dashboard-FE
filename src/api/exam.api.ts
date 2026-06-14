@@ -10,6 +10,8 @@ export type ExamPayload = {
   endTime: string;
   venue: string;
   description?: string;
+  totalMarks: number;
+  status: 'upcoming' | 'ongoing' | 'completed';
   isPublished?: boolean;
 };
 

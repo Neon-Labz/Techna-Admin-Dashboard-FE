@@ -58,10 +58,6 @@ export async function apiClient<T = unknown>(
 
   // Handle 401 Unauthorized - clear auth and redirect to login
   if (response.status === 401) {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('edu-auth');
-      window.location.href = '/login';
-    }
     throw new Error('Session expired. Please login again.');
   }
 

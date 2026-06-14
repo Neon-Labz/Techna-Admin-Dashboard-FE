@@ -1,2 +1,5 @@
-import StudentsPage from '@/pages/StudentsPage';
-export default function Page() { return <StudentsPage />; }
+import StudentsClient from './StudentsClient';
+
+export default function Page() {
+  return <StudentsClient />;
+}

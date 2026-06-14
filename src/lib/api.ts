@@ -157,12 +157,27 @@ const api: AxiosInstance = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('techna_admin_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+
+  const persistedAuth = localStorage.getItem('edu-auth');
+  if (persistedAuth) {
+    try {
+      const parsed = JSON.parse(persistedAuth);
+      const token = parsed?.state?.token;
+      if (typeof token === 'string' && token) return token;
+    } catch {
+      localStorage.removeItem('edu-auth');
     }
+  }
+
+  return localStorage.getItem('techna_admin_token');
+}
+
+api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const token = getAuthToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
