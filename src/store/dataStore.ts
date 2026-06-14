@@ -102,30 +102,8 @@ const SAMPLE_MODULES: Module[] = [
 ];
 
 const SAMPLE_TEACHERS: Teacher[] = [
-  {
-    id: 't1',
-    name: 'Ms. Sarah Johnson',
-    email: 'sarah@eduadmin.com',
-    phone: '+94 77 111 2222',
-    subject: 'English',
-    qualification: 'B.Ed (English)',
-    experience: '8 years',
-    address: 'Colombo 03',
-    joinDate: '2020-01-15',
-    status: 'active',
-  },
-  {
-    id: 't2',
-    name: 'Mr. David Silva',
-    email: 'david@eduadmin.com',
-    phone: '+94 77 333 4444',
-    subject: 'Science',
-    qualification: 'B.Sc (Physics)',
-    experience: '5 years',
-    address: 'Colombo 05',
-    joinDate: '2021-03-01',
-    status: 'active',
-  },
+  { id: 't1', name: 'Ms. Sarah Johnson', email: 'sarah@eduadmin.com', phone: '+94771112222', subject: ['English', 'Mathematics'], qualification: 'B.Ed (English)', experience: '8 years', address: 'Colombo 03', joinDate: '2020-01-15', status: 'active' },
+  { id: 't2', name: 'Mr. David Silva', email: 'david@eduadmin.com', phone: '+94773334444', subject: ['Science', 'Physics'], qualification: 'B.Sc (Physics)', experience: '5 years', address: 'Colombo 05', joinDate: '2021-03-01', status: 'active' },
 ];
 
 const SAMPLE_STUDENTS: Student[] = [];
