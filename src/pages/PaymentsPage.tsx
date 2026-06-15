@@ -34,6 +34,7 @@ interface StudentOption {
   name:       string;
   batch:      string;
   moduleRefs: string[];
+  status:     string;
 }
 interface ModuleOption { id: string; name: string; }
 interface StudentTracking {
@@ -133,15 +134,14 @@ function PaymentModal({
         const mArr = extractArrayResponse(mRaw);
 
         setStudents(
-          sArr
-            .filter(s => s.status === 'approved')
-            .map(s => ({
-              _id:        (s._id ?? s.id ?? s.studentId) as string,
-              studentId:  s.studentId as string,
-              name:       (s.fullNameEnglish ?? s.name ?? s.studentId) as string,
-              batch:      (s.batch ?? '') as string,
-              moduleRefs: Array.isArray(s.modules) ? (s.modules as string[]) : [],
-            }))
+          sArr.map(s => ({
+            _id:        (s._id ?? s.id ?? s.studentId) as string,
+            studentId:  s.studentId as string,
+            name:       (s.fullNameEnglish ?? s.name ?? s.studentId) as string,
+            batch:      (s.batch ?? '') as string,
+            moduleRefs: Array.isArray(s.modules) ? (s.modules as string[]) : [],
+            status:     (s.status ?? 'pending') as string,
+          }))
         );
 
         setAllModules(
@@ -200,7 +200,7 @@ function PaymentModal({
   }, [allModules]);
 
   const handleStudentChange = async (studentId: string) => {
-    const s = students.find(x => x.studentId === studentId);
+    const s = students.find(x => x._id === studentId);
     setForm(f => ({ ...f, studentId, moduleId: '', batch: s?.batch ?? f.batch }));
     setRegisteredModuleIds([]);
     if (!studentId || !s) return;
@@ -213,7 +213,7 @@ function PaymentModal({
     if (!isEdit || students.length === 0 || allModules.length === 0) return;
     if (enrollmentInitedRef.current) return;
     enrollmentInitedRef.current = true;
-    const s = students.find(x => x.studentId === form.studentId);
+    const s = students.find(x => x._id === form.studentId || x.studentId === form.studentId);
     if (s) loadEnrollmentForStudent(s);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, students, allModules]);
@@ -244,7 +244,7 @@ function PaymentModal({
       toast.error('Please fill all required fields');
       return;
     }
-    const student   = students.find(s => s.studentId === form.studentId);
+    const student   = students.find(s => s._id === form.studentId);
     const moduleRec = allModules.find(m => m.id === form.moduleId);
     const payload: CreatePaymentPayload = {
       studentId:   form.studentId,
@@ -305,7 +305,9 @@ function PaymentModal({
               className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="">Select student…</option>
               {students.map(s => (
-                <option key={s.studentId} value={s.studentId}>{s.name} ({s.studentId})</option>
+                <option key={s._id} value={s._id}>
+                  {s.name} ({s.studentId}) — {s.status}
+                </option>
               ))}
             </select>
           </div>
@@ -1086,27 +1088,214 @@ export default function PaymentsPage() {
 
   const generateAllPDF = () => {
     if (filtered.length === 0) { toast.error('No records to export'); return; }
-    const pdf   = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    const pageW = pdf.internal.pageSize.getWidth();
-    pdf.setFillColor(79, 70, 229); pdf.rect(0, 0, pageW, 18, 'F');
-    pdf.setTextColor(255, 255, 255); pdf.setFontSize(14); pdf.setFont('helvetica', 'bold');
-    pdf.text('Techna — Payment Report', pageW / 2, 11, { align: 'center' });
-    const headers   = ['Receipt No', 'Student', 'Module', 'Batch', 'Amount', 'Method', 'Date', 'Status'];
-    const rows      = filtered.map(p => [p.receiptNo, p.studentName, p.moduleName, p.batch, `LKR ${p.amount.toLocaleString()}`, p.method, p.paidDate, p.status]);
-    const colWidths = [30, 45, 30, 40, 25, 20, 25, 20];
-    let y = 30; let x = 10;
-    pdf.setFillColor(240, 240, 255); pdf.rect(8, y - 5, pageW - 16, 8, 'F');
-    pdf.setTextColor(79, 70, 229); pdf.setFontSize(8);
-    headers.forEach((h, i) => { pdf.setFont('helvetica', 'bold'); pdf.text(h, x, y); x += colWidths[i]; });
-    y += 6; pdf.setTextColor(50, 50, 50);
-    rows.forEach(row => {
-      if (y > 190) { pdf.addPage(); y = 20; }
-      x = 10;
-      row.forEach((cell, i) => { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.text(cell, x, y); x += colWidths[i]; });
-      y += 7; pdf.setDrawColor(230, 230, 230); pdf.line(8, y - 2, pageW - 8, y - 2);
-    });
-    pdf.save('payment-report.pdf');
-    toast.success('Report exported!');
+
+    const drawPDF = (logoDataUrl?: string) => {
+      const pdf    = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const W      = pdf.internal.pageSize.getWidth();   // 297mm
+      const H      = pdf.internal.pageSize.getHeight();  // 210mm
+      const margin  = 12;
+      const usableW = W - margin * 2;                    // 273mm
+      const dateStr = new Date().toISOString().split('T')[0];
+
+      // ── Top cyan bar ────────────────────────────────────────────────────────
+      pdf.setFillColor(0, 174, 219);
+      pdf.rect(0, 0, W, 8, 'F');
+
+      // ── White header background ─────────────────────────────────────────────
+      pdf.setFillColor(255, 255, 255);
+      pdf.rect(0, 8, W, 52, 'F');
+
+      // ── Logo (same loading + sizing as generatePaymentSlip) ─────────────────
+      if (logoDataUrl) {
+        try {
+          const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
+          const imgType   = mimeMatch ? mimeMatch[1].toUpperCase() : 'PNG';
+          const imgProps  = pdf.getImageProperties(logoDataUrl);
+          const boxH      = 36;
+          const ratio     = imgProps.width / imgProps.height;
+          const logoW     = boxH * ratio;
+          const logoH     = boxH;
+          const logoY     = 8 + (52 - logoH) / 2;
+          pdf.addImage(logoDataUrl, imgType, margin, logoY, logoW, logoH);
+        } catch (err) {
+          console.warn('Logo could not be added to PDF:', err);
+        }
+      }
+
+      // ── TECHNA title ────────────────────────────────────────────────────────
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(28);
+      pdf.setTextColor(0, 174, 219);
+      pdf.text('TECHNA', W / 2, 30, { align: 'center' });
+
+      // ── Contact line ────────────────────────────────────────────────────────
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(80, 80, 80);
+      pdf.text('Email: sivasakthy22@gmail.com  |  Contact: +94 77 170 3549', W / 2, 40, { align: 'center' });
+
+      // ── PAYMENT REPORT subtitle ─────────────────────────────────────────────
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(13);
+      pdf.setTextColor(0, 174, 219);
+      pdf.text('PAYMENT REPORT', W / 2, 51, { align: 'center' });
+
+      // ── Cyan divider ────────────────────────────────────────────────────────
+      pdf.setDrawColor(0, 174, 219);
+      pdf.setLineWidth(0.6);
+      pdf.line(margin, 62, W - margin, 62);
+
+      // ── Meta line ───────────────────────────────────────────────────────────
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(120, 120, 120);
+      pdf.text(`Generated: ${dateStr}  |  Total Records: ${filtered.length}`, W / 2, 68, { align: 'center' });
+
+      // ── Summary boxes ───────────────────────────────────────────────────────
+      const boxY   = 72;
+      const boxH   = 14;
+      const boxGap = 4;
+      const boxW   = (usableW - boxGap * 2) / 3;
+
+      pdf.setFillColor(232, 252, 245);
+      pdf.roundedRect(margin, boxY, boxW, boxH, 2, 2, 'F');
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(22, 163, 74);
+      pdf.text(`Total Collected: LKR ${totalPaid.toLocaleString()}`, margin + boxW / 2, boxY + 9, { align: 'center' });
+
+      pdf.setFillColor(255, 251, 235);
+      pdf.roundedRect(margin + boxW + boxGap, boxY, boxW, boxH, 2, 2, 'F');
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(180, 120, 0);
+      pdf.text(`Pending / Overdue: LKR ${totalPending.toLocaleString()}`, margin + boxW + boxGap + boxW / 2, boxY + 9, { align: 'center' });
+
+      pdf.setFillColor(240, 249, 255);
+      pdf.roundedRect(margin + (boxW + boxGap) * 2, boxY, boxW, boxH, 2, 2, 'F');
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(0, 120, 180);
+      pdf.text(`Total Records: ${filtered.length}`, margin + (boxW + boxGap) * 2 + boxW / 2, boxY + 9, { align: 'center' });
+
+      // ── Table ───────────────────────────────────────────────────────────────
+      const tableY  = boxY + boxH + 8;
+      const rowH    = 8;
+      const headerH = 10;
+
+      // Column widths — total = 55+43+48+35+28+20+26+18 = 273mm = usableW ✓
+      const cols: { header: string; w: number }[] = [
+        { header: 'Receipt No', w: 55 },
+        { header: 'Student',    w: 43 },
+        { header: 'Module',     w: 48 },
+        { header: 'Batch',      w: 35 },
+        { header: 'Amount',     w: 28 },
+        { header: 'Method',     w: 20 },
+        { header: 'Date',       w: 26 },
+        { header: 'Status',     w: 18 },
+      ];
+
+      // Truncate text to fit column (~1.45mm per char at 8pt helvetica)
+      const fitText = (text: string, maxMm: number): string => {
+        if (!text) return '';
+        const maxChars = Math.floor(maxMm / 1.45);
+        return text.length <= maxChars ? text : text.slice(0, maxChars - 1) + '…';
+      };
+
+      const drawTableHeader = (startY: number) => {
+        pdf.setFillColor(0, 174, 219);
+        pdf.rect(margin, startY, usableW, headerH, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setTextColor(255, 255, 255);
+        let hx = margin;
+        cols.forEach(col => { pdf.text(col.header, hx + 2, startY + 7); hx += col.w; });
+      };
+
+      drawTableHeader(tableY);
+
+      const rows = filtered.map(p => [
+        p.receiptNo   ?? '',
+        p.studentName ?? '',
+        p.moduleName  ?? '',
+        p.batch       ?? '',
+        `LKR ${p.amount.toLocaleString()}`,
+        p.method  ? p.method.charAt(0).toUpperCase()  + p.method.slice(1)  : '',
+        p.paidDate    ?? '',
+        p.status  ? p.status.charAt(0).toUpperCase()  + p.status.slice(1)  : '',
+      ]);
+
+      let y = tableY + headerH;
+
+      rows.forEach((row, rowIdx) => {
+        if (y + rowH > H - 16) {
+          pdf.addPage();
+          y = 16;
+          drawTableHeader(y);
+          y += headerH;
+        }
+
+        // Alternating row background
+        if (rowIdx % 2 === 0) {
+          pdf.setFillColor(255, 255, 255);
+        } else {
+          pdf.setFillColor(240, 250, 254);
+        }
+        pdf.rect(margin, y, usableW, rowH, 'F');
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+
+        const rawStatus = filtered[rowIdx]?.status ?? '';
+        let cx = margin;
+
+        row.forEach((cell, colIdx) => {
+          const colW = cols[colIdx].w;
+          if (colIdx === 7) {
+            if      (rawStatus === 'paid')    pdf.setTextColor(22, 163, 74);
+            else if (rawStatus === 'pending') pdf.setTextColor(217, 119, 6);
+            else if (rawStatus === 'overdue') pdf.setTextColor(220, 38, 38);
+            else                              pdf.setTextColor(50, 50, 50);
+          } else {
+            pdf.setTextColor(50, 50, 50);
+          }
+          pdf.text(fitText(cell, colW), cx + 2, y + 5.5);
+          cx += colW;
+        });
+
+        // Row separator
+        pdf.setDrawColor(224, 224, 224);
+        pdf.setLineWidth(0.2);
+        pdf.line(margin, y + rowH, margin + usableW, y + rowH);
+        y += rowH;
+      });
+
+      // ── Footer ──────────────────────────────────────────────────────────────
+      pdf.setFillColor(0, 174, 219);
+      pdf.rect(0, H - 12, W, 12, 'F');
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text('Techna', W / 2, H - 6, { align: 'center' });
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(6.5);
+      pdf.setTextColor(210, 240, 255);
+      pdf.text('Generated by Techna · Thank you!', W / 2, H - 1.5, { align: 'center' });
+
+      pdf.save(`payment-report-${dateStr}.pdf`);
+      toast.success('Report exported!');
+    };
+
+    fetch('/logo.png')
+      .then(res => {
+        if (!res.ok) throw new Error(`Logo fetch failed: ${res.status}`);
+        return res.blob();
+      })
+      .then(blob => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror  = reject;
+        reader.readAsDataURL(blob);
+      }))
+      .then(dataUrl => drawPDF(dataUrl))
+      .catch(() => {
+        console.warn('Logo not found — generating without logo.');
+        drawPDF();
+      });
   };
 
   const handlePaymentSuccess = (updated: PaymentRecord) => {

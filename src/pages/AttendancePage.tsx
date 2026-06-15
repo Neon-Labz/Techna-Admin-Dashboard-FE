@@ -36,7 +36,7 @@ export default function AttendancePage() {
   const [loading, setLoading] = useState(true);
   const [filterBatch, setFilterBatch] = useState('');
   const [filterModule, setFilterModule] = useState('');
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
+  const [filterDate, setFilterDate] = useState('');
   const [search, setSearch] = useState('');
 
   // ── Collapsible row state ───────────────────────────────────────────────────

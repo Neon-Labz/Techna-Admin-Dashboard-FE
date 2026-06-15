@@ -1,10 +1,21 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getModules, addResourceUrl, toggleResourcePublish, type ApiModule, type ApiResource } from '@/lib/api';
+import { getModules, addResourceUrl, toggleResourcePublish, isAxiosError, type ApiModule, type ApiResource } from '@/lib/api';
+
 import Modal from '@/components/ui/Modal';
 import { Play, Upload, Search, Filter, Video, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import Toast from '@/components/common/Toast';
+
+function extractErrorMessage(err: unknown): string {
+  if (isAxiosError(err)) {
+    const msg = err.response?.data?.message;
+    if (typeof msg === 'string') return msg;
+    if (Array.isArray(msg) && msg.length > 0) return String(msg[0]);
+  }
+  if (err instanceof Error) return err.message;
+  return 'Something went wrong';
+}
 
 interface VideoItem extends ApiResource {
   moduleName: string;
@@ -74,11 +85,16 @@ const VideoThumbnail = ({
   );
 };
 
+const capitalizeWords = (str: string) =>
+  str.trim().split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+
 export default function VideosPage() {
   const { toasts, addToast, removeToast } = useToast();
   const [modules, setModules] = useState<ApiModule[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterModule, setFilterModule] = useState('');
+  const [filterModule, setFilterModule] = useState('all');
   const [filterPublish, setFilterPublish] = useState<'all' | 'published' | 'unpublished'>('all');
   const [search, setSearch] = useState('');
   const [playVideo, setPlayVideo] = useState<VideoItem | null>(null);
@@ -104,17 +120,13 @@ export default function VideosPage() {
       .map(r => ({ ...r, moduleName: m.name, moduleId: m._id }))
   );
 
-  const filtered = videos.filter(v => {
-    const matchModule = !filterModule || v.moduleId === filterModule;
-    const matchSearch = !search ||
-      v.title.toLowerCase().includes(search.toLowerCase()) ||
-      v.moduleName.toLowerCase().includes(search.toLowerCase());
-    const matchPublish =
-      filterPublish === 'all' ||
-      (filterPublish === 'published' && v.isPublished === true) ||
-      (filterPublish === 'unpublished' && !v.isPublished);
-    return matchModule && matchSearch && matchPublish;
-  });
+  const filtered = videos.filter(v =>
+    (filterModule === 'all' || v.moduleId === filterModule) &&
+    (search === '' || v.title.toLowerCase().includes(search.toLowerCase())) &&
+    (filterPublish === 'all' ||
+      (filterPublish === 'published' && v.isPublished) ||
+      (filterPublish === 'unpublished' && !v.isPublished))
+  );
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,8 +149,7 @@ export default function VideosPage() {
       setUploadModuleId('');
       fetchModules();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to add video';
-      addToast(msg, 'error');
+      addToast(extractErrorMessage(err), 'error');
     } finally {
       setUploading(false);
     }
@@ -195,8 +206,8 @@ export default function VideosPage() {
           <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
           <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
             className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">All Modules</option>
-            {modules.map(m => <option key={m._id} value={m._id}>{m.name}</option>)}
+            <option value="all">All Modules</option>
+            {modules.map(m => <option key={m._id} value={m._id}>{capitalizeWords(m.name)}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -213,7 +224,7 @@ export default function VideosPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {filtered.map(v => (
           <div key={v._id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer" onClick={() => setPlayVideo(v)}>
-            <div className="w-full h-44 overflow-hidden rounded-t-2xl">
+            <div className="aspect-video overflow-hidden">
               <VideoThumbnail
                 src={v.url || v.fileUrl || ''}
                 thumbnailUrl={v.thumbnailUrl}
@@ -222,20 +233,17 @@ export default function VideosPage() {
             </div>
             <div className="p-4">
               <div className="flex items-start justify-between mb-2">
-                <h3 className="font-semibold text-gray-800 text-sm flex-1 pr-2">{v.title}</h3>
-                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 flex-shrink-0">{v.moduleName}</span>
+                <h3 className="font-semibold text-gray-800 text-sm line-clamp-2 flex-1 pr-2">{v.title}</h3>
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 flex-shrink-0">{capitalizeWords(v.moduleName)}</span>
               </div>
-              {v.fileKey && <p className="text-xs text-gray-400 font-mono truncate mb-3">{v.fileKey}</p>}
-              <div className="flex items-center justify-end mt-3">
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleTogglePublish(v.moduleId, v._id); }}
-                  className={v.isPublished === true
-                    ? "flex-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg py-2 text-sm font-medium flex items-center justify-center gap-1"
-                    : "flex-1 bg-gray-50 text-gray-500 hover:bg-gray-100 rounded-lg py-2 text-sm font-medium flex items-center justify-center gap-1"}>
-                  {v.isPublished === true ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                  {v.isPublished === true ? 'Published' : 'Unpublished'}
-                </button>
-              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleTogglePublish(v.moduleId, v._id); }}
+                className={v.isPublished === true
+                  ? "w-full mt-3 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg py-2 text-sm font-medium flex items-center justify-center gap-1"
+                  : "w-full mt-3 bg-gray-50 text-gray-500 hover:bg-gray-100 rounded-lg py-2 text-sm font-medium flex items-center justify-center gap-1"}>
+                {v.isPublished === true ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                {v.isPublished === true ? 'Published' : 'Unpublished'}
+              </button>
             </div>
           </div>
         ))}
@@ -279,7 +287,7 @@ export default function VideosPage() {
             <select required value={uploadModuleId} onChange={e => setUploadModuleId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
               <option value="">Select module...</option>
-              {modules.map(m => <option key={m._id} value={m._id}>{m.name} ({m.batch})</option>)}
+              {modules.map(m => <option key={m._id} value={m._id}>{capitalizeWords(m.name)} ({m.batch})</option>)}
             </select>
           </div>
           <div>
