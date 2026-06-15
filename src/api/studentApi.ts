@@ -65,10 +65,12 @@ export type CreateStudentRequestPayload = {
 export async function getStudents(): Promise<Student[]> {
   const response = await api.get('/students');
   return Array.isArray(response) ? response : (response as any)?.data || response || [];
+  return Array.isArray(response) ? response : (response as any)?.data || response || [];
 }
 
 export async function getStudentById(id: string): Promise<Student> {
   const response = await api.get(`/students/${id}`);
+  return response as unknown as Student;
   return response as unknown as Student;
 }
 
@@ -88,6 +90,7 @@ export async function createStudent(
 
   const response = await api.post('/students', payload);
   return response as unknown as Student;
+  return response as unknown as Student;
 }
 
 export async function updateStudent(
@@ -95,6 +98,7 @@ export async function updateStudent(
   payload: Partial<StudentPayload>,
 ): Promise<Student> {
   const response = await api.patch(`/students/${id}`, payload);
+  return response as unknown as Student;
   return response as unknown as Student;
 }
 
