@@ -251,15 +251,23 @@ export default function VideosPage() {
       </div>
 
       {/* Play Modal */}
-      <Modal isOpen={!!playVideo} onClose={() => setPlayVideo(null)} title={playVideo?.title ?? ''} size="2xl">
+      <Modal
+        isOpen={!!playVideo}
+        onClose={() => setPlayVideo(null)}
+        title={playVideo?.title ?? ''}
+        size="lg"
+        height="content"
+      >
         {playVideo && (
-          <video
-            src={playVideo.url || playVideo.fileUrl}
-            controls
-            controlsList="nodownload"
-            onContextMenu={e => e.preventDefault()}
-            className="w-full rounded-xl max-h-[60vh]"
-          />
+          <div className="flex justify-center rounded-xl bg-black">
+            <video
+              src={playVideo.url || playVideo.fileUrl}
+              controls
+              controlsList="nodownload"
+              onContextMenu={e => e.preventDefault()}
+              className="max-h-[72dvh] w-full rounded-xl object-contain"
+            />
+          </div>
         )}
       </Modal>
 

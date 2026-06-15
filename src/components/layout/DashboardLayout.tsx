@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Outlet } from 'react-router-dom';
 import Sidebar, { MobileMenuButton } from './Sidebar';
@@ -29,6 +29,10 @@ export default function DashboardLayout({
 
   const pathname = usePathname();
   const pageName = pageNames[pathname ?? '/dashboard'] || 'Dashboard';
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">

@@ -244,18 +244,17 @@ export default function StudentsPage() {
   };
 
   const handleStatusChange = async (
-  id: string,
-  status: 'pending' | 'approved' | 'rejected',
-) => {
-  if (status === 'approved') {
-    await approveStudent(id);
-    toast.success('Student approved!');
-    return;
-  }
-
-  await updateStudent(id, { status });
-  toast.success(`Student ${status}!`);
-};
+    id: string,
+    status: 'pending' | 'approved' | 'rejected',
+  ) => {
+    await updateStudent(id, {
+      status,
+      ...(status === 'approved'
+        ? { approvedAt: new Date().toISOString() }
+        : {}),
+    });
+    toast.success(`Student ${status}!`);
+  };
 
   const handleAttendanceUpdate = (
     studentId: string,
@@ -400,7 +399,8 @@ export default function StudentsPage() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editStudent ? 'Edit Student' : 'Add New Student'}
-        size="2xl"
+        size="xl"
+        height="content"
         closeOnBackdrop={false}
       >
         {!editStudent ? (

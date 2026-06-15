@@ -27,6 +27,65 @@ import { dashboardApi } from '@/api/dashboard.api';
 
 const COLORS = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'];
 
+const splitModuleName = (name: unknown, maxLineLength = 12) => {
+  const words = String(name || 'Module').split(/\s+/).filter(Boolean);
+  if (words.length === 0) return ['Module'];
+
+  const lines: string[] = [];
+  for (const word of words) {
+    if (lines.length === 0) {
+      lines.push(word);
+      continue;
+    }
+
+    const current = lines[lines.length - 1];
+    const next = `${current} ${word}`;
+
+    if (next.length <= maxLineLength) {
+      lines[lines.length - 1] = next;
+      continue;
+    }
+
+    if (lines.length === 2) break;
+    lines.push(word);
+  }
+
+  const usedWords = lines.join(' ').split(/\s+/).filter(Boolean).length;
+  if (usedWords < words.length) {
+    lines[lines.length - 1] = `${lines[lines.length - 1].replace(/\.+$/, '')}...`;
+  }
+
+  return lines.slice(0, 2).map((line) =>
+    line.length > maxLineLength + 3
+      ? `${line.slice(0, maxLineLength).replace(/\.+$/, '')}...`
+      : line,
+  );
+};
+
+const ModuleAxisTick = ({
+  x = 0,
+  y = 0,
+  payload,
+}: {
+  x?: number;
+  y?: number;
+  payload?: { value?: unknown };
+}) => {
+  const lines = splitModuleName(payload?.value);
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text textAnchor="middle" fill="#64748b" fontSize={12}>
+        {lines.map((line, index) => (
+          <tspan key={`${line}-${index}`} x={0} dy={index === 0 ? 12 : 13}>
+            {line}
+          </tspan>
+        ))}
+      </text>
+    </g>
+  );
+};
+
 const toArray = (data: any) => {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.data)) return data.data;
@@ -132,7 +191,16 @@ export default function DashboardHome() {
     }, {}),
   ).filter((item: any) => item.value > 0);
 
-  const mobileBarHeight = Math.max(220, moduleChartData.length * 48);
+  const maxModuleStudents = Math.max(
+    1,
+    ...moduleChartData.map((item) => item.students),
+  );
+  const moduleChartTicks =
+    maxModuleStudents <= 4
+      ? Array.from({ length: maxModuleStudents + 1 }, (_, index) => index)
+      : [0, Math.ceil(maxModuleStudents / 2), maxModuleStudents];
+  const moduleChartHeight = 240;
+  const mobileModuleChartHeight = Math.max(220, moduleChartData.length * 42);
   const upcomingExams = exams.slice(0, 5);
   const recentStudents = [...students].slice(-4).reverse();
 
@@ -219,83 +287,141 @@ value: `${(paidRevenue / 1000).toFixed(0)}K`,
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 overflow-hidden">
-          <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-indigo-500" />
-            Students per Module
-          </h3>
+        <div className="self-start bg-white rounded-2xl p-4 shadow-sm border border-gray-100 overflow-hidden">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-indigo-500" />
+              Students per Module
+            </h3>
 
-          <div className="md:hidden">
-            <div style={{ height: mobileBarHeight }}>
+            <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-600">
+              {moduleChartData.length} modules
+            </span>
+          </div>
+
+          {moduleChartData.length === 0 ? (
+            <div className="flex h-56 items-center justify-center rounded-xl bg-gray-50 text-sm text-gray-400">
+              No module enrolments yet
+            </div>
+          ) : (
+            <>
+            <div className="sm:hidden" style={{ height: mobileModuleChartHeight }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={moduleChartData}
                   layout="vertical"
-                  margin={{ top: 6, right: 18, left: -12, bottom: 6 }}
+                  margin={{ top: 6, right: 28, left: -18, bottom: 6 }}
+                  barCategoryGap={12}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="#eef2f7"
+                    horizontal={false}
+                  />
                   <XAxis
                     type="number"
-                    tick={{ fontSize: 11 }}
                     allowDecimals={false}
+                    domain={[0, maxModuleStudents]}
+                    ticks={moduleChartTicks}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: '#64748b' }}
                   />
                   <YAxis
                     type="category"
                     dataKey="name"
-                    width={78}
-                    tickLine={false}
+                    width={108}
                     axisLine={false}
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={(name) =>
-                      String(name).length > 13
-                        ? `${String(name).slice(0, 13)}...`
-                        : String(name)
-                    }
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: '#334155' }}
+                    tickFormatter={(name) => splitModuleName(name, 11).join(' ')}
                   />
-                  <Tooltip />
-                  <Bar dataKey="students" fill="#6366f1" radius={[0, 6, 6, 0]} barSize={20} />
+                  <Tooltip
+                    cursor={{ fill: '#f8fafc' }}
+                    formatter={(value) => [`${value} students`, 'Enrolled']}
+                    labelFormatter={(label) => String(label)}
+                  />
+                  <Bar
+                    dataKey="students"
+                    fill="#6366f1"
+                    radius={[0, 7, 7, 0]}
+                    barSize={22}
+                    label={{
+                      position: 'right',
+                      fill: '#334155',
+                      fontSize: 11,
+                      fontWeight: 700,
+                    }}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </div>
 
-          <div className="hidden md:block">
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart
-                data={moduleChartData}
-                margin={{ top: 8, right: 18, left: -12, bottom: 46 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis
-                  dataKey="name"
-                  interval={0}
-                  tick={{ fontSize: 12 }}
-                  tickLine={false}
-                  angle={-20}
-                  textAnchor="end"
-                  height={58}
-                />
-                <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="students" fill="#6366f1" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+            <div className="hidden sm:block" style={{ height: moduleChartHeight }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={moduleChartData}
+                  margin={{ top: 16, right: 18, left: -18, bottom: 50 }}
+                  barCategoryGap={18}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="#eef2f7"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="name"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={<ModuleAxisTick />}
+                    interval={0}
+                    height={56}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    domain={[0, maxModuleStudents]}
+                    ticks={moduleChartTicks}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 12, fill: '#334155' }}
+                  />
+                  <Tooltip
+                    cursor={{ fill: '#f8fafc' }}
+                    formatter={(value) => [`${value} students`, 'Enrolled']}
+                    labelFormatter={(label) => String(label)}
+                  />
+                  <Bar
+                    dataKey="students"
+                    fill="#6366f1"
+                    radius={[8, 8, 0, 0]}
+                    maxBarSize={54}
+                    label={{
+                      position: 'top',
+                      fill: '#334155',
+                      fontSize: 12,
+                      fontWeight: 700,
+                    }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            </>
+          )}
         </div>
 
-        <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 overflow-hidden">
-          <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+        <div className="self-start bg-white rounded-2xl p-4 shadow-sm border border-gray-100 overflow-hidden">
+          <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
             <CreditCard className="w-4 h-4 text-indigo-500" />
             Revenue by Module
           </h3>
 
-          <ResponsiveContainer width="100%" height={210}>
+          <ResponsiveContainer width="100%" height={160}>
             <PieChart>
               <Pie
                 data={paymentByModule}
                 cx="50%"
-                cy="48%"
-                outerRadius={82}
+                cy="50%"
+                outerRadius={62}
                 paddingAngle={1}
                 dataKey="value"
                 stroke="#ffffff"
@@ -310,7 +436,7 @@ value: `${(paidRevenue / 1000).toFixed(0)}K`,
             </PieChart>
           </ResponsiveContainer>
 
-          <div className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+          <div className="mt-1 grid grid-cols-1 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-2">
             {paymentByModule.map((item: any, i: number) => (
               <div key={item.name} className="flex min-w-0 items-center gap-2">
                 <span

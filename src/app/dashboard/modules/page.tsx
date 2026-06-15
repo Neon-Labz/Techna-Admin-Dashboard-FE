@@ -245,6 +245,8 @@ export default function ModulesPage() {
       m.batch.toLowerCase().includes(search.toLowerCase()),
   );
 
+  const moduleToDelete = modules.find((m) => m._id === deleteId);
+
   // ── Render ──
 
   return (
@@ -481,7 +483,9 @@ export default function ModulesPage() {
       {/* Delete confirmation */}
       <DeleteModal
         open={!!deleteId}
-        message="Are you sure you want to delete this module?"
+        title="Delete Module"
+        itemName={moduleToDelete?.name}
+        message="This will permanently delete the module and cannot be undone."
         loading={deleting}
         onCancel={() => setDeleteId(null)}
         onConfirm={handleDelete}

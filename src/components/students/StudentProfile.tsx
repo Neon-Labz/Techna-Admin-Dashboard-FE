@@ -319,8 +319,8 @@ export default function StudentProfile({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 bg-white p-4 lg:grid-cols-[420px_minmax(0,1fr)] lg:p-5">
-          <aside className="h-full overflow-hidden space-y-4">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto bg-white p-4 lg:grid-cols-[420px_minmax(0,1fr)] lg:overflow-hidden lg:p-5">
+          <aside className="space-y-4 lg:h-full lg:overflow-y-auto lg:pr-2">
             <div>
               <h3 className="mb-2 text-sm font-bold uppercase tracking-[0.16em] text-slate-400">
                 Student ID Card (PDF Preview)
@@ -488,7 +488,7 @@ export default function StudentProfile({
             </div>
           </aside>
 
-          <main className="h-full min-w-0 space-y-4 overflow-y-auto pr-4">
+          <main className="min-w-0 space-y-4 lg:h-full lg:overflow-y-auto lg:pr-4">
             <ProfileSection title="Payments">
               <div className="-mt-1 mb-3 flex justify-end">
                 <button

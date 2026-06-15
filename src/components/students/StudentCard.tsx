@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Student } from '../../types';
 import {
   Eye,
@@ -28,6 +29,8 @@ export default function StudentCard({
   onStatusChange,
 }: Props) {
   const [isStatusOpen, setIsStatusOpen] = useState(false);
+  const statusMenuRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
   const statuses = [
     {
@@ -68,6 +71,26 @@ export default function StudentCard({
     }
   };
 
+  useEffect(() => {
+    setIsStatusOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!isStatusOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!statusMenuRef.current?.contains(event.target as Node)) {
+        setIsStatusOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [isStatusOpen]);
+
   return (
     <div className="relative rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md sm:p-5">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -97,7 +120,7 @@ export default function StudentCard({
           </div>
         </div>
 
-        <div className="relative self-start">
+        <div ref={statusMenuRef} className="relative self-start">
           <button
             type="button"
             onClick={() => setIsStatusOpen(!isStatusOpen)}
@@ -108,7 +131,7 @@ export default function StudentCard({
           </button>
 
           {isStatusOpen && (
-            <div className="absolute right-0 mt-2 w-44 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden z-50">
+            <div className="absolute left-0 z-50 mt-2 w-40 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-lg sm:left-auto sm:right-0 sm:w-44">
               {statuses.map((status) => (
                 <button
                   key={status.value}

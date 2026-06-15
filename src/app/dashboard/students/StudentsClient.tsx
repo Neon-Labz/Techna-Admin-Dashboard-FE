@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useDataStore } from '@/store/dataStore';
 import type { Student, PaymentRecord } from '@/types';
 import Modal from '@/components/ui/Modal';
+import DeleteModal from '@/components/common/DeleteModal';
 import StudentCard from '@/components/students/StudentCard';
 import StudentProfile from '@/components/students/StudentProfile';
 import StudentRegistrationWizard from '@/components/students/StudentRegistrationWizard';
@@ -65,6 +66,7 @@ export default function StudentsPage() {
   const [editStudent, setEditStudent] = useState<Student | null>(null);
   const [form, setForm] = useState<any>(emptyStudent);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchStudents();
@@ -86,6 +88,8 @@ export default function StudentsPage() {
 
     return matchSearch && matchBatch && matchStatus;
   });
+
+  const studentToDelete = students.find((s) => s.id === deleteConfirm);
 
   const openAdd = () => {
     setForm(emptyStudent);
@@ -244,18 +248,17 @@ export default function StudentsPage() {
   };
 
   const handleStatusChange = async (
-  id: string,
-  status: 'pending' | 'approved' | 'rejected',
-) => {
-  if (status === 'approved') {
-    await approveStudent(id);
-    toast.success('Student approved!');
-    return;
-  }
-
-  await updateStudent(id, { status });
-  toast.success(`Student ${status}!`);
-};
+    id: string,
+    status: 'pending' | 'approved' | 'rejected',
+  ) => {
+    await updateStudent(id, {
+      status,
+      ...(status === 'approved'
+        ? { approvedAt: new Date().toISOString() }
+        : {}),
+    });
+    toast.success(`Student ${status}!`);
+  };
 
   const handleAttendanceUpdate = (
     studentId: string,
@@ -400,7 +403,8 @@ export default function StudentsPage() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editStudent ? 'Edit Student' : 'Add New Student'}
-        size="2xl"
+        size="xl"
+        height="content"
         closeOnBackdrop={false}
       >
         {!editStudent ? (
@@ -512,38 +516,26 @@ export default function StudentsPage() {
         )}
       </Modal>
 
-      <Modal
-        isOpen={!!deleteConfirm}
-        onClose={() => setDeleteConfirm(null)}
-        title="Confirm Delete"
-        size="sm"
-      >
-        <p className="text-gray-600 text-sm mb-5">
-          Are you sure you want to delete this student? All records will be lost.
-        </p>
+      <DeleteModal
+        open={!!deleteConfirm}
+        title="Delete Student"
+        itemName={studentToDelete ? getStudentName(studentToDelete) : undefined}
+        message="This will permanently delete the student profile and all related records."
+        loading={deleting}
+        onCancel={() => setDeleteConfirm(null)}
+        onConfirm={async () => {
+          if (!deleteConfirm) return;
 
-        <div className="flex gap-3">
-          <button
-            onClick={() => setDeleteConfirm(null)}
-            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-
-          <button
-            onClick={() => {
-              if (deleteConfirm) {
-                deleteStudent(deleteConfirm);
-              }
-              setDeleteConfirm(null);
-              toast.success('Student deleted');
-            }}
-            className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700"
-          >
-            Delete
-          </button>
-        </div>
-      </Modal>
+          setDeleting(true);
+          try {
+            await deleteStudent(deleteConfirm);
+            setDeleteConfirm(null);
+            toast.success('Student deleted');
+          } finally {
+            setDeleting(false);
+          }
+        }}
+      />
     </div>
   );
 }

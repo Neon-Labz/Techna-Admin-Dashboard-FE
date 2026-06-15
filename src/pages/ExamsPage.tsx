@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { Exam } from '../types';
 import Modal from '../components/ui/Modal';
+import DeleteModal from '../components/common/DeleteModal';
 import {
   Plus,
   Edit2,
@@ -47,6 +48,7 @@ export default function ExamsPage() {
   const [editExam, setEditExam] = useState<Exam | null>(null);
   const [form, setForm] = useState<Omit<Exam, 'id'>>(emptyExam);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadExams();
@@ -104,6 +106,8 @@ const list = Array.isArray(data) ? data : [];
     return matchSearch && matchBatch;
   });
 
+  const examToDelete = exams.find((e) => e.id === deleteConfirm);
+
   const openAdd = () => {
     setForm(emptyExam);
     setEditExam(null);
@@ -160,6 +164,7 @@ const list = Array.isArray(data) ? data : [];
     if (!deleteConfirm) return;
 
     try {
+      setDeleting(true);
       await examApi.delete(deleteConfirm);
       toast.success('Exam deleted');
       setDeleteConfirm(null);
@@ -167,6 +172,8 @@ const list = Array.isArray(data) ? data : [];
     } catch (error) {
       console.error('Delete exam error:', error);
       toast.error('Failed to delete exam');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -571,32 +578,15 @@ const list = Array.isArray(data) ? data : [];
         </form>
       </Modal>
 
-      <Modal
-        isOpen={!!deleteConfirm}
-        onClose={() => setDeleteConfirm(null)}
+      <DeleteModal
+        open={!!deleteConfirm}
         title="Delete Exam"
-        size="sm"
-      >
-        <p className="text-gray-600 text-sm mb-5">
-          Are you sure you want to delete this exam?
-        </p>
-
-        <div className="flex gap-3">
-          <button
-            onClick={() => setDeleteConfirm(null)}
-            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium"
-          >
-            Cancel
-          </button>
-
-          <button
-            onClick={handleDelete}
-            className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium"
-          >
-            Delete
-          </button>
-        </div>
-      </Modal>
+        itemName={examToDelete?.title}
+        message="This will permanently delete the exam and cannot be undone."
+        loading={deleting}
+        onCancel={() => setDeleteConfirm(null)}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

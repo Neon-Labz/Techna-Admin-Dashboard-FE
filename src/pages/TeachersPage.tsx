@@ -120,14 +120,16 @@ export default function TeachersPage() {
   };
 
   const fetchBackendModules = async () => {
-    try {
-      const data = await getModules();
-      setBackendModules(data);
-    } catch (error: any) {
-      // Silent fail – the dropdown will just show "No modules available"
-      console.error('Failed to load modules:', error);
-    }
-  };
+  try {
+    const data = await getModules();
+
+    console.log('Modules API Response:', data);
+
+    setBackendModules(data);
+  } catch (error) {
+    console.error('Failed to load modules:', error);
+  }
+};
 
   const filtered = teachers.filter(t => {
     const term = search.toLowerCase();
