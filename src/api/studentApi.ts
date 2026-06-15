@@ -64,16 +64,12 @@ export type CreateStudentRequestPayload = {
 
 export async function getStudents(): Promise<Student[]> {
   const response = await api.get('/students');
-
-  console.log('Students API Response:', response.data);
-
-  return response.data?.data || response.data || [];
+  return Array.isArray(response) ? response : (response as any)?.data || response || [];
 }
 
 export async function getStudentById(id: string): Promise<Student> {
   const response = await api.get(`/students/${id}`);
-
-  return response.data?.data || response.data;
+  return response as unknown as Student;
 }
 
 export async function createStudent(
@@ -91,8 +87,7 @@ export async function createStudent(
   });
 
   const response = await api.post('/students', payload);
-
-  return response.data?.data || response.data;
+  return response as unknown as Student;
 }
 
 export async function updateStudent(
@@ -100,8 +95,7 @@ export async function updateStudent(
   payload: Partial<StudentPayload>,
 ): Promise<Student> {
   const response = await api.patch(`/students/${id}`, payload);
-
-  return response.data?.data || response.data;
+  return response as unknown as Student;
 }
 
 export async function deleteStudent(id: string): Promise<void> {
@@ -110,6 +104,5 @@ export async function deleteStudent(id: string): Promise<void> {
 
 export async function approveStudent(id: string): Promise<Student> {
   const response = await api.patch(`/students/${id}/approve`);
-
-  return response.data?.data || response.data;
+  return response as unknown as Student;
 }
