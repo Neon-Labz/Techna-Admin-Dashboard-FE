@@ -326,6 +326,11 @@ export const getStudentAttendance = (
   api.get(`/api/attendance/student/${studentId}`).then(r => r.data);
 
 export function extractErrorMessage(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const msg = err.response?.data?.message;
+    if (typeof msg === 'string') return msg;
+    if (Array.isArray(msg) && msg.length > 0) return String(msg[0]);
+  }
   if (err instanceof Error) return err.message;
   return 'Something went wrong';
 }

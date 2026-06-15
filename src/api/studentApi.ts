@@ -64,18 +64,11 @@ export type CreateStudentRequestPayload = {
 
 export async function getStudents(): Promise<Student[]> {
   const response = await api.get('/students');
-
-  console.log('Students API Response:', response);
-
-  // The axios response interceptor already unwraps data.data,
-  // so `response` here is the actual payload (array or object with students).
-  return response as unknown as Student[];
+  return Array.isArray(response) ? response : (response as any)?.data || response || [];
 }
 
 export async function getStudentById(id: string): Promise<Student> {
   const response = await api.get(`/students/${id}`);
-
-  // Interceptor already unwraps the response envelope
   return response as unknown as Student;
 }
 
@@ -94,8 +87,6 @@ export async function createStudent(
   });
 
   const response = await api.post('/students', payload);
-
-  // Interceptor already unwraps the response envelope
   return response as unknown as Student;
 }
 
@@ -104,8 +95,6 @@ export async function updateStudent(
   payload: Partial<StudentPayload>,
 ): Promise<Student> {
   const response = await api.patch(`/students/${id}`, payload);
-
-  // Interceptor already unwraps the response envelope
   return response as unknown as Student;
 }
 
@@ -115,14 +104,10 @@ export async function deleteStudent(id: string): Promise<void> {
 
 export async function approveStudent(id: string): Promise<Student> {
   const response = await api.patch(`/students/${id}/approve`);
-
-  // Interceptor already unwraps the response envelope
   return response as unknown as Student;
 }
 
-export async function rejectStudent(id: string, reason?: string): Promise<Student> {
+export async function rejectStudent(id: string, reason: string): Promise<Student> {
   const response = await api.patch(`/students/${id}/reject`, { reason });
-
-  // Interceptor already unwraps the response envelope
   return response as unknown as Student;
 }

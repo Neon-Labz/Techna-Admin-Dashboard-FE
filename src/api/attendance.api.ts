@@ -131,4 +131,10 @@ export const attendanceApi = {
     const res = await api.delete(`/attendance/${id}`);
     return unwrap(res);
   },
+
+  async getByStudent(studentId: string) {
+    const res = await api.get(`/attendance/student/${studentId}`);
+    const data = unwrap(res);
+    return Array.isArray(data) ? data : [];
+  },
 };
