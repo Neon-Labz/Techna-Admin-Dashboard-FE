@@ -62,18 +62,32 @@ export type CreateStudentRequestPayload = {
   password: string;
 };
 
+function unwrapApiData<T>(response: unknown, fallback: T): T {
+  if (response && typeof response === 'object' && 'data' in response) {
+    const data = (response as { data?: unknown }).data;
+
+    if (data && typeof data === 'object' && 'data' in data) {
+      return ((data as { data?: unknown }).data ?? fallback) as T;
+    }
+
+    return (data ?? fallback) as T;
+  }
+
+  return (response ?? fallback) as T;
+}
+
 export async function getStudents(): Promise<Student[]> {
   const response = await api.get('/students');
 
-  console.log('Students API Response:', response.data);
+  console.log('Students API Response:', response);
 
-  return response.data?.data || response.data || [];
+  return unwrapApiData<Student[]>(response, []);
 }
 
 export async function getStudentById(id: string): Promise<Student> {
   const response = await api.get(`/students/${id}`);
 
-  return response.data?.data || response.data;
+  return unwrapApiData<Student>(response, {} as Student);
 }
 
 export async function createStudent(
@@ -92,7 +106,7 @@ export async function createStudent(
 
   const response = await api.post('/students', payload);
 
-  return response.data?.data || response.data;
+  return unwrapApiData<Student>(response, {} as Student);
 }
 
 export async function updateStudent(
@@ -101,7 +115,7 @@ export async function updateStudent(
 ): Promise<Student> {
   const response = await api.patch(`/students/${id}`, payload);
 
-  return response.data?.data || response.data;
+  return unwrapApiData<Student>(response, {} as Student);
 }
 
 export async function deleteStudent(id: string): Promise<void> {
@@ -111,5 +125,5 @@ export async function deleteStudent(id: string): Promise<void> {
 export async function approveStudent(id: string): Promise<Student> {
   const response = await api.patch(`/students/${id}/approve`);
 
-  return response.data?.data || response.data;
+  return unwrapApiData<Student>(response, {} as Student);
 }
