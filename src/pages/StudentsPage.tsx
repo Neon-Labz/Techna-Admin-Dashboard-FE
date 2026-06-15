@@ -235,7 +235,7 @@ export default function StudentsPage() {
     const name = getStudentName(s);
     try {
       await approveStudent(id);
-      toast.success(`✅ ${name} approved!`);
+      toast.success(`${name} approved!`);
       await fetchStudents();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to approve student');
@@ -260,7 +260,7 @@ export default function StudentsPage() {
   if (status === 'approved') {
     try {
       await approveStudent(id);
-      toast.success(`✅ ${name} approved!`);
+      toast.success(`${name} approved!`);
       await fetchStudents();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to approve student');
@@ -295,7 +295,7 @@ export default function StudentsPage() {
     setRejectLoading(true);
     try {
       await rejectStudent(rejectConfirm, rejectReason.trim());
-      toast.success(`❌ ${name} rejected.`);
+      toast.error(`${name} rejected.`);
       setRejectConfirm(null);
       setRejectReason('');
       await fetchStudents();

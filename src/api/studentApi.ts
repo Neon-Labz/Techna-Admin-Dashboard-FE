@@ -65,15 +65,18 @@ export type CreateStudentRequestPayload = {
 export async function getStudents(): Promise<Student[]> {
   const response = await api.get('/students');
 
-  console.log('Students API Response:', response.data);
+  console.log('Students API Response:', response);
 
-  return response.data?.data || response.data || [];
+  // The axios response interceptor already unwraps data.data,
+  // so `response` here is the actual payload (array or object with students).
+  return response as unknown as Student[];
 }
 
 export async function getStudentById(id: string): Promise<Student> {
   const response = await api.get(`/students/${id}`);
 
-  return response.data?.data || response.data;
+  // Interceptor already unwraps the response envelope
+  return response as unknown as Student;
 }
 
 export async function createStudent(
@@ -92,7 +95,8 @@ export async function createStudent(
 
   const response = await api.post('/students', payload);
 
-  return response.data?.data || response.data;
+  // Interceptor already unwraps the response envelope
+  return response as unknown as Student;
 }
 
 export async function updateStudent(
@@ -101,7 +105,8 @@ export async function updateStudent(
 ): Promise<Student> {
   const response = await api.patch(`/students/${id}`, payload);
 
-  return response.data?.data || response.data;
+  // Interceptor already unwraps the response envelope
+  return response as unknown as Student;
 }
 
 export async function deleteStudent(id: string): Promise<void> {
@@ -111,24 +116,13 @@ export async function deleteStudent(id: string): Promise<void> {
 export async function approveStudent(id: string): Promise<Student> {
   const response = await api.patch(`/students/${id}/approve`);
 
-  return response.data?.data || response.data;
+  // Interceptor already unwraps the response envelope
+  return response as unknown as Student;
 }
 
-export async function rejectStudent(
-  id: string,
-  reason: string,
-): Promise<Student> {
+export async function rejectStudent(id: string, reason?: string): Promise<Student> {
   const response = await api.patch(`/students/${id}/reject`, { reason });
 
-  // Backend returns { message, data: { _id, studentId, status, rejectionReason } }
-  // which gets wrapped by the response interceptor as { success, message, data: { message, data: {...} } }
-  // So response.data?.data may be the inner wrapper, not the student directly
-  const result = response.data?.data || response.data;
-
-  // If result has a nested 'data' property, extract the actual student data
-  if (result && typeof result === 'object' && 'data' in result && 'message' in result) {
-    return result.data;
-  }
-
-  return result;
+  // Interceptor already unwraps the response envelope
+  return response as unknown as Student;
 }
