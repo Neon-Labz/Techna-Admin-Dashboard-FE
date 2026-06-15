@@ -210,15 +210,18 @@ export default api;
 export interface ApiPayment {
   _id: string;
   studentId: string;
-  studentName?: string;
-  moduleId?: string;
-  moduleName?: string;
+  studentName: string;
+  moduleId: string;
+  moduleName: string;
   amount: number;
-  paymentDate: string;
-  paymentMethod: string;
-  status: 'paid' | 'pending' | 'partial';
+  paidDate: string;        // YYYY-MM-DD — matches payment.schema.ts
+  method: 'cash' | 'bank' | 'online';
+  status: 'paid' | 'pending' | 'overdue';
+  receiptNo: string;
+  batch: string;
   notes?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export const createPayment = (data: Partial<ApiPayment>): Promise<ApiPayment> =>

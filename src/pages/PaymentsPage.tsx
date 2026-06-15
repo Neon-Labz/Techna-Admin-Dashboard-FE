@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Search, Download, Filter, CreditCard,
   CheckCircle, Clock, AlertCircle, Loader2, RefreshCw, Plus, X,
@@ -55,6 +55,12 @@ const statusColor = (s: string) =>
   s === 'pending' ? 'bg-amber-100  text-amber-700'    :
                     'bg-red-100    text-red-700';
 
+// Strips punctuation and collapses whitespace for fuzzy name matching.
+// Handles mismatches like "Information & Communication Technology"
+// vs "Information Communication Technology" from different data sources.
+const normalizeModuleName = (s: string) =>
+  s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+
 // ── Payment Modal (Add + Edit) ─────────────────────────────────────────────────
 function PaymentModal({
   onClose,
@@ -71,6 +77,8 @@ function PaymentModal({
   const [registeredModuleIds, setRegisteredModuleIds] = useState<string[]>([]);
   const [fetchingMods,        setFetchingMods]        = useState(false);
   const [saving,              setSaving]              = useState(false);
+  // Prevents the edit-mode enrollment useEffect from firing more than once
+  const enrollmentInitedRef = useRef(false);
 
   const [form, setForm] = useState({
     studentId: initialData?.studentId ?? '',
@@ -123,34 +131,66 @@ function PaymentModal({
     })();
   }, []);
 
-  // When a student is selected, fetch their payment history using both their
-  // display studentId and their MongoDB _id (old payments store the _id as studentId).
-  // Extract unique moduleIds from those payments — that's the reliable source of
-  // which modules the student is enrolled in.
-  const handleStudentChange = async (studentId: string) => {
-    const s = students.find(x => x.studentId === studentId);
-    setForm(f => ({ ...f, studentId, moduleId: '', batch: s?.batch ?? f.batch }));
-    setRegisteredModuleIds([]);
+  // Loads enrolled modules for a given student without touching the form.
+  // Two sources, merged and deduplicated:
+  //   1. student.modules (subject names) → fuzzy-matched against DB module names
+  //   2. payment history → exact moduleId match (reliable for returning students)
+  const loadEnrollmentForStudent = useCallback(async (s: StudentOption) => {
+    // Source 1: name-based match using the student's registered subject list
+    const nameBasedIds = s.moduleRefs.length > 0
+      ? allModules
+          .filter(m => s.moduleRefs.some(ref => {
+            const normM = normalizeModuleName(m.name);
+            const normR = normalizeModuleName(ref);
+            return normM === normR || normM.includes(normR) || normR.includes(normM);
+          }))
+          .map(m => m.id)
+      : [];
 
-    if (!studentId || !s) return;
+    if (nameBasedIds.length > 0) {
+      setRegisteredModuleIds(nameBasedIds);
+    }
 
+    // Source 2: payment history (covers returning students and edge-case name mismatches)
     setFetchingMods(true);
     try {
       const results = await Promise.allSettled([
         paymentApi.getByStudent(s._id),
-        s._id !== s.studentId ? paymentApi.getByStudent(s.studentId) : Promise.resolve<PaymentRecord[]>([]),
+        s._id !== s.studentId
+          ? paymentApi.getByStudent(s.studentId)
+          : Promise.resolve<PaymentRecord[]>([]),
       ]);
       const merged: PaymentRecord[] = results.flatMap(r =>
         r.status === 'fulfilled' ? r.value : []
       );
-      const ids = [...new Set(merged.map(p => p.moduleId).filter(Boolean))];
-      setRegisteredModuleIds(ids);
+      const paymentIds = [...new Set(merged.map(p => p.moduleId).filter(Boolean))];
+      // Merge both sources; functional update picks up nameBasedIds already set above
+      setRegisteredModuleIds(prev => [...new Set([...prev, ...paymentIds])]);
     } catch {
-      // leave registeredModuleIds empty → filteredModules falls back to all
+      // retain nameBasedIds already applied
     } finally {
       setFetchingMods(false);
     }
+  }, [allModules]);
+
+  const handleStudentChange = async (studentId: string) => {
+    const s = students.find(x => x.studentId === studentId);
+    setForm(f => ({ ...f, studentId, moduleId: '', batch: s?.batch ?? f.batch }));
+    setRegisteredModuleIds([]);
+    if (!studentId || !s) return;
+    await loadEnrollmentForStudent(s);
   };
+
+  // In edit mode the student is pre-selected in the form but handleStudentChange
+  // is never called, so populate enrolled modules once students + modules are ready.
+  useEffect(() => {
+    if (!isEdit || students.length === 0 || allModules.length === 0) return;
+    if (enrollmentInitedRef.current) return;
+    enrollmentInitedRef.current = true;
+    const s = students.find(x => x.studentId === form.studentId);
+    if (s) loadEnrollmentForStudent(s);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, students, allModules]);
 
   // Show only the modules this student has previously paid for.
   // Falls back to all modules if no payment history is found (first-time student).
@@ -165,6 +205,13 @@ function PaymentModal({
     !fetchingMods &&
     filteredModules.length < allModules.length &&
     filteredModules.length > 0;
+
+  // True when a student is selected and we finished fetching but found no
+  // enrollment data from either source — filteredModules falls back to all.
+  const showingAllModulesFallback =
+    form.studentId.length > 0 &&
+    !fetchingMods &&
+    registeredModuleIds.length === 0;
 
   const handleSubmit = async () => {
     if (!form.studentId || !form.moduleId || !form.amount || !form.paidDate) {
@@ -244,8 +291,11 @@ function PaymentModal({
               )}
               {isFiltered && (
                 <span className="text-xs text-indigo-500 font-medium">
-                  {filteredModules.length} registered module{filteredModules.length !== 1 ? 's' : ''}
+                  {filteredModules.length} enrolled module{filteredModules.length !== 1 ? 's' : ''}
                 </span>
+              )}
+              {showingAllModulesFallback && (
+                <span className="text-xs text-amber-500">No enrolment data — showing all</span>
               )}
             </div>
             <select
