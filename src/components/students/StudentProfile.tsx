@@ -39,12 +39,6 @@ const formatDate = (value: any) => {
   return date.toLocaleDateString();
 };
 
-const formatAmount = (value: any) => {
-  const amount = Number(value);
-  if (!Number.isFinite(amount)) return getValue(value);
-  return amount.toLocaleString();
-};
-
 const normalizeQrImageUrl = (value?: string) => {
   const cleaned = value?.trim().replace(/\*/g, '');
   if (!cleaned) return '';
@@ -143,12 +137,7 @@ export default function StudentProfile({
         : Array.isArray(s.subjectSelection?.subjects) &&
             s.subjectSelection.subjects.length > 0
           ? s.subjectSelection.subjects
-          : Array.isArray(s.subjectSelection?.enrolledModules) &&
-              s.subjectSelection.enrolledModules.length > 0
-            ? s.subjectSelection.enrolledModules
-            : Array.isArray(s.enrolledModules) && s.enrolledModules.length > 0
-              ? s.enrolledModules
-              : [];
+          : [];
 
   const studentModules = studentModuleValues.map((item: string) => {
     const found = modules.find(
@@ -498,39 +487,35 @@ export default function StudentProfile({
             </ProfileSection>
 
             <ProfileSection title="Attendance History">
-              {(s.attendance || []).length === 0 ? (
-                <p className="text-[13px] text-slate-400">
-                  No attendance records
-                </p>
-              ) : (
-                <div className="max-h-64 space-y-3 overflow-y-auto pr-2">
-                  {[...(s.attendance || [])].map((a: any) => (
-                    <div
-                      key={a.id || `${a.moduleId}-${a.date}`}
-                      className="grid grid-cols-1 gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-[13px] md:grid-cols-[1fr_auto_auto] md:items-center md:gap-4"
-                    >
-                      <span className="font-bold text-slate-800">
-                        {getValue(a.moduleName)}
-                      </span>
+  {(s.attendance || []).length === 0 ? (
+    <p className="text-[13px] text-slate-400">No attendance records</p>
+  ) : (
+    <div className="max-h-64 space-y-3 overflow-y-auto pr-2">
+      {[...(s.attendance || [])].map((a: any) => (
+        <div
+          key={a.id || `${a.moduleId}-${a.date}`}
+          className="grid grid-cols-1 gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-[13px] md:grid-cols-[1fr_auto_auto] md:items-center md:gap-4"
+        >
+          <span className="font-bold text-slate-800">
+            {getValue(a.moduleName)}
+          </span>
 
-                      <span className="text-slate-400">
-                        {formatDate(a.date)}
-                      </span>
+          <span className="text-slate-400">{formatDate(a.date)}</span>
 
-                      <span
-                        className={`w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase ${
-                          a.status === 'present'
-                            ? 'bg-emerald-100 text-emerald-600'
-                            : 'bg-red-100 text-red-600'
-                        }`}
-                      >
-                        {a.status === 'present' ? 'Present' : 'Absent'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </ProfileSection>
+          <span
+            className={`w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase ${
+              a.status === 'present'
+                ? 'bg-emerald-100 text-emerald-600'
+                : 'bg-red-100 text-red-600'
+            }`}
+          >
+            {a.status === 'present' ? 'Present' : 'Absent'}
+          </span>
+        </div>
+      ))}
+    </div>
+  )}
+</ProfileSection>
 
             <ProfileSection title="Payments">
               <div className="-mt-1 mb-3 flex justify-end">
@@ -564,7 +549,7 @@ export default function StudentProfile({
                         {paid ? (
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-emerald-600">
-                              LKR {formatAmount(paid.amount)}
+                              LKR {paid.amount?.toLocaleString()}
                             </span>
                             <CheckCircle className="h-4 w-4 text-emerald-600" />
                           </div>
@@ -611,7 +596,8 @@ export default function StudentProfile({
                           {formatDate(p.paidDate)}
                         </span>
                         <span className="font-bold text-emerald-600">
-                          LKR {formatAmount(p.amount)}
+                          LKR{' '}
+                          {p.amount?.toLocaleString?.() || getValue(p.amount)}
                         </span>
                         <span className="col-span-3 -mt-2 text-right text-xs capitalize text-slate-400">
                           {getValue(p.method)}
@@ -656,6 +642,19 @@ export default function StudentProfile({
               </div>
             </ProfileSection>
 
+            <ProfileSection title="Address Details">
+              <div className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-3">
+                <DetailItem
+                  label="Permanent Address"
+                  value={s.permanentAddress || s.address}
+                />
+                <DetailItem
+                  label="District"
+                  value={s.administrativeDistrict || s.district}
+                />
+                <DetailItem label="Postal Code" value={s.postalCode} />
+              </div>
+            </ProfileSection>
           </main>
         </div>
 
