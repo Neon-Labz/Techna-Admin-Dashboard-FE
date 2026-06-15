@@ -12,14 +12,33 @@ import toast from 'react-hot-toast';
 
 const SUBJECT_OPTIONS = [
   'Engineering Technology',
-  'Science for Technology',
-  'Information & Communication Technology',
-  'Agricultural Technology',
+  'Science For Technology',
+  'Information Communication Technology',
+  'Agricultural Science',
   'Accounting',
   'Business Studies',
   'English',
   'Science',
   'Mathematics',
+];
+
+const RACE_OPTIONS = [
+  'Sinhala',
+  'Tamil',
+  'Indian Tamil',
+  'Muslim',
+  'Burgher',
+  'Malay',
+  'Other',
+];
+
+const RELIGION_OPTIONS = [
+  'Buddhism',
+  'Hinduism',
+  'Islam',
+  'Christianity',
+  'Catholicism',
+  'Other',
 ];
 
 const emptyStudent: any = {
@@ -294,8 +313,6 @@ export default function StudentsPage() {
     ['motherName', 'Mother Name'],
     ['guardianName', 'Guardian Name'],
     ['guardianMobile', 'Guardian Mobile'],
-    ['race', 'Race'],
-    ['religion', 'Religion'],
   ] as const;
 
   const selectedModules =
@@ -437,22 +454,51 @@ export default function StudentsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Batch
+                  Race
                 </label>
                 <select
-                  value={form.batch}
-                  onChange={(e) => handleChange('batch', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                  value={form.race || ''}
+                  onChange={(e) => handleChange('race', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
                 >
-                  {batchOptions
-                    .filter((b) => b !== 'All Batches')
-                    .map((b) => (
-                      <option key={b}>{b}</option>
-                    ))}
-                  {form.batch && !batchOptions.includes(form.batch) && (
-                    <option value={form.batch}>{form.batch}</option>
-                  )}
+                  <option value="">Select Race</option>
+                  {RACE_OPTIONS.map((race) => (
+                    <option key={race} value={race}>
+                      {race}
+                    </option>
+                  ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Religion
+                </label>
+                <select
+                  value={form.religion || ''}
+                  onChange={(e) => handleChange('religion', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                >
+                  <option value="">Select Religion</option>
+                  {RELIGION_OPTIONS.map((religion) => (
+                    <option key={religion} value={religion}>
+                      {religion}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Batch
+                </label>
+                <input
+                  type="text"
+                  value={form.batch || ''}
+                  onChange={(e) => handleChange('batch', e.target.value)}
+                  placeholder="Enter batch"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                />
               </div>
             </div>
 

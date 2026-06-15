@@ -430,62 +430,6 @@ export default function StudentProfile({
               </div>
             </div>
 
-            <div>
-              <h3 className="mb-2 text-sm font-bold uppercase tracking-[0.16em] text-slate-400">
-                Attendance (Today)
-              </h3>
-
-              <div className="space-y-1.5">
-                {studentModules.length > 0 ? (
-                  studentModules.map((m: any) => {
-                    const att = getAttendanceStatus(m.id);
-
-                    return (
-                      <div
-                        key={m.id || m.name}
-                        className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-1.5"
-                      >
-                        <span className="text-[13px] font-medium text-slate-800">
-                          {m.name}
-                        </span>
-
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() =>
-                              onAttendanceUpdate(m.id, today, 'present')
-                            }
-                            className={`rounded-lg border px-2 py-1 text-xs font-bold transition ${
-                              att === 'present'
-                                ? 'border-emerald-100 bg-emerald-100 text-emerald-600'
-                                : 'border-slate-200 bg-white text-slate-400 hover:text-emerald-600'
-                            }`}
-                          >
-                            Present
-                          </button>
-
-                          <button
-                            onClick={() =>
-                              onAttendanceUpdate(m.id, today, 'absent')
-                            }
-                            className={`rounded-lg border px-2 py-1 text-xs font-bold transition ${
-                              att === 'absent'
-                                ? 'border-red-100 bg-red-100 text-red-600'
-                                : 'border-slate-200 bg-white text-slate-400 hover:text-red-600'
-                            }`}
-                          >
-                            Absent
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="rounded-xl bg-slate-50 p-4 text-[13px] text-slate-400">
-                    No modules selected
-                  </p>
-                )}
-              </div>
-            </div>
           </aside>
 
           <main className="h-full min-w-0 space-y-4 overflow-y-auto pr-4">
@@ -581,17 +525,70 @@ export default function StudentProfile({
               </div>
             </ProfileSection>
 
+            <ProfileSection title="Attendance (Today)">
+              <div className="space-y-2">
+                {studentModules.length > 0 ? (
+                  studentModules.map((m: any) => {
+                    const att = getAttendanceStatus(m.id);
+
+                    return (
+                      <div
+                        key={m.id || m.name}
+                        className="flex flex-col gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 md:flex-row md:items-center md:justify-between"
+                      >
+                        <span className="text-[13px] font-bold text-slate-800">
+                          {m.name}
+                        </span>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() =>
+                              onAttendanceUpdate(m.id, today, 'present')
+                            }
+                            className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
+                              att === 'present'
+                                ? 'border-emerald-100 bg-emerald-100 text-emerald-600'
+                                : 'border-slate-200 bg-white text-slate-400 hover:text-emerald-600'
+                            }`}
+                          >
+                            Present
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              onAttendanceUpdate(m.id, today, 'absent')
+                            }
+                            className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
+                              att === 'absent'
+                                ? 'border-red-100 bg-red-100 text-red-600'
+                                : 'border-slate-200 bg-white text-slate-400 hover:text-red-600'
+                            }`}
+                          >
+                            Absent
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="rounded-xl bg-slate-50 p-4 text-[13px] text-slate-400">
+                    No modules selected
+                  </p>
+                )}
+              </div>
+            </ProfileSection>
+
             <ProfileSection title="Attendance History">
               {(s.attendance || []).length === 0 ? (
                 <p className="text-[13px] text-slate-400">
                   No attendance records
                 </p>
               ) : (
-                <div className="space-y-3">
+                <div className="max-h-64 space-y-3 overflow-y-auto pr-2">
                   {[...(s.attendance || [])].map((a: any) => (
                     <div
                       key={a.id || `${a.moduleId}-${a.date}`}
-                      className="grid grid-cols-[1fr_auto_auto] items-center gap-4 text-[13px]"
+                      className="grid grid-cols-1 gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-[13px] md:grid-cols-[1fr_auto_auto] md:items-center md:gap-4"
                     >
                       <span className="font-bold text-slate-800">
                         {getValue(a.moduleName)}
@@ -600,7 +597,7 @@ export default function StudentProfile({
                         {formatDate(a.date)}
                       </span>
                       <span
-                        className={`rounded-md px-2.5 py-1 text-xs font-bold uppercase ${
+                        className={`w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase ${
                           a.status === 'present'
                             ? 'bg-emerald-100 text-emerald-600'
                             : 'bg-red-100 text-red-600'

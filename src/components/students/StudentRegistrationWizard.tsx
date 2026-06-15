@@ -24,7 +24,7 @@ const DISTRICTS = [
 
 const RACES = [
   'Sinhala',
-  'Sri Lankan Tamil',
+  'Tamil',
   'Indian Tamil',
   'Muslim',
   'Burgher',
@@ -45,9 +45,9 @@ const GRADES = ['A', 'B', 'C', 'S', 'W', 'Absent'];
 
 const DEFAULT_SUBJECTS = [
   'Engineering Technology',
-  'Science for Technology',
-  'Information & Communication Technology',
-  'Agricultural Technology',
+  'Science For Technology',
+  'Information Communication Technology',
+  'Agricultural Science',
   'Accounting',
   'Business Studies',
   'English',
