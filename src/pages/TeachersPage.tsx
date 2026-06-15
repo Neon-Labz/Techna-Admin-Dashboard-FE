@@ -148,13 +148,13 @@ export default function TeachersPage() {
   );
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Teachers</h1>
           <p className="text-gray-500 text-sm">{teachers.length} total teachers</p>
         </div>
-        <button onClick={openAdd} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+        <button onClick={openAdd} className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 sm:w-auto">
           <Plus className="w-4 h-4" /> Add Teacher
         </button>
       </div>
@@ -177,29 +177,29 @@ export default function TeachersPage() {
       {!loading && (
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         {filtered.map(t => (
-          <div key={t.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
+          <div key={t.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-100">
                   <span className="text-indigo-600 font-bold text-lg">{t.name.charAt(0)}</span>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-gray-800">{t.name}</h3>
-                  <p className="text-sm text-indigo-600 font-medium">{t.subject}</p>
+                <div className="min-w-0">
+                  <h3 className="break-words font-semibold text-gray-800">{t.name}</h3>
+                  <p className="break-words text-sm font-medium text-indigo-600">{t.subject}</p>
                 </div>
               </div>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${t.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+              <span className={`self-start rounded-full px-2 py-0.5 text-xs font-medium ${t.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
                 {t.status}
               </span>
             </div>
 
             <div className="space-y-2 text-sm text-gray-600">
-              <div className="flex items-center gap-2"><Mail className="w-3.5 h-3.5 text-gray-400" />{t.email}</div>
-              <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-gray-400" />{t.phone}</div>
-              <div className="flex items-center gap-2"><GraduationCap className="w-3.5 h-3.5 text-gray-400" />{t.qualification} · {t.experience}</div>
+              <div className="flex min-w-0 items-center gap-2"><Mail className="h-3.5 w-3.5 shrink-0 text-gray-400" /><span className="min-w-0 break-words">{t.email}</span></div>
+              <div className="flex min-w-0 items-center gap-2"><Phone className="h-3.5 w-3.5 shrink-0 text-gray-400" /><span className="min-w-0 break-words">{t.phone}</span></div>
+              <div className="flex min-w-0 items-center gap-2"><GraduationCap className="h-3.5 w-3.5 shrink-0 text-gray-400" /><span className="min-w-0 break-words">{t.qualification} · {t.experience}</span></div>
             </div>
 
-            <div className="flex gap-2 mt-4">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:flex">
               <button onClick={() => openEdit(t)} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg text-sm font-medium transition-colors">
                 <Edit2 className="w-3.5 h-3.5" /> Edit
               </button>
@@ -220,7 +220,7 @@ export default function TeachersPage() {
       )}
 
       {/* Add/Edit Modal */}
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editTeacher ? 'Edit Teacher' : 'Add New Teacher'} closeOnBackdrop={false} showCloseButton={false}>
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title={editTeacher ? 'Edit Teacher' : 'Add New Teacher'} closeOnBackdrop={false}>
         <form onSubmit={handleSubmit} onKeyDown={preventEnterSubmit} className="grid w-full min-w-0 max-w-full grid-cols-1 gap-4 md:grid-cols-2">
           {inp('name', 'Full Name')}
           {inp('email', 'Email', 'email')}
@@ -231,7 +231,7 @@ export default function TeachersPage() {
           {inp('address', 'Address')}
           {inp('joinDate', 'Join Date', 'date')}
           {inp('status', 'Status', 'text', ['active', 'inactive'])}
-          <div className="md:col-span-2 flex gap-3 pt-2">
+          <div className="sticky bottom-0 -mx-3.5 flex gap-3 border-t border-gray-100 bg-white px-3.5 py-3 md:col-span-2 md:-mx-5 md:px-5">
             <button type="button" onClick={() => setModalOpen(false)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Cancel</button>
             <button type="submit" disabled={saving} className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-60">
               {saving ? 'Saving...' : editTeacher ? 'Update Teacher' : 'Add Teacher'}

@@ -305,8 +305,8 @@ export default function StudentsPage() {
     form.subjects?.length ? form.subjects : form.modules || [];
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Students</h1>
           <p className="text-gray-500 text-sm">
@@ -318,7 +318,7 @@ export default function StudentsPage() {
 
         <button
           onClick={openAdd}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 sm:w-auto"
         >
           <Plus className="w-4 h-4" /> Add Student
         </button>
@@ -335,12 +335,12 @@ export default function StudentsPage() {
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-400" />
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 sm:flex">
+          <Filter className="h-4 w-4 shrink-0 text-gray-400" />
           <select
             value={filterBatch}
             onChange={(e) => setFilterBatch(e.target.value)}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+            className="min-w-0 px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
           >
             {batchOptions.map((b) => (
               <option key={b} value={b === 'All Batches' ? '' : b}>
@@ -352,7 +352,7 @@ export default function StudentsPage() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+            className="min-w-0 px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
           >
             <option value="">All Status</option>
             <option value="pending">Pending</option>
@@ -402,7 +402,6 @@ export default function StudentsPage() {
         title={editStudent ? 'Edit Student' : 'Add New Student'}
         size="2xl"
         closeOnBackdrop={false}
-        showCloseButton={false}
       >
         {!editStudent ? (
           <StudentRegistrationWizard
