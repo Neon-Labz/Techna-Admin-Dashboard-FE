@@ -53,20 +53,17 @@ export default function ExamsPage() {
     loadModules();
   }, []);
 
- const loadModules = async () => {
-  try {
-    const { data } = await api.get('/modules');
-
-    const list = Array.isArray(data)
-      ? data
-      : data?.data || data?.modules || [];
-
-    setModules(list);
-  } catch (error) {
-    console.error('Module API Error:', error);
-    toast.error('Failed to load modules');
-  }
-};
+  const loadModules = async () => {
+    try {
+      const res: any = await api.get('/modules');
+      // Interceptor returns the unwrapped value directly, not an AxiosResponse
+      const list = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
+      setModules(list);
+    } catch (error) {
+      console.error('Module API Error:', error);
+      toast.error('Failed to load modules');
+    }
+  };
   const loadExams = async () => {
     try {
       const data = await examApi.getAll();
