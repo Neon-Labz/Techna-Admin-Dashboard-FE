@@ -1,9 +1,5 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios';
 
-// ─── Backend response types ────────────────────────────────────────────────────
-// These reflect the exact MongoDB/Mongoose document shapes returned by Techna-BE.
-// All documents carry _id (Mongo ObjectId serialised as string) plus timestamps.
-
 export interface ApiResource {
   _id: string;
   title: string;
@@ -37,7 +33,7 @@ export interface ApiTeacher {
   fullName: string;
   email: string;
   phone: string;
-  subject: string;
+  subject: string | string[];
   qualification: string;
   experience: string;
   address: string;
@@ -98,7 +94,22 @@ export interface ApiAttendance {
   updatedAt: string;
 }
 
-// ─── Request DTOs ──────────────────────────────────────────────────────────────
+export interface ApiPayment {
+  _id: string;
+  studentId: string;
+  studentName: string;
+  moduleId: string;
+  moduleName: string;
+  amount: number;
+  paidDate: string;
+  method: 'cash' | 'bank' | 'online';
+  status: 'paid' | 'pending' | 'overdue';
+  receiptNo: string;
+  batch: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
 
 export interface CreateModuleDto {
   name: string;
@@ -150,7 +161,14 @@ export interface AttendanceFilters {
   sessionDate?: string;
 }
 
-// ─── Axios instance ────────────────────────────────────────────────────────────
+export interface CreateAttendanceDto {
+  studentId: string;
+  moduleId: string;
+  moduleName: string;
+  date: string;
+  status: 'present' | 'absent';
+  markedAt: string;
+}
 
 const api: AxiosInstance = axios.create({
   baseURL: 'http://localhost:4000',
@@ -160,12 +178,31 @@ const api: AxiosInstance = axios.create({
 function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
 
-  const persistedAuth = localStorage.getItem('edu-auth');
-  if (persistedAuth) {
+  const technaAuth = localStorage.getItem('techna-auth');
+
+  if (technaAuth) {
     try {
-      const parsed = JSON.parse(persistedAuth);
+      const parsed = JSON.parse(technaAuth);
       const token = parsed?.state?.token;
-      if (typeof token === 'string' && token) return token;
+
+      if (typeof token === 'string' && token) {
+        return token;
+      }
+    } catch {
+      localStorage.removeItem('techna-auth');
+    }
+  }
+
+  const eduAuth = localStorage.getItem('edu-auth');
+
+  if (eduAuth) {
+    try {
+      const parsed = JSON.parse(eduAuth);
+      const token = parsed?.state?.token;
+
+      if (typeof token === 'string' && token) {
+        return token;
+      }
     } catch {
       localStorage.removeItem('edu-auth');
     }
@@ -176,16 +213,16 @@ function getAuthToken(): string | null {
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = getAuthToken();
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
   return config;
 });
 
 api.interceptors.response.use(
   (response) => {
-    // Unwrap the global { success, message, data, timestamp, path } envelope
-    // that ResponseInterceptor adds to every 2xx response in Techna-BE.
     if (
       response.data &&
       typeof response.data === 'object' &&
@@ -194,6 +231,7 @@ api.interceptors.response.use(
     ) {
       response.data = response.data.data;
     }
+
     return response;
   },
   (error: unknown) => {
@@ -202,37 +240,26 @@ api.interceptors.response.use(
       error.response?.status === 401 &&
       typeof window !== 'undefined'
     ) {
+      localStorage.removeItem('techna-auth');
+      localStorage.removeItem('edu-auth');
+      localStorage.removeItem('techna_admin_token');
       window.location.href = '/login';
     }
+
     return Promise.reject(error);
   },
 );
 
 export default api;
 
-// ─── Payments ─────────────────────────────────────────────────────────────────
-
-export interface ApiPayment {
-  _id: string;
-  studentId: string;
-  studentName?: string;
-  moduleId?: string;
-  moduleName?: string;
-  amount: number;
-  paymentDate: string;
-  paymentMethod: string;
-  status: 'paid' | 'pending' | 'partial';
-  notes?: string;
-  createdAt: string;
-}
-
 export const createPayment = (data: Partial<ApiPayment>): Promise<ApiPayment> =>
   api.post<ApiPayment>('/api/payments', data).then((r) => r.data);
 
-export const updatePayment = (id: string, data: Partial<ApiPayment>): Promise<ApiPayment> =>
+export const updatePayment = (
+  id: string,
+  data: Partial<ApiPayment>,
+): Promise<ApiPayment> =>
   api.patch<ApiPayment>(`/api/payments/${id}`, data).then((r) => r.data);
-
-// ─── Modules ───────────────────────────────────────────────────────────────────
 
 export const getModules = (): Promise<ApiModule[]> =>
   api.get<ApiModule[]>('/api/modules').then((r) => r.data);
@@ -243,23 +270,20 @@ export const getModuleById = (id: string): Promise<ApiModule> =>
 export const createModule = (data: CreateModuleDto): Promise<ApiModule> =>
   api.post<ApiModule>('/api/modules', data).then((r) => r.data);
 
-export const updateModule = (id: string, data: UpdateModuleDto): Promise<ApiModule> =>
+export const updateModule = (
+  id: string,
+  data: UpdateModuleDto,
+): Promise<ApiModule> =>
   api.patch<ApiModule>(`/api/modules/${id}`, data).then((r) => r.data);
 
 export const deleteModule = (id: string): Promise<{ message: string }> =>
   api.delete<{ message: string }>(`/api/modules/${id}`).then((r) => r.data);
 
-// ─── Teachers ──────────────────────────────────────────────────────────────────
-
 export const getTeachers = (): Promise<ApiTeacher[]> =>
   api.get<ApiTeacher[]>('/api/teachers').then((r) => r.data);
 
-// ─── Students ──────────────────────────────────────────────────────────────────
-
 export const getStudents = (): Promise<ApiStudent[]> =>
   api.get<ApiStudent[]>('/api/students').then((r) => r.data);
-
-// ─── Videos ────────────────────────────────────────────────────────────────────
 
 export const getVideos = (filters?: VideoFilters): Promise<ApiVideo[]> =>
   api.get<ApiVideo[]>('/api/videos', { params: filters }).then((r) => r.data);
@@ -267,26 +291,34 @@ export const getVideos = (filters?: VideoFilters): Promise<ApiVideo[]> =>
 export const createVideo = (data: CreateVideoDto): Promise<ApiVideo> =>
   api.post<ApiVideo>('/api/videos', data).then((r) => r.data);
 
-// ─── Attendance ────────────────────────────────────────────────────────────────
-
-export const getAttendance = (filters?: AttendanceFilters): Promise<ApiAttendance[]> =>
+export const getAttendance = (
+  filters?: AttendanceFilters,
+): Promise<ApiAttendance[]> =>
   api.get<ApiAttendance[]>('/api/attendance', { params: filters }).then((r) => r.data);
 
-export const updateAttendance = (id: string, data: UpdateAttendanceDto): Promise<ApiAttendance> =>
+export const createAttendance = (
+  data: CreateAttendanceDto,
+): Promise<ApiAttendance> =>
+  api.post<ApiAttendance>('/api/attendance', data).then((r) => r.data);
+
+export const updateAttendance = (
+  id: string,
+  data: UpdateAttendanceDto,
+): Promise<ApiAttendance> =>
   api.patch<ApiAttendance>(`/api/attendance/${id}`, data).then((r) => r.data);
 
 export const deleteAttendance = (id: string): Promise<{ message: string }> =>
   api.delete<{ message: string }>(`/api/attendance/${id}`).then((r) => r.data);
 
-// ─── Module Resources ──────────────────────────────────────────────────────────
-
 export const uploadModuleResource = (
   moduleId: string,
-  formData: FormData
+  formData: FormData,
 ): Promise<ApiResource> =>
-  api.post<ApiResource>(`/api/modules/${moduleId}/upload-resource`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }).then(r => r.data);
+  api
+    .post<ApiResource>(`/api/modules/${moduleId}/upload-resource`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    .then((r) => r.data);
 
 export const addResourceUrl = (
   moduleId: string,
@@ -296,44 +328,40 @@ export const addResourceUrl = (
     thumbnailUrl?: string;
     fileType: string;
     description?: string;
-  }
+  },
 ): Promise<ApiResource> =>
-  api.post(`/api/modules/${moduleId}/add-resource-url`, data)
-    .then(r => r.data);
+  api.post<ApiResource>(`/api/modules/${moduleId}/add-resource-url`, data).then((r) => r.data);
 
 export const toggleResourcePublish = (
   moduleId: string,
-  resourceId: string
+  resourceId: string,
 ): Promise<{ resourceId: string; isPublished: boolean; message: string }> =>
-  api.patch(`/api/modules/${moduleId}/resources/${resourceId}/toggle-publish`)
-    .then(r => r.data);
-
-// ─── Attendance (create) ───────────────────────────────────────────────────────
-
-export interface CreateAttendanceDto {
-  studentId: string;
-  moduleId: string;
-  moduleName: string;
-  date: string;
-  status: 'present' | 'absent';
-  markedAt: string;
-}
-
-export const createAttendance = (data: CreateAttendanceDto): Promise<ApiAttendance> =>
-  api.post<ApiAttendance>('/api/attendance', data).then(r => r.data);
+  api
+    .patch<{ resourceId: string; isPublished: boolean; message: string }>(
+      `/api/modules/${moduleId}/resources/${resourceId}/toggle-publish`,
+    )
+    .then((r) => r.data);
 
 export const getStudentAttendance = (
-  studentId: string
+  studentId: string,
 ): Promise<ApiAttendance[]> =>
-  api.get(`/api/attendance/student/${studentId}`).then(r => r.data);
+  api.get<ApiAttendance[]>(`/api/attendance/student/${studentId}`).then((r) => r.data);
 
 export function extractErrorMessage(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    return (
+      err.response?.data?.message ||
+      err.response?.data?.error ||
+      err.message ||
+      'Something went wrong'
+    );
+  }
+
   if (err instanceof Error) return err.message;
+
   return 'Something went wrong';
 }
 
-// Re-export for use in components without importing axios directly
 export { isAxiosError } from 'axios';
-
 export { apiClient as apiRequest, getStoredToken } from '../api/axiosClient';
 export { authApi } from '../api/auth.api';
