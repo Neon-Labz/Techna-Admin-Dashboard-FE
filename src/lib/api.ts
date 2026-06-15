@@ -37,7 +37,7 @@ export interface ApiTeacher {
   fullName: string;
   email: string;
   phone: string;
-  subject: string;
+  subject: string | string[];
   qualification: string;
   experience: string;
   address: string;
@@ -159,9 +159,18 @@ const api: AxiosInstance = axios.create({
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('techna_admin_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Read token from the Zustand persisted auth store ('edu-auth' key)
+    try {
+      const stored = localStorage.getItem('edu-auth');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const token = parsed?.state?.token;
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+    } catch {
+      // Ignore parse errors
     }
   }
   return config;
@@ -187,6 +196,7 @@ api.interceptors.response.use(
       error.response?.status === 401 &&
       typeof window !== 'undefined'
     ) {
+      localStorage.removeItem('edu-auth');
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -194,6 +204,31 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+// ─── Payments ─────────────────────────────────────────────────────────────────
+
+export interface ApiPayment {
+  _id: string;
+  studentId: string;
+  studentName: string;
+  moduleId: string;
+  moduleName: string;
+  amount: number;
+  paidDate: string;        // YYYY-MM-DD — matches payment.schema.ts
+  method: 'cash' | 'bank' | 'online';
+  status: 'paid' | 'pending' | 'overdue';
+  receiptNo: string;
+  batch: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export const createPayment = (data: Partial<ApiPayment>): Promise<ApiPayment> =>
+  api.post<ApiPayment>('/api/payments', data).then((r) => r.data);
+
+export const updatePayment = (id: string, data: Partial<ApiPayment>): Promise<ApiPayment> =>
+  api.patch<ApiPayment>(`/api/payments/${id}`, data).then((r) => r.data);
 
 // ─── Modules ───────────────────────────────────────────────────────────────────
 
