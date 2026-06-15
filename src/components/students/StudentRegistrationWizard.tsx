@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   BookOpen,
   Check,
@@ -12,7 +12,8 @@ import {
   Trash2,
   User,
 } from 'lucide-react';
-import type { Module, Student, OLResult } from '../../types';
+import type { ApiModule } from '../../lib/api';
+import type { Student, OLResult } from '../../types';
 
 const DISTRICTS = [
   'Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo', 'Galle',
@@ -42,18 +43,6 @@ const RELIGIONS = [
 ];
 
 const GRADES = ['A', 'B', 'C', 'S', 'W', 'Absent'];
-
-const DEFAULT_SUBJECTS = [
-  'Engineering Technology',
-  'Science For Technology',
-  'Information Communication Technology',
-  'Agricultural Science',
-  'Accounting',
-  'Business Studies',
-  'English',
-  'Science',
-  'Mathematics',
-];
 
 const STEPS = [
   { id: 1, label: 'Basic Info', icon: User },
@@ -142,13 +131,15 @@ const emptyForm: FormState = {
 };
 
 interface Props {
-  modules: Module[];
+  modules: ApiModule[];
+  modulesLoading: boolean;
   onCancel: () => void;
   onSubmit: (payload: WizardPayload) => Promise<void>;
 }
 
 export default function StudentRegistrationWizard({
   modules,
+  modulesLoading,
   onCancel,
   onSubmit,
 }: Props) {
@@ -156,15 +147,6 @@ export default function StudentRegistrationWizard({
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-
-  const subjectOptions = useMemo(() => {
-    return Array.from(
-      new Set([
-        ...DEFAULT_SUBJECTS,
-        ...modules.map((m) => m.name).filter(Boolean),
-      ]),
-    );
-  }, [modules]);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -695,27 +677,33 @@ export default function StudentRegistrationWizard({
             </div>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {subjectOptions.map((subject) => {
-                const checked = (form.subjects || []).includes(subject);
+              {modulesLoading ? (
+                <p className="text-sm text-gray-400">Loading modules...</p>
+              ) : modules.length === 0 ? (
+                <p className="text-sm text-gray-400">No modules found</p>
+              ) : (
+                modules.map((module) => {
+                  const checked = (form.subjects || []).includes(module.name);
 
-                return (
-                  <label
-                    key={subject}
-                    className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${
-                      checked
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                        : 'border-gray-200 bg-white text-gray-700'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleSubject(subject)}
-                    />
-                    <span>{subject}</span>
-                  </label>
-                );
-              })}
+                  return (
+                    <label
+                      key={module._id}
+                      className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${
+                        checked
+                          ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                          : 'border-gray-200 bg-white text-gray-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleSubject(module.name)}
+                      />
+                      <span>{module.name}</span>
+                    </label>
+                  );
+                })
+              )}
             </div>
 
             {errors.subjects && (

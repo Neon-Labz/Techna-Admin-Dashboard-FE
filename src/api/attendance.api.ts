@@ -50,6 +50,11 @@ export const attendanceApi = {
     return unwrap(res);
   },
 
+  async getByStudent(studentId: string) {
+    const res = await api.get(`/attendance/student/${studentId}`);
+    return toArray(res);
+  },
+
   async markAttendance(payload: {
     studentId: string;
     moduleId: string;
@@ -92,27 +97,38 @@ export const attendanceApi = {
     date: string,
     status: 'present' | 'absent'
   ) {
-    const report = await attendanceApi.getReport({ studentId });
-    const students: any[] = report?.students ?? [];
+    const records = await attendanceApi.getByStudent(studentId);
+    const existing = records.find(
+      (a: any) =>
+        String(a.moduleId) === String(moduleId) &&
+        String(a.date || '').startsWith(date)
+    );
 
-    let existingId: string | null = null;
+    const existingId = existing?.id || existing?._id;
 
-    for (const s of students) {
-      if (s.studentId === studentId || s.id === studentId || s._id === studentId) {
-        const rec = (s.attendance ?? []).find(
+    if (!existingId) {
+      try {
+        const report = await attendanceApi.getReport({ studentId });
+        const students: any[] = report?.students ?? [];
+        const reportStudent = students.find(
+          (s: any) =>
+            s.studentId === studentId || s.id === studentId || s._id === studentId
+        );
+        const reportRecord = (reportStudent?.attendance ?? []).find(
           (a: any) =>
             String(a.moduleId) === String(moduleId) &&
             String(a.date || '').startsWith(date)
         );
 
-        if (rec?.id || rec?._id) {
-          existingId = rec.id || rec._id;
-          break;
+        if (reportRecord?.id || reportRecord?._id) {
+          return attendanceApi.updateAttendance(reportRecord.id || reportRecord._id, {
+            status,
+          });
         }
+      } catch {
+        // Fall through to the clearer error below.
       }
-    }
 
-    if (!existingId) {
       throw new Error('Attendance already marked but record not found');
     }
 

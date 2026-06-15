@@ -9,17 +9,16 @@ import StudentProfile from '../components/students/StudentProfile';
 import StudentRegistrationWizard from '../components/students/StudentRegistrationWizard';
 import { Plus, Search, Filter, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { attendanceApi } from '../api/attendance.api';
+import { paymentApi } from '../api/payment.api';
+import { getModules, type ApiModule } from '../lib/api';
 
-const SUBJECT_OPTIONS = [
-  'Engineering Technology',
-  'Science For Technology',
-  'Information Communication Technology',
-  'Agricultural Science',
-  'Accounting',
-  'Business Studies',
-  'English',
-  'Science',
-  'Mathematics',
+const DISTRICT_OPTIONS = [
+  'Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo', 'Galle',
+  'Gampaha', 'Hambantota', 'Jaffna', 'Kalutara', 'Kandy', 'Kegalle',
+  'Kilinochchi', 'Kurunegala', 'Mannar', 'Matale', 'Matara', 'Monaragala',
+  'Mullaitivu', 'Nuwara Eliya', 'Polonnaruwa', 'Puttalam', 'Ratnapura',
+  'Trincomalee', 'Vavuniya',
 ];
 
 const RACE_OPTIONS = [
@@ -92,10 +91,29 @@ export default function StudentsPage() {
   const [editStudent, setEditStudent] = useState<Student | null>(null);
   const [form, setForm] = useState<any>(emptyStudent);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [moduleOptions, setModuleOptions] = useState<ApiModule[]>([]);
+  const [modulesLoading, setModulesLoading] = useState(true);
 
   useEffect(() => {
     fetchStudents();
   }, [fetchStudents]);
+
+  const fetchModuleOptions = async () => {
+    setModulesLoading(true);
+    try {
+      const fetchedModules = await getModules();
+      setModuleOptions(Array.isArray(fetchedModules) ? fetchedModules : []);
+    } catch (error) {
+      console.error('Failed to load modules:', error);
+      setModuleOptions([]);
+    } finally {
+      setModulesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchModuleOptions();
+  }, []);
 
   const getStudentName = (s: any) =>
     s.name || s.fullNameEnglish || s.fullNameTamil || '';
@@ -115,6 +133,7 @@ export default function StudentsPage() {
   });
 
   const openAdd = () => {
+    void fetchModuleOptions();
     setForm(emptyStudent);
     setEditStudent(null);
     setModalOpen(true);
@@ -134,10 +153,20 @@ export default function StudentsPage() {
     ) {
       return s.subjectSelection.subjects;
     }
+    if (
+      Array.isArray(s.subjectSelection?.enrolledModules) &&
+      s.subjectSelection.enrolledModules.length > 0
+    ) {
+      return s.subjectSelection.enrolledModules;
+    }
+    if (Array.isArray(s.enrolledModules) && s.enrolledModules.length > 0) {
+      return s.enrolledModules;
+    }
     return [];
   };
 
   const openEdit = (s: any) => {
+    void fetchModuleOptions();
     const selectedModules = getSelectedModules(s);
 
     setForm({
@@ -251,12 +280,74 @@ export default function StudentsPage() {
     toast.success(`✅ ${getStudentName(s)} approved!`);
   };
 
-  const handlePaymentAdd = (
+  const getModuleName = (moduleId: string) => {
+    const mod = modules.find(
+      (m: any) => m.id === moduleId || m._id === moduleId || m.name === moduleId,
+    );
+    return mod?.name || moduleId;
+  };
+
+  const normalizeRecordDate = (value?: string) => {
+    if (!value) return '';
+    return value.includes('T') ? value.split('T')[0] : value;
+  };
+
+  const patchStudentRecords = (
+    studentId: string,
+    records: Partial<Pick<Student, 'attendance' | 'payments'>>,
+  ) => {
+    useDataStore.setState((state) => ({
+      students: state.students.map((student) =>
+        student.id === studentId ? { ...student, ...records } : student,
+      ),
+    }));
+
+    setViewStudent((student) =>
+      student?.id === studentId ? { ...student, ...records } : student,
+    );
+  };
+
+  const loadStudentRecords = async (student: Student) => {
+    try {
+      const attendanceStudentId = student.studentId || student.id;
+      const [attendanceRecords, payments] = await Promise.all([
+        attendanceApi.getByStudent(attendanceStudentId),
+        paymentApi.getByStudent(student.id),
+      ]);
+
+      const attendance = attendanceRecords.map((record: any) => ({
+        ...record,
+        id: record.id || record._id,
+        date: normalizeRecordDate(record.date),
+      }));
+
+      patchStudentRecords(student.id, { attendance, payments });
+    } catch (error) {
+      console.warn('Failed to load student records');
+      toast.error('Failed to load student records');
+    }
+  };
+
+  const openProfile = (student: Student) => {
+    setViewStudent(student);
+    void loadStudentRecords(student);
+  };
+
+  const handlePaymentAdd = async (
     studentId: string,
     payment: Omit<PaymentRecord, 'id'>,
   ) => {
-    useDataStore.getState().addPayment(studentId, payment);
-    toast.success('Payment recorded!');
+    try {
+      const savedPayment = await paymentApi.create(payment);
+      const currentStudent = students.find((student) => student.id === studentId);
+      const nextPayments = [...(currentStudent?.payments || []), savedPayment];
+
+      patchStudentRecords(studentId, { payments: nextPayments });
+      toast.success('Payment recorded!');
+    } catch (error) {
+      console.warn('Failed to record payment');
+      toast.error('Failed to record payment');
+    }
   };
 
   const handleStatusChange = async (
@@ -273,13 +364,50 @@ export default function StudentsPage() {
   toast.success(`Student ${status}!`);
 };
 
-  const handleAttendanceUpdate = (
+  const handleAttendanceUpdate = async (
     studentId: string,
     moduleId: string,
     date: string,
     status: 'present' | 'absent',
   ) => {
-    useDataStore.getState().updateAttendance(studentId, moduleId, date, status);
+    try {
+      const currentStudent = students.find((student) => student.id === studentId);
+      const attendanceStudentId = currentStudent?.studentId || studentId;
+      const savedAttendance = await attendanceApi.markAttendance({
+        studentId: attendanceStudentId,
+        moduleId,
+        moduleName: getModuleName(moduleId),
+        date,
+        status,
+      });
+      const normalizedAttendance = {
+        ...savedAttendance,
+        id: savedAttendance.id || savedAttendance._id,
+        studentId: attendanceStudentId,
+        moduleId,
+        moduleName: savedAttendance.moduleName || getModuleName(moduleId),
+        date: normalizeRecordDate(savedAttendance.date || date),
+        status,
+        markedAt: savedAttendance.markedAt || new Date().toISOString(),
+      };
+      const existingAttendance = currentStudent?.attendance || [];
+      const nextAttendance = existingAttendance.some(
+        (record) =>
+          record.moduleId === moduleId && normalizeRecordDate(record.date) === date,
+      )
+        ? existingAttendance.map((record) =>
+            record.moduleId === moduleId &&
+            normalizeRecordDate(record.date) === date
+              ? { ...record, ...normalizedAttendance }
+              : record,
+          )
+        : [...existingAttendance, normalizedAttendance];
+
+      patchStudentRecords(studentId, { attendance: nextAttendance });
+    } catch (error) {
+      console.warn('Failed to update attendance');
+      toast.error('Failed to update attendance');
+    }
   };
 
   const currentViewStudent = viewStudent
@@ -317,6 +445,14 @@ export default function StudentsPage() {
 
   const selectedModules =
     form.subjects?.length ? form.subjects : form.modules || [];
+
+  const isModuleSelected = (module: ApiModule) =>
+    selectedModules.some(
+      (selected: string) =>
+        selected === module.name ||
+        selected === module._id ||
+        selected === (module as any).id,
+    );
 
   return (
     <div className="p-6">
@@ -381,7 +517,7 @@ export default function StudentsPage() {
           <StudentCard
             key={s.id}
             student={s}
-            onView={() => setViewStudent(s)}
+            onView={() => openProfile(s)}
             onEdit={() => openEdit(s)}
             onDelete={() => setDeleteConfirm(s.id)}
             onApprove={() => handleApprove(s.id)}
@@ -418,7 +554,8 @@ export default function StudentsPage() {
       >
         {!editStudent ? (
           <StudentRegistrationWizard
-            modules={modules}
+            modules={moduleOptions}
+            modulesLoading={modulesLoading}
             onCancel={() => setModalOpen(false)}
             onSubmit={handleWizardSubmit}
           />
@@ -434,21 +571,38 @@ export default function StudentsPage() {
                     {label}
                   </label>
 
-                  <input
-                    type={
-                      field === 'dob'
-                        ? 'date'
-                        : field === 'email'
-                          ? 'email'
-                          : 'text'
-                    }
-                    value={form[field] || ''}
-                    onChange={(e) => handleChange(field, e.target.value)}
-                    required={['fullNameEnglish', 'email', 'phone'].includes(
-                      field,
-                    )}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                  />
+                  {field === 'administrativeDistrict' ? (
+                    <select
+                      value={form.administrativeDistrict || ''}
+                      onChange={(e) =>
+                        handleChange('administrativeDistrict', e.target.value)
+                      }
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                    >
+                      <option value="">Select District</option>
+                      {DISTRICT_OPTIONS.map((district) => (
+                        <option key={district} value={district}>
+                          {district}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={
+                        field === 'dob'
+                          ? 'date'
+                          : field === 'email'
+                            ? 'email'
+                            : 'text'
+                      }
+                      value={form[field] || ''}
+                      onChange={(e) => handleChange(field, e.target.value)}
+                      required={['fullNameEnglish', 'email', 'phone'].includes(
+                        field,
+                      )}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    />
+                  )}
                 </div>
               ))}
 
@@ -508,28 +662,34 @@ export default function StudentsPage() {
               </label>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {SUBJECT_OPTIONS.map((moduleName) => {
-                  const checked = selectedModules.includes(moduleName);
+                {modulesLoading ? (
+                  <p className="text-sm text-gray-400">Loading modules...</p>
+                ) : moduleOptions.length === 0 ? (
+                  <p className="text-sm text-gray-400">No modules found</p>
+                ) : (
+                  moduleOptions.map((module) => {
+                    const checked = isModuleSelected(module);
 
-                  return (
-                    <label
-                      key={moduleName}
-                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer text-sm ${
-                        checked
-                          ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
-                          : 'bg-white border-gray-200 text-gray-700'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleModule(moduleName)}
-                        className="rounded border-gray-300"
-                      />
-                      {moduleName}
-                    </label>
-                  );
-                })}
+                    return (
+                      <label
+                        key={module._id}
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer text-sm ${
+                          checked
+                            ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
+                            : 'bg-white border-gray-200 text-gray-700'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleModule(module.name)}
+                          className="rounded border-gray-300"
+                        />
+                        {module.name}
+                      </label>
+                    );
+                  })
+                )}
               </div>
             </div>
 

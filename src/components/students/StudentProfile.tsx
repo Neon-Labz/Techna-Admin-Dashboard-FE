@@ -39,6 +39,12 @@ const formatDate = (value: any) => {
   return date.toLocaleDateString();
 };
 
+const formatAmount = (value: any) => {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return getValue(value);
+  return amount.toLocaleString();
+};
+
 const normalizeQrImageUrl = (value?: string) => {
   const cleaned = value?.trim().replace(/\*/g, '');
   if (!cleaned) return '';
@@ -137,7 +143,12 @@ export default function StudentProfile({
         : Array.isArray(s.subjectSelection?.subjects) &&
             s.subjectSelection.subjects.length > 0
           ? s.subjectSelection.subjects
-          : [];
+          : Array.isArray(s.subjectSelection?.enrolledModules) &&
+              s.subjectSelection.enrolledModules.length > 0
+            ? s.subjectSelection.enrolledModules
+            : Array.isArray(s.enrolledModules) && s.enrolledModules.length > 0
+              ? s.enrolledModules
+              : [];
 
   const studentModules = studentModuleValues.map((item: string) => {
     const found = modules.find(
@@ -433,98 +444,6 @@ export default function StudentProfile({
           </aside>
 
           <main className="h-full min-w-0 space-y-4 overflow-y-auto pr-4">
-            <ProfileSection title="Payments">
-              <div className="-mt-1 mb-3 flex justify-end">
-                <button
-                  onClick={() => setShowPayModal(true)}
-                  className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add Payment
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                {studentModules.length > 0 ? (
-                  studentModules.map((m: any) => {
-                    const paid = getModulePayment(m.id);
-
-                    return (
-                      <div
-                        key={m.id || m.name}
-                        className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
-                          paid
-                            ? 'border-emerald-200 bg-emerald-50'
-                            : 'border-slate-100 bg-white'
-                        }`}
-                      >
-                        <span className="text-[13px] font-bold text-slate-800">
-                          {m.name}
-                        </span>
-
-                        {paid ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-emerald-600">
-                              LKR {paid.amount?.toLocaleString()}
-                            </span>
-                            <CheckCircle className="h-4 w-4 text-emerald-600" />
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-slate-400">
-                              Unpaid
-                            </span>
-                            <XCircle className="h-4 w-4 text-slate-400" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="rounded-xl bg-slate-50 p-4 text-[13px] text-slate-400">
-                    No modules selected
-                  </p>
-                )}
-              </div>
-
-              <div className="mt-4 border-t border-slate-100 pt-4">
-                <h4 className="mb-3 text-xs font-bold uppercase text-slate-400">
-                  Payment History
-                </h4>
-
-                {(s.payments || []).length === 0 ? (
-                  <p className="text-[13px] text-slate-400">
-                    No payment records
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {(s.payments || []).map((p: any) => (
-                      <div
-                        key={
-                          p.id || p.receiptNo || `${p.moduleId}-${p.paidDate}`
-                        }
-                        className="grid grid-cols-[1fr_auto_auto] items-center gap-4 text-[13px]"
-                      >
-                        <span className="font-bold text-slate-800">
-                          {getValue(p.moduleName)}
-                        </span>
-                        <span className="text-slate-400">
-                          {formatDate(p.paidDate)}
-                        </span>
-                        <span className="font-bold text-emerald-600">
-                          LKR{' '}
-                          {p.amount?.toLocaleString?.() || getValue(p.amount)}
-                        </span>
-                        <span className="col-span-3 -mt-2 text-right text-xs capitalize text-slate-400">
-                          {getValue(p.method)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </ProfileSection>
-
             <ProfileSection title="Attendance (Today)">
               <div className="space-y-2">
                 {studentModules.length > 0 ? (
@@ -593,9 +512,11 @@ export default function StudentProfile({
                       <span className="font-bold text-slate-800">
                         {getValue(a.moduleName)}
                       </span>
+
                       <span className="text-slate-400">
                         {formatDate(a.date)}
                       </span>
+
                       <span
                         className={`w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase ${
                           a.status === 'present'
@@ -609,6 +530,97 @@ export default function StudentProfile({
                   ))}
                 </div>
               )}
+            </ProfileSection>
+
+            <ProfileSection title="Payments">
+              <div className="-mt-1 mb-3 flex justify-end">
+                <button
+                  onClick={() => setShowPayModal(true)}
+                  className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Payment
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                {studentModules.length > 0 ? (
+                  studentModules.map((m: any) => {
+                    const paid = getModulePayment(m.id);
+
+                    return (
+                      <div
+                        key={m.id || m.name}
+                        className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
+                          paid
+                            ? 'border-emerald-200 bg-emerald-50'
+                            : 'border-slate-100 bg-white'
+                        }`}
+                      >
+                        <span className="text-[13px] font-bold text-slate-800">
+                          {m.name}
+                        </span>
+
+                        {paid ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-emerald-600">
+                              LKR {formatAmount(paid.amount)}
+                            </span>
+                            <CheckCircle className="h-4 w-4 text-emerald-600" />
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-400">
+                              Unpaid
+                            </span>
+                            <XCircle className="h-4 w-4 text-slate-400" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="rounded-xl bg-slate-50 p-4 text-[13px] text-slate-400">
+                    No modules selected
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-4 border-t border-slate-100 pt-4">
+                <h4 className="mb-3 text-xs font-bold uppercase text-slate-400">
+                  Payment History
+                </h4>
+
+                {(s.payments || []).length === 0 ? (
+                  <p className="text-[13px] text-slate-400">
+                    No payment records
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {(s.payments || []).map((p: any) => (
+                      <div
+                        key={
+                          p.id || p.receiptNo || `${p.moduleId}-${p.paidDate}`
+                        }
+                        className="grid grid-cols-[1fr_auto_auto] items-center gap-4 text-[13px]"
+                      >
+                        <span className="font-bold text-slate-800">
+                          {getValue(p.moduleName)}
+                        </span>
+                        <span className="text-slate-400">
+                          {formatDate(p.paidDate)}
+                        </span>
+                        <span className="font-bold text-emerald-600">
+                          LKR {formatAmount(p.amount)}
+                        </span>
+                        <span className="col-span-3 -mt-2 text-right text-xs capitalize text-slate-400">
+                          {getValue(p.method)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </ProfileSection>
 
             <ProfileSection title="Personal Details">
@@ -644,19 +656,6 @@ export default function StudentProfile({
               </div>
             </ProfileSection>
 
-            <ProfileSection title="Address Details">
-              <div className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-3">
-                <DetailItem
-                  label="Permanent Address"
-                  value={s.permanentAddress || s.address}
-                />
-                <DetailItem
-                  label="District"
-                  value={s.administrativeDistrict || s.district}
-                />
-                <DetailItem label="Postal Code" value={s.postalCode} />
-              </div>
-            </ProfileSection>
           </main>
         </div>
 
