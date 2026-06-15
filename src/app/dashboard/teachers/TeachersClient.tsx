@@ -3,17 +3,34 @@ import { useState, useEffect } from 'react';
 import type { Teacher } from '@/types';
 import {
   teacherApi,
+  type CreateTeacherPayload,
   type TeacherFromApi,
-  type TeacherPayload,
 } from '@/api/teacher.api';
 import Modal from '@/components/ui/Modal';
 import { Plus, Edit2, Trash2, GraduationCap, Phone, Mail, Search, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const emptyTeacher: Omit<Teacher, 'id'> = {
+type TeacherForm = Omit<Teacher, 'id' | 'subject'> & {
+  subject: string;
+};
+
+const emptyTeacher: TeacherForm = {
   name: '', email: '', phone: '', subject: '', qualification: '',
   experience: '', address: '', joinDate: '', status: 'active',
 };
+
+function normalizeSubject(subject: TeacherFromApi['subject']): string[] {
+  if (Array.isArray(subject)) return subject;
+
+  return subject
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formatSubjects(subjects: string[]): string {
+  return subjects.join(', ');
+}
 
 /** Map backend response to frontend Teacher type */
 function mapApiTeacher(t: TeacherFromApi): Teacher {
@@ -22,7 +39,7 @@ function mapApiTeacher(t: TeacherFromApi): Teacher {
     name: t.fullName,
     email: t.email,
     phone: t.phone,
-    subject: t.subject,
+    subject: normalizeSubject(t.subject),
     qualification: t.qualification,
     experience: t.experience,
     address: t.address,
@@ -31,12 +48,12 @@ function mapApiTeacher(t: TeacherFromApi): Teacher {
   };
 }
 
-function mapFormToPayload(form: Omit<Teacher, 'id'>): TeacherPayload {
+function mapFormToPayload(form: TeacherForm): CreateTeacherPayload {
   return {
     fullName: form.name.trim(),
     email: form.email.trim(),
     phone: form.phone.trim(),
-    subject: form.subject.trim(),
+    subject: normalizeSubject(form.subject),
     qualification: form.qualification.trim(),
     experience: form.experience.trim(),
     address: form.address.trim(),
@@ -52,7 +69,7 @@ export default function TeachersPage() {
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editTeacher, setEditTeacher] = useState<Teacher | null>(null);
-  const [form, setForm] = useState<Omit<Teacher, 'id'>>(emptyTeacher);
+  const [form, setForm] = useState<TeacherForm>(emptyTeacher);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   // Fetch teachers from backend on mount
@@ -77,12 +94,12 @@ export default function TeachersPage() {
     return (
       (t.name || '').toLowerCase().includes(term) ||
       (t.email || '').toLowerCase().includes(term) ||
-      (t.subject || '').toLowerCase().includes(term)
+      formatSubjects(t.subject).toLowerCase().includes(term)
     );
   });
 
   const openAdd = () => { setForm(emptyTeacher); setEditTeacher(null); setModalOpen(true); };
-  const openEdit = (t: Teacher) => { setForm({ ...t }); setEditTeacher(t); setModalOpen(true); };
+  const openEdit = (t: Teacher) => { setForm({ ...t, subject: formatSubjects(t.subject) }); setEditTeacher(t); setModalOpen(true); };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,10 +112,7 @@ export default function TeachersPage() {
         await teacherApi.update(editTeacher.id, payload);
         toast.success('Teacher updated!');
       } else {
-        await teacherApi.create({
-          ...payload,
-          password: 'Teacher@123',
-        });
+        await teacherApi.create(payload);
         toast.success('Teacher added!');
       }
 
@@ -132,7 +146,7 @@ export default function TeachersPage() {
     }
   };
 
-  const inp = (field: keyof Omit<Teacher, 'id'>, label: string, type = 'text', opts?: string[]) => (
+  const inp = (field: keyof TeacherForm, label: string, type = 'text', opts?: string[]) => (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
       {opts ? (
@@ -185,7 +199,7 @@ export default function TeachersPage() {
                 </div>
                 <div className="min-w-0">
                   <h3 className="break-words font-semibold text-gray-800">{t.name}</h3>
-                  <p className="break-words text-sm font-medium text-indigo-600">{t.subject}</p>
+                  <p className="break-words text-sm font-medium text-indigo-600">{formatSubjects(t.subject)}</p>
                 </div>
               </div>
               <span className={`self-start rounded-full px-2 py-0.5 text-xs font-medium ${t.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
