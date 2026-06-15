@@ -516,17 +516,17 @@ export const useDataStore = create<DataStore>()(
 
       rejectStudent: async (id, reason) => {
         try {
-          const rejected = await rejectStudentRequest(id, reason);
+          const rejected: any = await rejectStudentRequest(id, reason);
 
           set((state) => ({
             students: state.students.map((x) => {
               if (x.id !== id) return x;
-              if (rejected) {
-                return mapBackendStudent(rejected);
-              }
+              // Backend reject returns partial data ({ _id, studentId, status, rejectionReason })
+              // Merge it with existing student data instead of replacing entirely
               return {
                 ...x,
                 status: 'rejected' as const,
+                ...(rejected?.rejectionReason ? { rejectionReason: rejected.rejectionReason } : {}),
               };
             }),
           }));

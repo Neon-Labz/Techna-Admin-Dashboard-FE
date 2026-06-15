@@ -56,13 +56,20 @@ export async function apiClient<T = unknown>(
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
 
-  // Handle 401 Unauthorized - clear auth and redirect to login
+  // Handle 401 Unauthorized
   if (response.status === 401) {
-    if (typeof window !== 'undefined') {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.message || 'Unauthorized';
+
+    // Only clear auth and redirect if this is NOT a login attempt
+    // (login failures also return 401 but shouldn't trigger redirect)
+    const isLoginRequest = endpoint.includes('/auth/login') || endpoint.includes('/auth/student/login');
+    if (!isLoginRequest && typeof window !== 'undefined') {
       localStorage.removeItem('edu-auth');
       window.location.href = '/login';
     }
-    throw new Error('Session expired. Please login again.');
+
+    throw new Error(Array.isArray(message) ? message[0] : message);
   }
 
   if (!response.ok) {

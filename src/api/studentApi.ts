@@ -120,5 +120,15 @@ export async function rejectStudent(
 ): Promise<Student> {
   const response = await api.patch(`/students/${id}/reject`, { reason });
 
-  return response.data?.data || response.data;
+  // Backend returns { message, data: { _id, studentId, status, rejectionReason } }
+  // which gets wrapped by the response interceptor as { success, message, data: { message, data: {...} } }
+  // So response.data?.data may be the inner wrapper, not the student directly
+  const result = response.data?.data || response.data;
+
+  // If result has a nested 'data' property, extract the actual student data
+  if (result && typeof result === 'object' && 'data' in result && 'message' in result) {
+    return result.data;
+  }
+
+  return result;
 }
