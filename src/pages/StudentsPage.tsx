@@ -9,10 +9,36 @@ import StudentProfile from '../components/students/StudentProfile';
 import StudentRegistrationWizard from '../components/students/StudentRegistrationWizard';
 import { Plus, Search, Filter, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
-import {
-  AL_SUBJECT_OPTIONS,
-  normalizeAlSubjects,
-} from '../utils/studentPayload';
+import { attendanceApi } from '../api/attendance.api';
+import { paymentApi } from '../api/payment.api';
+import { getModules, type ApiModule } from '../lib/api';
+
+const DISTRICT_OPTIONS = [
+  'Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo', 'Galle',
+  'Gampaha', 'Hambantota', 'Jaffna', 'Kalutara', 'Kandy', 'Kegalle',
+  'Kilinochchi', 'Kurunegala', 'Mannar', 'Matale', 'Matara', 'Monaragala',
+  'Mullaitivu', 'Nuwara Eliya', 'Polonnaruwa', 'Puttalam', 'Ratnapura',
+  'Trincomalee', 'Vavuniya',
+];
+
+const RACE_OPTIONS = [
+  'Sinhala',
+  'Tamil',
+  'Indian Tamil',
+  'Muslim',
+  'Burgher',
+  'Malay',
+  'Other',
+];
+
+const RELIGION_OPTIONS = [
+  'Buddhism',
+  'Hinduism',
+  'Islam',
+  'Christianity',
+  'Catholicism',
+  'Other',
+];
 
 const emptyStudent: any = {
   name: '',
@@ -65,10 +91,29 @@ export default function StudentsPage() {
   const [editStudent, setEditStudent] = useState<Student | null>(null);
   const [form, setForm] = useState<any>(emptyStudent);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [moduleOptions, setModuleOptions] = useState<ApiModule[]>([]);
+  const [modulesLoading, setModulesLoading] = useState(true);
 
   useEffect(() => {
     fetchStudents();
   }, [fetchStudents]);
+
+  const fetchModuleOptions = async () => {
+    setModulesLoading(true);
+    try {
+      const fetchedModules = await getModules();
+      setModuleOptions(Array.isArray(fetchedModules) ? fetchedModules : []);
+    } catch (error) {
+      console.error('Failed to load modules:', error);
+      setModuleOptions([]);
+    } finally {
+      setModulesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchModuleOptions();
+  }, []);
 
   const getStudentName = (s: any) =>
     s.name || s.fullNameEnglish || s.fullNameTamil || '';
@@ -88,6 +133,7 @@ export default function StudentsPage() {
   });
 
   const openAdd = () => {
+    void fetchModuleOptions();
     setForm(emptyStudent);
     setEditStudent(null);
     setModalOpen(true);
@@ -99,22 +145,28 @@ export default function StudentsPage() {
   };
 
   const getSelectedModules = (s: any) => {
-    if (Array.isArray(s.subjects) && s.subjects.length > 0) {
-      return normalizeAlSubjects(s.subjects);
-    }
-    if (Array.isArray(s.modules) && s.modules.length > 0) {
-      return normalizeAlSubjects(s.modules);
-    }
+    if (Array.isArray(s.subjects) && s.subjects.length > 0) return s.subjects;
+    if (Array.isArray(s.modules) && s.modules.length > 0) return s.modules;
     if (
       Array.isArray(s.subjectSelection?.subjects) &&
       s.subjectSelection.subjects.length > 0
     ) {
-      return normalizeAlSubjects(s.subjectSelection.subjects);
+      return s.subjectSelection.subjects;
     }
-    return normalizeAlSubjects([]);
+    if (
+      Array.isArray(s.subjectSelection?.enrolledModules) &&
+      s.subjectSelection.enrolledModules.length > 0
+    ) {
+      return s.subjectSelection.enrolledModules;
+    }
+    if (Array.isArray(s.enrolledModules) && s.enrolledModules.length > 0) {
+      return s.enrolledModules;
+    }
+    return [];
   };
 
   const openEdit = (s: any) => {
+    void fetchModuleOptions();
     const selectedModules = getSelectedModules(s);
 
     setForm({
@@ -187,9 +239,8 @@ export default function StudentsPage() {
 
     if (!editStudent) return;
 
-    const selectedModules = normalizeAlSubjects(
-      form.subjects?.length ? form.subjects : form.modules || [],
-    );
+    const selectedModules =
+      form.subjects?.length ? form.subjects : form.modules || [];
 
     const payload = {
       ...form,
@@ -211,12 +262,6 @@ export default function StudentsPage() {
     setModalOpen(false);
   };
 
-  const preventEnterSubmit = (e: React.KeyboardEvent<HTMLFormElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-    }
-  };
-
   const handleWizardSubmit = async (payload: any) => {
     try {
       await addStudent(payload);
@@ -235,34 +280,134 @@ export default function StudentsPage() {
     toast.success(`✅ ${getStudentName(s)} approved!`);
   };
 
-  const handlePaymentAdd = (
+  const getModuleName = (moduleId: string) => {
+    const mod = modules.find(
+      (m: any) => m.id === moduleId || m._id === moduleId || m.name === moduleId,
+    );
+    return mod?.name || moduleId;
+  };
+
+  const normalizeRecordDate = (value?: string) => {
+    if (!value) return '';
+    return value.includes('T') ? value.split('T')[0] : value;
+  };
+
+  const patchStudentRecords = (
+    studentId: string,
+    records: Partial<Pick<Student, 'attendance' | 'payments'>>,
+  ) => {
+    useDataStore.setState((state) => ({
+      students: state.students.map((student) =>
+        student.id === studentId ? { ...student, ...records } : student,
+      ),
+    }));
+
+    setViewStudent((student) =>
+      student?.id === studentId ? { ...student, ...records } : student,
+    );
+  };
+
+  const loadStudentRecords = async (student: Student) => {
+    try {
+      const attendanceStudentId = student.studentId || student.id;
+      const [attendanceRecords, payments] = await Promise.all([
+        attendanceApi.getByStudent(attendanceStudentId),
+        paymentApi.getByStudent(student.id),
+      ]);
+
+      const attendance = attendanceRecords.map((record: any) => ({
+        ...record,
+        id: record.id || record._id,
+        date: normalizeRecordDate(record.date),
+      }));
+
+      patchStudentRecords(student.id, { attendance, payments });
+    } catch (error) {
+      console.warn('Failed to load student records');
+      toast.error('Failed to load student records');
+    }
+  };
+
+  const openProfile = (student: Student) => {
+    setViewStudent(student);
+    void loadStudentRecords(student);
+  };
+
+  const handlePaymentAdd = async (
     studentId: string,
     payment: Omit<PaymentRecord, 'id'>,
   ) => {
-    useDataStore.getState().addPayment(studentId, payment);
-    toast.success('Payment recorded!');
+    try {
+      const savedPayment = await paymentApi.create(payment);
+      const currentStudent = students.find((student) => student.id === studentId);
+      const nextPayments = [...(currentStudent?.payments || []), savedPayment];
+
+      patchStudentRecords(studentId, { payments: nextPayments });
+      toast.success('Payment recorded!');
+    } catch (error) {
+      console.warn('Failed to record payment');
+      toast.error('Failed to record payment');
+    }
   };
 
   const handleStatusChange = async (
-    id: string,
-    status: 'pending' | 'approved' | 'rejected',
-  ) => {
-    await updateStudent(id, {
-      status,
-      ...(status === 'approved'
-        ? { approvedAt: new Date().toISOString() }
-        : {}),
-    });
-    toast.success(`Student ${status}!`);
-  };
+  id: string,
+  status: 'pending' | 'approved' | 'rejected',
+) => {
+  if (status === 'approved') {
+    await approveStudent(id);
+    toast.success('Student approved!');
+    return;
+  }
 
-  const handleAttendanceUpdate = (
+  await updateStudent(id, { status });
+  toast.success(`Student ${status}!`);
+};
+
+  const handleAttendanceUpdate = async (
     studentId: string,
     moduleId: string,
     date: string,
     status: 'present' | 'absent',
   ) => {
-    useDataStore.getState().updateAttendance(studentId, moduleId, date, status);
+    try {
+      const currentStudent = students.find((student) => student.id === studentId);
+      const attendanceStudentId = currentStudent?.studentId || studentId;
+      const savedAttendance = await attendanceApi.markAttendance({
+        studentId: attendanceStudentId,
+        moduleId,
+        moduleName: getModuleName(moduleId),
+        date,
+        status,
+      });
+      const normalizedAttendance = {
+        ...savedAttendance,
+        id: savedAttendance.id || savedAttendance._id,
+        studentId: attendanceStudentId,
+        moduleId,
+        moduleName: savedAttendance.moduleName || getModuleName(moduleId),
+        date: normalizeRecordDate(savedAttendance.date || date),
+        status,
+        markedAt: savedAttendance.markedAt || new Date().toISOString(),
+      };
+      const existingAttendance = currentStudent?.attendance || [];
+      const nextAttendance = existingAttendance.some(
+        (record) =>
+          record.moduleId === moduleId && normalizeRecordDate(record.date) === date,
+      )
+        ? existingAttendance.map((record) =>
+            record.moduleId === moduleId &&
+            normalizeRecordDate(record.date) === date
+              ? { ...record, ...normalizedAttendance }
+              : record,
+          )
+        : [...existingAttendance, normalizedAttendance];
+
+      patchStudentRecords(studentId, { attendance: nextAttendance });
+    } catch (error) {
+      console.warn('Failed to update attendance');
+      toast.error('Failed to update attendance');
+    }
   };
 
   const currentViewStudent = viewStudent
@@ -296,16 +441,22 @@ export default function StudentsPage() {
     ['motherName', 'Mother Name'],
     ['guardianName', 'Guardian Name'],
     ['guardianMobile', 'Guardian Mobile'],
-    ['race', 'Race'],
-    ['religion', 'Religion'],
   ] as const;
 
   const selectedModules =
     form.subjects?.length ? form.subjects : form.modules || [];
 
+  const isModuleSelected = (module: ApiModule) =>
+    selectedModules.some(
+      (selected: string) =>
+        selected === module.name ||
+        selected === module._id ||
+        selected === (module as any).id,
+    );
+
   return (
-    <div className="p-4 sm:p-6">
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Students</h1>
           <p className="text-gray-500 text-sm">
@@ -317,7 +468,7 @@ export default function StudentsPage() {
 
         <button
           onClick={openAdd}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 sm:w-auto"
+          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
         >
           <Plus className="w-4 h-4" /> Add Student
         </button>
@@ -334,12 +485,12 @@ export default function StudentsPage() {
           />
         </div>
 
-        <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 sm:flex">
-          <Filter className="h-4 w-4 shrink-0 text-gray-400" />
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-gray-400" />
           <select
             value={filterBatch}
             onChange={(e) => setFilterBatch(e.target.value)}
-            className="min-w-0 px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+            className="px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
           >
             {batchOptions.map((b) => (
               <option key={b} value={b === 'All Batches' ? '' : b}>
@@ -351,7 +502,7 @@ export default function StudentsPage() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="min-w-0 px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+            className="px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
           >
             <option value="">All Status</option>
             <option value="pending">Pending</option>
@@ -366,7 +517,7 @@ export default function StudentsPage() {
           <StudentCard
             key={s.id}
             student={s}
-            onView={() => setViewStudent(s)}
+            onView={() => openProfile(s)}
             onEdit={() => openEdit(s)}
             onDelete={() => setDeleteConfirm(s.id)}
             onApprove={() => handleApprove(s.id)}
@@ -399,21 +550,19 @@ export default function StudentsPage() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editStudent ? 'Edit Student' : 'Add New Student'}
-        size="xl"
-        height="content"
-        closeOnBackdrop={false}
+        size="2xl"
       >
         {!editStudent ? (
           <StudentRegistrationWizard
-            modules={modules}
+            modules={moduleOptions}
+            modulesLoading={modulesLoading}
             onCancel={() => setModalOpen(false)}
             onSubmit={handleWizardSubmit}
           />
         ) : (
           <form
             onSubmit={handleSubmit}
-            onKeyDown={preventEnterSubmit}
-            className="w-full min-w-0 max-w-full space-y-4"
+            className="space-y-4 max-h-[75vh] overflow-y-auto pr-2"
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {editFields.map(([field, label]) => (
@@ -422,42 +571,88 @@ export default function StudentsPage() {
                     {label}
                   </label>
 
-                  <input
-                    type={
-                      field === 'dob'
-                        ? 'date'
-                        : field === 'email'
-                          ? 'email'
-                          : 'text'
-                    }
-                    value={form[field] || ''}
-                    onChange={(e) => handleChange(field, e.target.value)}
-                    required={['fullNameEnglish', 'email', 'phone'].includes(
-                      field,
-                    )}
-                    className="w-full min-w-0 max-w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base"
-                  />
+                  {field === 'administrativeDistrict' ? (
+                    <select
+                      value={form.administrativeDistrict || ''}
+                      onChange={(e) =>
+                        handleChange('administrativeDistrict', e.target.value)
+                      }
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                    >
+                      <option value="">Select District</option>
+                      {DISTRICT_OPTIONS.map((district) => (
+                        <option key={district} value={district}>
+                          {district}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={
+                        field === 'dob'
+                          ? 'date'
+                          : field === 'email'
+                            ? 'email'
+                            : 'text'
+                      }
+                      value={form[field] || ''}
+                      onChange={(e) => handleChange(field, e.target.value)}
+                      required={['fullNameEnglish', 'email', 'phone'].includes(
+                        field,
+                      )}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    />
+                  )}
                 </div>
               ))}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Batch
+                  Race
                 </label>
                 <select
-                  value={form.batch}
-                  onChange={(e) => handleChange('batch', e.target.value)}
-                  className="w-full min-w-0 max-w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base"
+                  value={form.race || ''}
+                  onChange={(e) => handleChange('race', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
                 >
-                  {batchOptions
-                    .filter((b) => b !== 'All Batches')
-                    .map((b) => (
-                      <option key={b}>{b}</option>
-                    ))}
-                  {form.batch && !batchOptions.includes(form.batch) && (
-                    <option value={form.batch}>{form.batch}</option>
-                  )}
+                  <option value="">Select Race</option>
+                  {RACE_OPTIONS.map((race) => (
+                    <option key={race} value={race}>
+                      {race}
+                    </option>
+                  ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Religion
+                </label>
+                <select
+                  value={form.religion || ''}
+                  onChange={(e) => handleChange('religion', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+                >
+                  <option value="">Select Religion</option>
+                  {RELIGION_OPTIONS.map((religion) => (
+                    <option key={religion} value={religion}>
+                      {religion}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Batch
+                </label>
+                <input
+                  type="text"
+                  value={form.batch || ''}
+                  onChange={(e) => handleChange('batch', e.target.value)}
+                  placeholder="Enter batch"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                />
               </div>
             </div>
 
@@ -467,28 +662,34 @@ export default function StudentsPage() {
               </label>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {AL_SUBJECT_OPTIONS.map((moduleName) => {
-                  const checked = selectedModules.includes(moduleName);
+                {modulesLoading ? (
+                  <p className="text-sm text-gray-400">Loading modules...</p>
+                ) : moduleOptions.length === 0 ? (
+                  <p className="text-sm text-gray-400">No modules found</p>
+                ) : (
+                  moduleOptions.map((module) => {
+                    const checked = isModuleSelected(module);
 
-                  return (
-                    <label
-                      key={moduleName}
-                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer text-sm ${
-                        checked
-                          ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
-                          : 'bg-white border-gray-200 text-gray-700'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleModule(moduleName)}
-                        className="rounded border-gray-300"
-                      />
-                      {moduleName}
-                    </label>
-                  );
-                })}
+                    return (
+                      <label
+                        key={module._id}
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer text-sm ${
+                          checked
+                            ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
+                            : 'bg-white border-gray-200 text-gray-700'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleModule(module.name)}
+                          className="rounded border-gray-300"
+                        />
+                        {module.name}
+                      </label>
+                    );
+                  })
+                )}
               </div>
             </div>
 

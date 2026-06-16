@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   BookOpen,
   Check,
@@ -12,13 +12,8 @@ import {
   Trash2,
   User,
 } from 'lucide-react';
-import type { Module, Student, OLResult } from '../../types';
-import {
-  AL_SUBJECT_OPTIONS,
-  OL_GRADE_OPTIONS,
-  cleanOlResults,
-  normalizeAlSubjects,
-} from '../../utils/studentPayload';
+import type { ApiModule } from '../../lib/api';
+import type { Student, OLResult } from '../../types';
 
 const DISTRICTS = [
   'Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo', 'Galle',
@@ -30,7 +25,7 @@ const DISTRICTS = [
 
 const RACES = [
   'Sinhala',
-  'Sri Lankan Tamil',
+  'Tamil',
   'Indian Tamil',
   'Muslim',
   'Burgher',
@@ -47,6 +42,8 @@ const RELIGIONS = [
   'Other',
 ];
 
+const GRADES = ['A', 'B', 'C', 'S', 'W', 'Absent'];
+
 const STEPS = [
   { id: 1, label: 'Basic Info', icon: User },
   { id: 2, label: 'Address & Contact', icon: MapPin },
@@ -54,8 +51,6 @@ const STEPS = [
   { id: 4, label: 'O/L Results', icon: BookOpen },
   { id: 5, label: 'Subjects & Confirmation', icon: FileText },
 ];
-
-const WIZARD_LABEL_CLASS = 'mb-1 block text-xs font-semibold text-gray-700';
 
 type WizardPayload = Omit<
   Student,
@@ -136,13 +131,15 @@ const emptyForm: FormState = {
 };
 
 interface Props {
-  modules: Module[];
+  modules: ApiModule[];
+  modulesLoading: boolean;
   onCancel: () => void;
   onSubmit: (payload: WizardPayload) => Promise<void>;
 }
 
 export default function StudentRegistrationWizard({
   modules,
+  modulesLoading,
   onCancel,
   onSubmit,
 }: Props) {
@@ -150,10 +147,6 @@ export default function StudentRegistrationWizard({
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-
-  const subjectOptions = useMemo(() => {
-    return Array.from(new Set([...AL_SUBJECT_OPTIONS]));
-  }, [modules]);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -167,10 +160,9 @@ export default function StudentRegistrationWizard({
   };
 
   const inputCls = (err?: string) =>
-    `block h-10 w-full min-w-0 max-w-full rounded-md border px-3 text-[16px] leading-5 md:h-9 md:text-sm ${
+    `w-full px-3 py-2 border ${
       err ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-white'
-    } outline-none transition-colors focus:border-indigo-500 focus:ring-0`;
-  const labelCls = WIZARD_LABEL_CLASS;
+    } rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm`;
 
   const validateStep = () => {
     const nextErrors: Record<string, string> = {};
@@ -243,7 +235,7 @@ export default function StudentRegistrationWizard({
     setSubmitting(true);
 
     const fullNameEnglish = form.fullNameEnglish?.trim() || form.name.trim();
-    const selectedSubjects = normalizeAlSubjects(form.subjects || []);
+    const selectedSubjects = form.subjects || [];
 
     try {
       await onSubmit({
@@ -260,7 +252,6 @@ export default function StudentRegistrationWizard({
           form.parentName,
         parentPhone: form.parentsNo || form.guardianMobile || form.parentPhone,
         declarationAccepted: form.declarationRules && form.declarationAccuracy,
-        olResults: cleanOlResults(form.olResults || []) as OLResult[],
         modules: selectedSubjects,
         subjects: selectedSubjects,
         enrolledAt: new Date().toISOString(),
@@ -271,8 +262,8 @@ export default function StudentRegistrationWizard({
   };
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-4 overflow-x-hidden">
-      <div className="flex max-w-full items-center gap-2 overflow-x-auto border-b border-gray-100 pb-3">
+    <div className="space-y-5">
+      <div className="flex items-center gap-2 overflow-x-auto pb-2">
         {STEPS.map((item) => {
           const Icon = item.icon;
           const active = step === item.id;
@@ -281,7 +272,7 @@ export default function StudentRegistrationWizard({
           return (
             <div key={item.id} className="flex min-w-max items-center gap-2">
               <div
-                className={`flex h-8 w-8 items-center justify-center rounded-full border ${
+                className={`flex h-9 w-9 items-center justify-center rounded-full border ${
                   done
                     ? 'border-green-500 bg-green-500 text-white'
                     : active
@@ -305,7 +296,7 @@ export default function StudentRegistrationWizard({
       </div>
 
       {step === 1 && (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {[
             ['fullNameTamil', 'Full Name Tamil'],
             ['fullNameEnglish', 'Full Name English'],
@@ -318,12 +309,11 @@ export default function StudentRegistrationWizard({
             ['confirmPassword', 'Confirm Password'],
           ].map(([key, label]) => (
             <label key={key} className="block">
-              <span className={labelCls}>
+              <span className="mb-1 block text-sm font-medium text-gray-700">
                 {label}
               </span>
 
               <input
-                autoComplete="off"
                 type={
                   key.includes('password') || key.includes('Password')
                     ? 'password'
@@ -345,7 +335,7 @@ export default function StudentRegistrationWizard({
           ))}
 
           <label className="block">
-            <span className={labelCls}>
+            <span className="mb-1 block text-sm font-medium text-gray-700">
               Date of Birth
             </span>
             <input
@@ -360,30 +350,30 @@ export default function StudentRegistrationWizard({
           </label>
 
           <label className="block md:col-span-2">
-            <span className={labelCls}>
+            <span className="mb-1 block text-sm font-medium text-gray-700">
               Address
             </span>
             <textarea
               value={form.address}
               onChange={(e) => set('address', e.target.value)}
               rows={2}
-              className={`${inputCls()} h-16 resize-none py-2`}
+              className={`${inputCls()} resize-none`}
             />
           </label>
         </div>
       )}
 
       {step === 2 && (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <label className="block md:col-span-2">
-            <span className={labelCls}>
+            <span className="mb-1 block text-sm font-medium text-gray-700">
               Permanent Address
             </span>
             <textarea
               value={form.permanentAddress}
               onChange={(e) => set('permanentAddress', e.target.value)}
               rows={2}
-              className={`${inputCls(errors.permanentAddress)} h-16 resize-none py-2`}
+              className={`${inputCls(errors.permanentAddress)} resize-none`}
             />
             {errors.permanentAddress && (
               <p className="mt-1 text-xs text-red-500">
@@ -448,21 +438,21 @@ export default function StudentRegistrationWizard({
           />
 
           <label className="block md:col-span-2">
-            <span className={labelCls}>
+            <span className="mb-1 block text-sm font-medium text-gray-700">
               Contact Address
             </span>
             <textarea
               value={form.contactAddress}
               onChange={(e) => set('contactAddress', e.target.value)}
               rows={2}
-              className={`${inputCls()} h-16 resize-none py-2`}
+              className={`${inputCls()} resize-none`}
             />
           </label>
         </div>
       )}
 
       {step === 3 && (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Field
             label="Father Full Name"
             value={form.fatherName || ''}
@@ -507,14 +497,14 @@ export default function StudentRegistrationWizard({
           />
 
           <label className="block md:col-span-2">
-            <span className={labelCls}>
+            <span className="mb-1 block text-sm font-medium text-gray-700">
               Guardian Address
             </span>
             <textarea
               value={form.guardianAddress}
               onChange={(e) => set('guardianAddress', e.target.value)}
               rows={2}
-              className={`${inputCls()} h-16 resize-none py-2`}
+              className={`${inputCls()} resize-none`}
             />
           </label>
         </div>
@@ -522,7 +512,7 @@ export default function StudentRegistrationWizard({
 
       {step === 4 && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Select
               label="O/L Category"
               value={form.olCategory || 'Local O/L'}
@@ -591,7 +581,7 @@ export default function StudentRegistrationWizard({
                         onChange={(e) =>
                           updateOlRow(index, 'year', e.target.value)
                         }
-                        className="h-10 w-20 min-w-0 rounded border border-gray-200 px-2 text-[16px] outline-none focus:border-indigo-500"
+                        className="w-20 rounded border border-gray-200 px-2 py-1"
                       />
                     </td>
 
@@ -601,7 +591,7 @@ export default function StudentRegistrationWizard({
                         onChange={(e) =>
                           updateOlRow(index, 'indexNumber', e.target.value)
                         }
-                        className="h-10 w-24 min-w-0 rounded border border-gray-200 px-2 text-[16px] outline-none focus:border-indigo-500"
+                        className="w-24 rounded border border-gray-200 px-2 py-1"
                       />
                     </td>
 
@@ -620,10 +610,10 @@ export default function StudentRegistrationWizard({
                           onChange={(e) =>
                             updateOlRow(index, subject, e.target.value)
                           }
-                          className="h-10 w-20 min-w-0 rounded border border-gray-200 px-2 text-[16px] outline-none focus:border-indigo-500"
+                          className="w-20 rounded border border-gray-200 px-2 py-1"
                         >
                           <option value="">-</option>
-                          {OL_GRADE_OPTIONS.map((grade) => (
+                          {GRADES.map((grade) => (
                             <option key={grade}>{grade}</option>
                           ))}
                         </select>
@@ -667,47 +657,53 @@ export default function StudentRegistrationWizard({
       )}
 
       {step === 5 && (
-        <div className="space-y-4">
+        <div className="space-y-5">
           <div>
-            <label className={labelCls}>
-              Batch
-            </label>
+  <label className="block text-sm font-medium text-gray-700 mb-1">
+    Batch
+  </label>
 
-            <input
-              type="text"
-              value={form.batch}
-              onChange={(e) => handleChange('batch', e.target.value)}
-              placeholder="Enter batch (e.g. May 2026 Batch)"
-              className="block h-10 w-full min-w-0 max-w-full rounded-md border border-gray-200 px-3 text-[16px] outline-none focus:border-indigo-500 md:h-9 md:text-sm"
-            />
-          </div>
+  <input
+    type="text"
+    value={form.batch}
+    onChange={(e) => handleChange('batch', e.target.value)}
+    placeholder="Enter batch (e.g. May 2026 Batch)"
+    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+  />
+</div>
           <div>
-            <div className="mb-2 text-xs font-semibold text-gray-700">
+            <div className="mb-2 text-sm font-medium text-gray-700">
               Subject Selection
             </div>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {subjectOptions.map((subject) => {
-                const checked = (form.subjects || []).includes(subject);
+              {modulesLoading ? (
+                <p className="text-sm text-gray-400">Loading modules...</p>
+              ) : modules.length === 0 ? (
+                <p className="text-sm text-gray-400">No modules found</p>
+              ) : (
+                modules.map((module) => {
+                  const checked = (form.subjects || []).includes(module.name);
 
-                return (
-                  <label
-                    key={subject}
-                    className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${
-                      checked
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                        : 'border-gray-200 bg-white text-gray-700'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleSubject(subject)}
-                    />
-                    <span>{subject}</span>
-                  </label>
-                );
-              })}
+                  return (
+                    <label
+                      key={module._id}
+                      className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${
+                        checked
+                          ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                          : 'border-gray-200 bg-white text-gray-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleSubject(module.name)}
+                      />
+                      <span>{module.name}</span>
+                    </label>
+                  );
+                })
+              )}
             </div>
 
             {errors.subjects && (
@@ -715,7 +711,7 @@ export default function StudentRegistrationWizard({
             )}
           </div>
 
-          <div className="rounded-lg bg-indigo-50 p-3 text-sm text-gray-700">
+          <div className="rounded-lg bg-indigo-50 p-4 text-sm text-gray-700">
             <div className="font-semibold text-indigo-900">
               Application Summary
             </div>
@@ -735,7 +731,7 @@ export default function StudentRegistrationWizard({
             </div>
           </div>
 
-          <label className="flex gap-3 rounded-lg border border-gray-200 p-2.5 text-sm">
+          <label className="flex gap-3 rounded-lg border border-gray-200 p-3 text-sm">
             <input
               type="checkbox"
               checked={form.declarationRules}
@@ -744,7 +740,7 @@ export default function StudentRegistrationWizard({
             <span>I agree to follow all institute rules and regulations.</span>
           </label>
 
-          <label className="flex gap-3 rounded-lg border border-gray-200 p-2.5 text-sm">
+          <label className="flex gap-3 rounded-lg border border-gray-200 p-3 text-sm">
             <input
               type="checkbox"
               checked={form.declarationAccuracy}
@@ -761,11 +757,11 @@ export default function StudentRegistrationWizard({
         </div>
       )}
 
-      <div className="sticky bottom-0 z-10 -mx-3.5 flex items-center justify-between gap-2 border-t border-gray-100 bg-white px-3.5 py-2.5 md:-mx-4 md:px-4">
+      <div className="flex items-center justify-between border-t border-gray-100 pt-5">
         <button
           type="button"
           onClick={step === 1 ? onCancel : () => setStep((s) => s - 1)}
-          className="flex items-center gap-2 rounded-lg border border-gray-200 px-3.5 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
+          className="flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
         >
           {step === 1 ? (
             'Cancel'
@@ -780,7 +776,7 @@ export default function StudentRegistrationWizard({
           <button
             type="button"
             onClick={() => validateStep() && setStep((s) => s + 1)}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white hover:bg-indigo-700"
+            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700"
           >
             Next <ChevronRight className="h-4 w-4" />
           </button>
@@ -789,7 +785,7 @@ export default function StudentRegistrationWizard({
             type="button"
             onClick={submit}
             disabled={submitting}
-            className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-60"
+            className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-60"
           >
             <Check className="h-4 w-4" />
             {submitting ? 'Submitting...' : 'Final Submit'}
@@ -815,7 +811,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className={WIZARD_LABEL_CLASS}>
+      <span className="mb-1 block text-sm font-medium text-gray-700">
         {label}
       </span>
       <input
@@ -845,7 +841,7 @@ function Select({
 }) {
   return (
     <label className="block">
-      <span className={WIZARD_LABEL_CLASS}>
+      <span className="mb-1 block text-sm font-medium text-gray-700">
         {label}
       </span>
       <select
