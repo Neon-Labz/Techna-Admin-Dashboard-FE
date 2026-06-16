@@ -3,6 +3,7 @@ import api from '@/lib/axios';
 export interface PaymentRecord {
   id: string;
   studentId: string;
+  studentCode?: string;
   studentName: string;
   moduleId: string;
   moduleName: string;

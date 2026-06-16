@@ -15,6 +15,7 @@ import {
   isAxiosError,
   updateModule,
 } from '@/lib/api';
+import { validateModuleForm } from '@/lib/validation';
 import DeleteModal from '@/components/common/DeleteModal';
 import Modal from '@/components/ui/Modal';
 
@@ -194,6 +195,16 @@ export default function ModulesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const validationError = validateModuleForm({
+      name: form.name,
+      description: form.description,
+    });
+    if (validationError) {
+      addToast(validationError, 'error');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const base: CreateModuleDto = {
