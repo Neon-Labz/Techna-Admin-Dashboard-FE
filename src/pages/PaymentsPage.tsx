@@ -116,7 +116,6 @@ function PaymentModal({
     paidDate:  initialData?.paidDate  ?? new Date().toISOString().split('T')[0],
     method:    (initialData?.method   ?? 'cash') as 'cash' | 'bank' | 'online',
     status:    (initialData?.status   ?? 'paid') as 'paid' | 'pending' | 'overdue',
-    receiptNo: initialData?.receiptNo ?? '',
     batch:     initialData?.batch     ?? '',
     notes:     initialData?.notes     ?? '',
   });
@@ -255,7 +254,6 @@ function PaymentModal({
       paidDate:    form.paidDate,
       method:      form.method,
       status:      form.status,
-      receiptNo:   form.receiptNo || undefined,
       batch:       form.batch || student?.batch || 'N/A',
       notes:       form.notes || undefined,
     };
@@ -369,13 +367,6 @@ function PaymentModal({
               <option value="pending">Pending</option>
               <option value="overdue">Overdue</option>
             </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label text="Receipt No" />
-            <input type="text" value={form.receiptNo}
-              onChange={e => setForm(f => ({ ...f, receiptNo: e.target.value }))}
-              placeholder="Auto-generated if empty"
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </div>
           <div className="flex flex-col gap-1">
             <Label text="Batch" />
@@ -1013,7 +1004,7 @@ export default function PaymentsPage() {
       // ── LEFT column: Student Information ──────────────────────────────────
       yL = sectionTitle('STUDENT INFORMATION', colL, yL);
       yL = dataRow('Student Name', payment.studentName,    colL, yL, true);
-      yL = dataRow('Student ID',   payment.studentId,      colL, yL, false);
+      yL = dataRow('Student ID',   payment.studentCode || payment.studentId, colL, yL, false);
       yL = dataRow('Batch',        payment.batch || 'N/A', colL, yL, true);
       yL = dataRow('Receipt No',   payment.receiptNo,      colL, yL, false);
 
@@ -1022,7 +1013,25 @@ export default function PaymentsPage() {
       yR = dataRow('Module',         payment.moduleName,           colR, yR, true);
       yR = dataRow('Payment Date',   payment.paidDate,             colR, yR, false);
       yR = dataRow('Payment Method', payment.method.toUpperCase(), colR, yR, true);
-      yR = dataRow('Status',         payment.status.toUpperCase(), colR, yR, false);
+
+      // ── Status row — bold colored value ───────────────────────────────────
+      {
+        const statusColorMap: Record<string, [number, number, number]> = {
+          paid:    [22, 163, 74],
+          pending: [217, 119, 6],
+          overdue: [220, 38, 38],
+        };
+        const [cr, cg, cb] = statusColorMap[payment.status] ?? [100, 100, 100];
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8.5);
+        pdf.setTextColor(100, 110, 130);
+        pdf.text('Status', colR + 3, yR + 2);
+        pdf.setTextColor(cr, cg, cb);
+        pdf.text(payment.status.toUpperCase(), colR + 52, yR + 2);
+        pdf.setTextColor(0, 0, 0);
+        pdf.setFont('helvetica', 'normal');
+        yR += 10;
+      }
 
       // ── Amount box (full width) ────────────────────────────────────────────
       const amtY = Math.max(yL, yR) + 8;
@@ -1036,21 +1045,6 @@ export default function PaymentsPage() {
       pdf.setFontSize(20);
       pdf.setTextColor(255, 255, 255);
       pdf.text(`LKR ${payment.amount.toLocaleString()}`, W / 2, amtY + 20, { align: 'center' });
-
-      // ── Status badge ───────────────────────────────────────────────────────
-      const badgeY = amtY + 32;
-      const badgeColors: Record<string, [number, number, number]> = {
-        paid:    [16, 185, 129],
-        pending: [245, 158, 11],
-        overdue: [239, 68, 68],
-      };
-      const [sr, sg, sb] = badgeColors[payment.status] ?? [100, 100, 100];
-      pdf.setFillColor(sr, sg, sb);
-      pdf.roundedRect(W / 2 - 20, badgeY, 40, 10, 4, 4, 'F');
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(8.5);
-      pdf.setTextColor(255, 255, 255);
-      pdf.text(payment.status.toUpperCase(), W / 2, badgeY + 7, { align: 'center' });
 
       // ── Footer cyan bar ────────────────────────────────────────────────────
       pdf.setFillColor(0, 174, 219);

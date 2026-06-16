@@ -136,10 +136,10 @@ const list = Array.isArray(data) ? data : [];
         date: form.date,
         startTime: form.startTime,
         endTime: form.endTime,
-        venue: form.venue.trim(),
-        description: form.description?.trim(),
-        totalMarks: form.totalMarks,
-        status: form.status,
+        venue: form.venue,
+        description: form.description,
+        totalMarks: form.totalMarks ?? 100,
+        status: form.status ?? 'upcoming',
         isPublished: true,
       };
 
