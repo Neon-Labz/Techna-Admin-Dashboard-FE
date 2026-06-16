@@ -374,13 +374,13 @@ export default function StudentProfile({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-4 lg:items-center">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
 
-      <div className="relative flex h-[90vh] w-full max-w-[1280px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <div className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-[1280px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)] lg:h-[90vh]">
         <button
           onClick={onClose}
           className="absolute right-5 top-5 z-20 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
@@ -451,8 +451,8 @@ export default function StudentProfile({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-[1fr_125px] gap-3 p-3">
-                  <div className="space-y-1.5 border-r border-dashed border-slate-200 pr-3">
+                <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_112px]">
+                  <div className="min-w-0 space-y-1.5 border-b border-dashed border-slate-200 pb-3 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-3">
                     <div>
                       <span className="text-[11px] font-bold uppercase text-slate-400">
                         Phone
@@ -462,11 +462,11 @@ export default function StudentProfile({
                       </p>
                     </div>
 
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-[11px] font-bold uppercase text-slate-400">
                         Email
                       </span>
-                      <p className="text-[12px] font-bold leading-tight text-slate-800 break-words">
+                      <p className="line-clamp-2 max-w-full break-all text-[12px] font-bold leading-tight text-slate-800">
                         {getValue(s.email)}
                       </p>
                     </div>
@@ -493,7 +493,7 @@ export default function StudentProfile({
                           studentModules.map((m: any) => (
                             <span
                               key={m.id || m.name}
-                              className="rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-600"
+                              className="max-w-full break-words rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-600"
                             >
                               {m.name}
                             </span>
@@ -507,17 +507,22 @@ export default function StudentProfile({
                     </div>
                   </div>
 
-                  <div className="flex flex-col items-center justify-center">
+                  <div className="min-w-0 overflow-hidden flex flex-col items-center justify-center">
                     <div className="bg-white leading-none">
                       {shouldShowQrImage ? (
                         <img
                           src={qrImageUrl}
                           alt="Student QR"
-                          className="h-[112px] w-[112px] object-contain"
+                          className="h-[112px] w-[112px] max-w-full object-contain"
                           onError={() => setQrImageFailed(true)}
                         />
                       ) : (
-                        <QRCodeSVG value={qrData} size={112} level="M" />
+                        <QRCodeSVG
+                          value={qrData}
+                          size={112}
+                          level="M"
+                          className="h-[112px] w-[112px] max-w-full"
+                        />
                       )}
                     </div>
 
@@ -589,7 +594,7 @@ export default function StudentProfile({
             </div>
           </aside>
 
-          <main className="h-full min-w-0 overflow-y-auto pr-4">
+          <main className="min-w-0 overflow-visible pb-4 lg:h-full lg:overflow-y-auto lg:pr-4">
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
               <div className="space-y-4 lg:col-span-2">
                 <ProfileSection title="Payments">
