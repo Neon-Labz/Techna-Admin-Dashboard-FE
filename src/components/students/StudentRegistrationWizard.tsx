@@ -37,8 +37,7 @@ const RELIGIONS = [
   'Buddhism',
   'Hinduism',
   'Islam',
-  'Christianity',
-  'Catholicism',
+  'Christianity(RC/Non.RC)',
   'Other',
 ];
 

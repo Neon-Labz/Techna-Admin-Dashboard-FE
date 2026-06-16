@@ -81,6 +81,7 @@ export default function StudentsPage() {
     updateStudent,
     deleteStudent,
     approveStudent,
+    rejectStudent,
   } = useDataStore();
 
   const [search, setSearch] = useState('');
@@ -93,6 +94,9 @@ export default function StudentsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [moduleOptions, setModuleOptions] = useState<ApiModule[]>([]);
   const [modulesLoading, setModulesLoading] = useState(true);
+  const [rejectConfirm, setRejectConfirm] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectLoading, setRejectLoading] = useState(false);
 
   useEffect(() => {
     fetchStudents();
@@ -116,7 +120,7 @@ export default function StudentsPage() {
   }, []);
 
   const getStudentName = (s: any) =>
-    s.name || s.fullNameEnglish || s.fullNameTamil || '';
+    s?.name || s?.fullNameEnglish || s?.fullNameTamil || 'Student';
 
   const filtered = students.filter((s: any) => {
     const q = search.toLowerCase();
@@ -275,9 +279,15 @@ export default function StudentsPage() {
   };
 
   const handleApprove = async (id: string) => {
-    await approveStudent(id);
     const s: any = students.find((x) => x.id === id);
-    toast.success(`✅ ${getStudentName(s)} approved!`);
+    const name = getStudentName(s);
+    try {
+      await approveStudent(id);
+      toast.success(`${name} approved!`);
+      await fetchStudents();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to approve student');
+    }
   };
 
   const getModuleName = (moduleId: string) => {
@@ -354,15 +364,57 @@ export default function StudentsPage() {
   id: string,
   status: 'pending' | 'approved' | 'rejected',
 ) => {
+  const s: any = students.find((x) => x.id === id);
+  const name = getStudentName(s);
+
   if (status === 'approved') {
-    await approveStudent(id);
-    toast.success('Student approved!');
+    try {
+      await approveStudent(id);
+      toast.success(`${name} approved!`);
+      await fetchStudents();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to approve student');
+    }
     return;
   }
 
-  await updateStudent(id, { status });
-  toast.success(`Student ${status}!`);
+  if (status === 'rejected') {
+    setRejectConfirm(id);
+    setRejectReason('');
+    return;
+  }
+
+  try {
+    await updateStudent(id, { status });
+    toast.success(`Student status set to ${status}!`);
+    await fetchStudents();
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : 'Failed to update status');
+  }
 };
+
+  const handleRejectConfirm = async () => {
+    if (!rejectConfirm || !rejectReason.trim()) {
+      toast.error('Please provide a rejection reason');
+      return;
+    }
+
+    const s: any = students.find((x) => x.id === rejectConfirm);
+    const name = getStudentName(s);
+
+    setRejectLoading(true);
+    try {
+      await rejectStudent(rejectConfirm, rejectReason.trim());
+      toast.error(`${name} rejected.`);
+      setRejectConfirm(null);
+      setRejectReason('');
+      await fetchStudents();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to reject student');
+    } finally {
+      setRejectLoading(false);
+    }
+  };
 
   const handleAttendanceUpdate = async (
     studentId: string,
@@ -513,9 +565,9 @@ export default function StudentsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        {filtered.map((s) => (
+        {filtered.map((s, index) => (
           <StudentCard
-            key={s.id}
+            key={s.id || `student-${index}`}
             student={s}
             onView={() => openProfile(s)}
             onEdit={() => openEdit(s)}
@@ -743,6 +795,72 @@ export default function StudentsPage() {
           >
             Delete
           </button>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!rejectConfirm}
+        onClose={() => {
+          setRejectConfirm(null);
+          setRejectReason('');
+        }}
+        title="Reject Student"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600 text-sm">
+            Please provide a reason for rejecting this student. A rejection email will be sent to the student&apos;s registered email address.
+          </p>
+
+          {rejectConfirm && (
+            <div className="bg-gray-50 rounded-lg p-3">
+              <p className="text-xs text-gray-500">Student</p>
+              <p className="text-sm font-medium text-gray-800">
+                {getStudentName(students.find((s) => s.id === rejectConfirm))}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                📧 {students.find((s) => s.id === rejectConfirm)?.email}
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Rejection Reason <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Enter the reason for rejection..."
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-sm resize-none"
+            />
+            {rejectReason.trim().length > 0 && rejectReason.trim().length < 3 && (
+              <p className="text-xs text-red-500 mt-1">
+                Reason must be at least 3 characters
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => {
+                setRejectConfirm(null);
+                setRejectReason('');
+              }}
+              className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+
+            <button
+              onClick={handleRejectConfirm}
+              disabled={rejectLoading || rejectReason.trim().length < 3}
+              className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {rejectLoading ? 'Rejecting...' : 'Reject & Send Email'}
+            </button>
+          </div>
         </div>
       </Modal>
     </div>
