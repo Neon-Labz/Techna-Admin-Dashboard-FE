@@ -28,6 +28,15 @@ function getSelectedSubjects(s: any): string[] {
   ) {
     return s.subjectSelection.subjects;
   }
+  if (
+    Array.isArray(s.subjectSelection?.enrolledModules) &&
+    s.subjectSelection.enrolledModules.length > 0
+  ) {
+    return s.subjectSelection.enrolledModules;
+  }
+  if (Array.isArray(s.enrolledModules) && s.enrolledModules.length > 0) {
+    return s.enrolledModules;
+  }
   return [];
 }
 
