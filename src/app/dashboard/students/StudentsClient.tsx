@@ -308,7 +308,7 @@ export default function StudentsPage() {
     form.subjects?.length ? form.subjects : form.modules || [];
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="p-3 pb-20 sm:p-6 sm:pb-6">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Students</h1>

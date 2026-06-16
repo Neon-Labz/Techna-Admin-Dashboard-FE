@@ -250,7 +250,7 @@ value: `${(paidRevenue / 1000).toFixed(0)}K`,
   ];
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6 p-3 pb-20 sm:p-6 sm:pb-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-800">
           Dashboard Overview

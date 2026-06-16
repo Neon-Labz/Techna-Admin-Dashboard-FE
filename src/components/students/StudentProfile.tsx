@@ -319,21 +319,21 @@ export default function StudentProfile({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 bg-white p-4 lg:grid-cols-[420px_minmax(0,1fr)] lg:p-5">
-          <aside className="h-full overflow-hidden space-y-4">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto bg-white p-4 lg:grid-cols-[420px_minmax(0,1fr)] lg:overflow-hidden lg:p-5">
+          <aside className="space-y-4 lg:h-full lg:overflow-hidden">
             <div>
               <h3 className="mb-2 text-sm font-bold uppercase tracking-[0.16em] text-slate-400">
                 Student ID Card (PDF Preview)
               </h3>
 
-              <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-md">
+              <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
                 <div className="rounded-t-2xl bg-gradient-to-r from-indigo-500 to-purple-500 px-4 py-3 text-white">
                   <div className="flex items-center gap-3">
                     <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/30 bg-white/20 text-xl font-bold">
                       {studentName.charAt(0).toUpperCase()}
                     </div>
 
-                    <div>
+                    <div className="min-w-0">
                       <h2 className="text-lg font-bold leading-tight">
                         {studentName}
                       </h2>
@@ -347,7 +347,7 @@ export default function StudentProfile({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-[1fr_125px] gap-3 p-3">
+                <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_125px]">
                   <div className="space-y-1.5 border-r border-dashed border-slate-200 pr-3">
                     <div>
                       <span className="text-[11px] font-bold uppercase text-slate-400">
@@ -432,7 +432,7 @@ export default function StudentProfile({
 
           </aside>
 
-          <main className="h-full min-w-0 space-y-4 overflow-y-auto pr-4">
+          <main className="min-w-0 space-y-4 lg:h-full lg:overflow-y-auto lg:pr-4">
             <ProfileSection title="Attendance (Today)">
               <div className="space-y-2">
                 {studentModules.length > 0 ? (

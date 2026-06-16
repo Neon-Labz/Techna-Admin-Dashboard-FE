@@ -39,7 +39,7 @@ export default function DashboardLayout({
       <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-100 shadow-sm">
+        <header className="flex items-center justify-between px-3 py-3 bg-white border-b border-gray-100 shadow-sm sm:px-6">
           <div className="flex items-center gap-3">
             <MobileMenuButton onClick={() => setSidebarOpen(true)} />
             <h2 className="font-semibold text-gray-800 hidden sm:block">
