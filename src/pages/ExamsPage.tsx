@@ -134,6 +134,8 @@ const list = Array.isArray(data) ? data : [];
         endTime: form.endTime,
         venue: form.venue,
         description: form.description,
+        totalMarks: form.totalMarks ?? 100,
+        status: form.status ?? 'upcoming',
         isPublished: true,
       };
 
