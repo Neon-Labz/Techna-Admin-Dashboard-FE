@@ -101,6 +101,11 @@ export interface Student {
   olAccept?: string;
   olResults?: OLResult[];
   subjects?: string[];
+  subjectSelection?: {
+    subjects?: string[];
+    enrolledModules?: string[];
+  };
+  enrolledModules?: string[];
   declarationAccepted?: boolean;
 }
 
