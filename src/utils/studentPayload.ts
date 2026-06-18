@@ -34,7 +34,7 @@ const SUBJECT_ALIASES: Record<string, string> = {
 export function normalizeAlSubjects(subjects: string[] = []): string[] {
   const normalized = subjects
     .map((subject) => SUBJECT_ALIASES[subject] || subject)
-    .filter((subject) => AL_SUBJECT_OPTIONS.includes(subject));
+    .filter((subject) => subject && subject.trim());
 
   return Array.from(new Set(normalized));
 }

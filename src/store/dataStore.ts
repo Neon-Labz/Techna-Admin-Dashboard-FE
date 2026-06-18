@@ -411,10 +411,15 @@ export const useDataStore = create<DataStore>()(
 
       updateStudent: async (id, s) => {
         try {
+          const selectedSubjects = getSelectedSubjects(s);
           const payload = {
             ...s,
-            modules: getSelectedSubjects(s),
-            subjects: getSelectedSubjects(s),
+            ...(selectedSubjects.length > 0
+              ? {
+                  modules: selectedSubjects,
+                  subjects: selectedSubjects,
+                }
+              : {}),
           };
 
           const updated = await updateStudentRequest(id, payload);

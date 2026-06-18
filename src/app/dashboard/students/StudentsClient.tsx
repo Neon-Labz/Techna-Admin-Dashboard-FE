@@ -10,8 +10,8 @@ import StudentProfile from '@/components/students/StudentProfile';
 import StudentRegistrationWizard from '@/components/students/StudentRegistrationWizard';
 import { Plus, Search, Filter, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getModules, type ApiModule } from '@/lib/api';
 import {
-  AL_SUBJECT_OPTIONS,
   normalizeAlSubjects,
 } from '@/utils/studentPayload';
 
@@ -67,10 +67,30 @@ export default function StudentsPage() {
   const [form, setForm] = useState<any>(emptyStudent);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [moduleOptions, setModuleOptions] = useState<ApiModule[]>([]);
+  const [modulesLoading, setModulesLoading] = useState(true);
 
   useEffect(() => {
     fetchStudents();
   }, [fetchStudents]);
+
+  const fetchModuleOptions = async () => {
+    setModulesLoading(true);
+    try {
+      const fetchedModules = await getModules();
+      setModuleOptions(Array.isArray(fetchedModules) ? fetchedModules : []);
+    } catch (error) {
+      console.error('Failed to load modules:', error);
+      setModuleOptions([]);
+      toast.error('Failed to load modules');
+    } finally {
+      setModulesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchModuleOptions();
+  }, []);
 
   const getStudentName = (s: any) =>
     s.name || s.fullNameEnglish || s.fullNameTamil || '';
@@ -92,6 +112,7 @@ export default function StudentsPage() {
   const studentToDelete = students.find((s) => s.id === deleteConfirm);
 
   const openAdd = () => {
+    void fetchModuleOptions();
     setForm(emptyStudent);
     setEditStudent(null);
     setModalOpen(true);
@@ -119,6 +140,7 @@ export default function StudentsPage() {
   };
 
   const openEdit = (s: any) => {
+    void fetchModuleOptions();
     const selectedModules = getSelectedModules(s);
 
     setForm({
@@ -307,6 +329,14 @@ export default function StudentsPage() {
   const selectedModules =
     form.subjects?.length ? form.subjects : form.modules || [];
 
+  const isModuleSelected = (module: ApiModule) =>
+    selectedModules.some(
+      (selected: string) =>
+        selected === module.name ||
+        selected === module._id ||
+        selected === (module as any).id,
+    );
+
   return (
     <div className="p-3 pb-20 sm:p-6 sm:pb-6">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -409,7 +439,8 @@ export default function StudentsPage() {
       >
         {!editStudent ? (
           <StudentRegistrationWizard
-            modules={modules}
+            modules={moduleOptions}
+            modulesLoading={modulesLoading}
             onCancel={() => setModalOpen(false)}
             onSubmit={handleWizardSubmit}
           />
@@ -471,28 +502,34 @@ export default function StudentsPage() {
               </label>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {AL_SUBJECT_OPTIONS.map((moduleName) => {
-                  const checked = selectedModules.includes(moduleName);
+                {modulesLoading ? (
+                  <p className="text-sm text-gray-400">Loading modules...</p>
+                ) : moduleOptions.length === 0 ? (
+                  <p className="text-sm text-gray-400">No modules found</p>
+                ) : (
+                  moduleOptions.map((module) => {
+                    const checked = isModuleSelected(module);
 
-                  return (
-                    <label
-                      key={moduleName}
-                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer text-sm ${
-                        checked
-                          ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
-                          : 'bg-white border-gray-200 text-gray-700'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleModule(moduleName)}
-                        className="rounded border-gray-300"
-                      />
-                      {moduleName}
-                    </label>
-                  );
-                })}
+                    return (
+                      <label
+                        key={module._id}
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer text-sm ${
+                          checked
+                            ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
+                            : 'bg-white border-gray-200 text-gray-700'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleModule(module.name)}
+                          className="rounded border-gray-300"
+                        />
+                        {module.name}
+                      </label>
+                    );
+                  })
+                )}
               </div>
             </div>
 

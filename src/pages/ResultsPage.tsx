@@ -1,0 +1,770 @@
+'use client';
+import toast from 'react-hot-toast';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Search,
+  Plus,
+  Send,
+  Trash2,
+  Edit2,
+  User,
+  Filter,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
+import { resultsApi } from '@/api/results.api';
+
+type Student = {
+  _id?: string;
+  id?: string;
+  studentId?: string;
+  fullNameEnglish?: string;
+  name?: string;
+  batch?: string;
+};
+
+type ResultRow = {
+  moduleName: string;
+  examType: 'Mid exam' | 'Final exam';
+  marks: number;
+  grade?: 'A' | 'B' | 'C' | 'F';
+};
+
+type ResultItem = {
+  _id?: string;
+  id?: string;
+  studentId: string;
+  studentName: string;
+  batch: string;
+  modules: ResultRow[];
+  createdAt?: string;
+};
+
+type FormRow = {
+  moduleName: string;
+  examType: 'Mid exam' | 'Final exam';
+  marks: string;
+};
+
+const emptyRow: FormRow = {
+  moduleName: '',
+  examType: 'Mid exam',
+  marks: '',
+};
+
+const calculateGrade = (marks: number) => {
+  if (marks >= 75) return 'A';
+  if (marks >= 65) return 'B';
+  if (marks >= 35) return 'C';
+  return 'F';
+};
+
+const gradeClass = (grade?: string) => {
+  if (grade === 'A') return 'bg-green-50 text-green-700 border-green-200';
+  if (grade === 'B') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (grade === 'C') return 'bg-yellow-50 text-yellow-700 border-yellow-200';
+  return 'bg-red-50 text-red-700 border-red-200';
+};
+
+const formatDate = (date?: string) => {
+  if (!date) return '-';
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleDateString('en-GB');
+};
+
+export default function ResultsPage() {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [results, setResults] = useState<ResultItem[]>([]);
+  const [studentSearch, setStudentSearch] = useState('');
+  const [studentDropdown, setStudentDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const [selectedStudent, setSelectedStudent] = useState<{
+    studentId: string;
+    studentName: string;
+    batch: string;
+    modules: string[];
+  } | null>(null);
+
+  const [rows, setRows] = useState<FormRow[]>([{ ...emptyRow }]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const [search, setSearch] = useState('');
+  const [batchFilter, setBatchFilter] = useState('all');
+  const [moduleFilter, setModuleFilter] = useState('all');
+  const [examFilter, setExamFilter] = useState('all');
+  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
+
+  const loadData = async () => {
+    try {
+      const [studentsData, resultsData] = await Promise.all([
+        resultsApi.getStudents(),
+        resultsApi.getAll(),
+      ]);
+
+      setStudents(studentsData);
+      setResults(resultsData);
+    } catch (error) {
+      console.error('Load results error:', error);
+      alert('Failed to load data');
+    }
+  };
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  useEffect(() => {
+  const handleClickOutside = (event: MouseEvent) => {
+    if (
+      dropdownRef.current &&
+      !dropdownRef.current.contains(event.target as Node)
+    ) {
+      setStudentDropdown(false);
+    }
+  };
+
+  document.addEventListener('mousedown', handleClickOutside);
+
+  return () => {
+    document.removeEventListener('mousedown', handleClickOutside);
+  };
+}, []);
+
+  const studentOptions = useMemo(() => {
+    const q = studentSearch.toLowerCase().trim();
+
+    return students
+      .filter((s) => {
+        const sid = s.studentId?.toLowerCase() || '';
+        const name = (s.fullNameEnglish || s.name || '').toLowerCase();
+        if (!q) return true;
+        return sid.includes(q) || name.includes(q);
+      })
+      .slice(0, 6);
+  }, [students, studentSearch]);
+
+  const flatResults = useMemo(() => {
+    return results.flatMap((result) =>
+      (result.modules || []).map((module, index) => ({
+        key: `${result._id || result.id}-${index}`,
+        resultId: result._id || result.id || '',
+        studentId: result.studentId,
+        studentName: result.studentName,
+        batch: result.batch,
+        createdAt: result.createdAt,
+        moduleName: module.moduleName,
+        examType: module.examType,
+        marks: module.marks,
+        grade: module.grade,
+      }))
+    );
+  }, [results]);
+
+  const filteredResults = useMemo(() => {
+    const q = search.toLowerCase().trim();
+
+    return flatResults.filter((r) => {
+      if (
+        q &&
+        !r.studentId.toLowerCase().includes(q) &&
+        !r.studentName.toLowerCase().includes(q)
+      ) {
+        return false;
+      }
+
+      if (batchFilter !== 'all' && r.batch !== batchFilter) return false;
+      if (moduleFilter !== 'all' && r.moduleName !== moduleFilter) return false;
+      if (examFilter !== 'all' && r.examType !== examFilter) return false;
+
+      return true;
+    });
+  }, [flatResults, search, batchFilter, moduleFilter, examFilter]);
+
+  const groupedResults = useMemo(() => {
+    const map = new Map<string, typeof filteredResults>();
+
+    filteredResults.forEach((item) => {
+      const existing = map.get(item.studentId) || [];
+      existing.push(item);
+      map.set(item.studentId, existing);
+    });
+
+    return Array.from(map.entries()).map(([studentId, items]) => ({
+      studentId,
+      studentName: items[0]?.studentName || '-',
+      batch: items[0]?.batch || '-',
+      items,
+      total: items.length,
+      passed: items.filter((i) => i.grade !== 'F').length,
+      failed: items.filter((i) => i.grade === 'F').length,
+    }));
+  }, [filteredResults]);
+
+  const batches = Array.from(
+    new Set(flatResults.map((r) => r.batch).filter(Boolean))
+  );
+
+  const modules = Array.from(
+    new Set(flatResults.map((r) => r.moduleName).filter(Boolean))
+  );
+
+  const selectStudent = async (student: Student) => {
+    if (!student.studentId) return;
+
+    try {
+      const data = await resultsApi.getStudentModules(student.studentId);
+
+      setSelectedStudent(data);
+      setStudentSearch(`${data.studentId} - ${data.studentName}`);
+      setStudentDropdown(false);
+      setEditingId(null);
+      setRows([
+        {
+          moduleName: data.modules?.[0] || '',
+          examType: 'Mid exam',
+          marks: '',
+        },
+      ]);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to fetch student modules');
+    }
+  };
+
+  const addRow = () => {
+    setRows((prev) => [
+      ...prev,
+      {
+        moduleName: selectedStudent?.modules?.[0] || '',
+        examType: 'Mid exam',
+        marks: '',
+      },
+    ]);
+  };
+
+  const updateRow = (index: number, key: keyof FormRow, value: string) => {
+    setRows((prev) =>
+      prev.map((row, i) => (i === index ? { ...row, [key]: value } : row))
+    );
+  };
+
+  const removeRow = (index: number) => {
+    setRows((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const resetForm = () => {
+    setSelectedStudent(null);
+    setStudentSearch('');
+    setRows([{ ...emptyRow }]);
+    setEditingId(null);
+  };
+
+  const publishResult = async () => {
+    if (!selectedStudent?.studentId) {
+      toast.error('Please select student');
+      return;
+    }
+
+    const modulesPayload = rows
+      .filter((r) => r.moduleName && r.marks !== '')
+      .map((r) => ({
+        moduleName: r.moduleName,
+        examType: r.examType,
+        marks: Number(r.marks),
+      }));
+
+    if (modulesPayload.length === 0) {
+      toast.error('Please add result rows');
+      return;
+    }
+
+    const invalid = modulesPayload.find(
+      (r) => Number.isNaN(r.marks) || r.marks < 0 || r.marks > 100
+    );
+
+    if (invalid) {
+  toast.error('Marks must be between 0 and 100');
+  return;
+}
+
+    setSaving(true);
+
+    try {
+      if (editingId) {
+        await resultsApi.update(editingId, {
+          studentId: selectedStudent.studentId,
+          modules: modulesPayload,
+        });
+        toast.success('Result updated successfully');
+      } else {
+        await resultsApi.create({
+          studentId: selectedStudent.studentId,
+          modules: modulesPayload,
+        });
+        toast.success('Result published successfully');
+      }
+
+      resetForm();
+      await loadData();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to save result');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editResult = async (resultId: string) => {
+    const result = results.find((r) => (r._id || r.id) === resultId);
+    if (!result) return;
+
+    try {
+      const data = await resultsApi.getStudentModules(result.studentId);
+
+      setSelectedStudent(data);
+      setStudentSearch(`${data.studentId} - ${data.studentName}`);
+      setRows(
+        result.modules.map((m) => ({
+          moduleName: m.moduleName,
+          examType: m.examType,
+          marks: String(m.marks),
+        }))
+      );
+      setEditingId(resultId);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      toast.error('Failed to edit result');
+    }
+  };
+
+  const deleteResult = async (resultId: string) => {
+  try {
+    await resultsApi.remove(resultId);
+    await loadData();
+    toast.success('Result deleted');
+  } catch {
+    toast.error('Failed to delete result');
+  }
+};
+  return (
+    <div className="mx-auto w-full max-w-[1280px] space-y-5 px-4 py-5 sm:px-5">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">Results</h1>
+        <p className="mt-1 text-sm text-slate-500">Dashboard / Results</p>
+      </div>
+
+      <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+        <h2 className="mb-4 text-base font-bold text-slate-900">
+          {editingId ? 'Edit Result' : 'Add New Result'}
+        </h2>
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_1fr]">
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+              Student ID
+            </label>
+
+              <div className="relative" ref={dropdownRef}>
+                <input
+                value={studentSearch}
+                onChange={(e) => {
+                  setStudentSearch(e.target.value);
+                  setStudentDropdown(true);
+                }}
+                onFocus={() => setStudentDropdown(true)}
+                placeholder="Search student ID..."
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 pr-9 text-sm outline-none focus:border-blue-500"
+              />
+              <Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
+
+              {studentDropdown && (
+                <div className="absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-gray-100 bg-white shadow-lg">
+                  {studentOptions.map((student) => (
+                    <button
+                      key={student._id || student.id || student.studentId}
+                      type="button"
+                      onClick={() => selectStudent(student)}
+                      className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left text-sm hover:bg-blue-50"
+                    >
+                      <span className="truncate">
+                        <span className="font-semibold text-blue-600">
+                          {student.studentId}
+                        </span>{' '}
+                        - {student.fullNameEnglish || student.name || 'Student'}
+                      </span>
+                      <span className="shrink-0 text-xs text-slate-400">
+                        {student.batch || '-'}
+                      </span>
+                    </button>
+                  ))}
+
+                  {studentOptions.length === 0 && (
+                    <p className="px-4 py-3 text-sm text-slate-400">
+                      No students found
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-blue-100 bg-blue-50/40 px-4 py-3">
+            {selectedStudent ? (
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white text-blue-600">
+                  <User className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-slate-900">
+                    {selectedStudent.studentId} - {selectedStudent.studentName}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Batch:{' '}
+                    <span className="font-semibold text-blue-600">
+                      {selectedStudent.batch || '-'}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">
+                Select a student to load enrolled modules.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-x-auto rounded-lg border border-gray-100">
+          <table className="w-full min-w-[850px] text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+              <tr>
+                <th className="px-4 py-2">Module / Subject</th>
+                <th className="px-4 py-2">Exam Type</th>
+                <th className="px-4 py-2">Marks</th>
+                <th className="px-4 py-2">Result</th>
+                <th className="px-4 py-2 text-center">Action</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {rows.map((row, index) => {
+                const marks = Number(row.marks);
+                const grade =
+                    row.marks !== '' &&
+                    !Number.isNaN(marks) &&
+                    marks >= 0 &&
+                    marks <= 100
+                      ? calculateGrade(marks)
+                      : '-';
+
+                return (
+                  <tr key={index} className="border-t border-gray-100">
+                    <td className="px-4 py-2">
+                      <select
+                        value={row.moduleName}
+                        onChange={(e) =>
+                          updateRow(index, 'moduleName', e.target.value)
+                        }
+                        className="w-full rounded-lg border border-gray-200 px-3 py-1.5 outline-none focus:border-blue-500"
+                      >
+                        <option value="">Search module...</option>
+                        {(selectedStudent?.modules || []).map((module) => (
+                          <option key={module} value={module}>
+                            {module}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+
+                    <td className="px-4 py-2">
+                      <select
+                        value={row.examType}
+                        onChange={(e) =>
+                          updateRow(
+                            index,
+                            'examType',
+                            e.target.value as 'Mid exam' | 'Final exam'
+                          )
+                        }
+                        className="w-full rounded-lg border border-gray-200 px-3 py-1.5 outline-none focus:border-blue-500"
+                      >
+                        <option value="Mid exam">Mid exam</option>
+                        <option value="Final exam">Final exam</option>
+                      </select>
+                    </td>
+
+                    <td className="px-4 py-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={row.marks}
+                        onChange={(e) =>
+                          updateRow(index, 'marks', e.target.value)
+                        }
+                        className="w-full rounded-lg border border-gray-200 px-3 py-1.5 outline-none focus:border-blue-500"
+                      />
+                    </td>
+
+                    <td className="px-4 py-2">
+                      <span
+                        className={`inline-flex min-w-12 justify-center rounded-lg border px-3 py-1 font-semibold ${gradeClass(
+                          grade
+                        )}`}
+                      >
+                        {grade}
+                      </span>
+                    </td>
+
+                    <td className="px-4 py-2 text-center">
+                      <button
+                        type="button"
+                        onClick={() => removeRow(index)}
+                        className="rounded-lg p-1.5 text-red-500 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            type="button"
+            onClick={addRow}
+            disabled={!selectedStudent}
+            className="inline-flex w-fit items-center gap-2 rounded-lg border border-blue-200 px-3 py-1.5 text-sm font-semibold text-blue-600 disabled:opacity-50"
+          >
+            <Plus className="h-4 w-4" />
+            Add Subject
+          </button>
+
+          <div className="flex gap-2">
+            {editingId && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-lg border px-3 py-1.5 text-sm font-semibold text-slate-600"
+              >
+                Cancel
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={publishResult}
+              disabled={saving || !selectedStudent}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              <Send className="h-4 w-4" />
+              {saving ? 'Saving...' : editingId ? 'Update Result' : 'Publish Result'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
+        <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center">
+          <h2 className="mr-auto text-lg font-bold text-slate-900">Results List</h2>
+
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search student..."
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          />
+
+          <select
+            value={batchFilter}
+            onChange={(e) => setBatchFilter(e.target.value)}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          >
+            <option value="all">All Batches</option>
+            {batches.map((batch) => (
+              <option key={batch} value={batch}>
+                {batch}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={moduleFilter}
+            onChange={(e) => setModuleFilter(e.target.value)}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          >
+            <option value="all">All Modules</option>
+            {modules.map((module) => (
+              <option key={module} value={module}>
+                {module}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={examFilter}
+            onChange={(e) => setExamFilter(e.target.value)}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          >
+            <option value="all">All Exam Types</option>
+            <option value="Mid exam">Mid exam</option>
+            <option value="Final exam">Final exam</option>
+          </select>
+
+          <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-600">
+            <Filter className="h-4 w-4" />
+            Filter
+          </button>
+        </div>
+
+        <div className="overflow-x-auto rounded-xl border border-gray-100">
+          <table className="w-full min-w-[1000px] text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Student ID</th>
+                <th className="px-4 py-3">Student Name</th>
+                <th className="px-4 py-3">Batch</th>
+                <th className="px-4 py-3">Total</th>
+                <th className="px-4 py-3">Passed</th>
+                <th className="px-4 py-3">Failed</th>
+                <th className="px-4 py-3 text-center">Action</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {groupedResults.map((group) => {
+                const isOpen = expandedStudentId === group.studentId;
+
+                return (
+                  <Fragment key={group.studentId}>
+                    <tr className="border-t border-gray-100">
+                      <td className="px-4 py-4">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedStudentId(isOpen ? null : group.studentId)
+                          }
+                          className="font-bold text-blue-600 underline-offset-4 hover:underline"
+                        >
+                          {group.studentId}
+                        </button>
+                      </td>
+                      <td className="px-4 py-4 font-semibold text-slate-900">
+                        {group.studentName}
+                      </td>
+                      <td className="px-4 py-4 text-slate-600">{group.batch}</td>
+                      <td className="px-4 py-4">{group.total}</td>
+                      <td className="px-4 py-4">
+                        <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-bold text-green-700">
+                          {group.passed}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
+                          {group.failed}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedStudentId(isOpen ? null : group.studentId)
+                          }
+                          className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
+                        >
+                          {isOpen ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
+                        </button>
+                      </td>
+                    </tr>
+
+                    {isOpen && (
+                      <tr>
+                        <td colSpan={7} className="bg-slate-50 px-6 py-4">
+                          <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white">
+                            <table className="w-full text-sm">
+                              <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                                <tr>
+                                  <th className="px-4 py-3">#</th>
+                                  <th className="px-4 py-3">Module</th>
+                                  <th className="px-4 py-3">Exam Type</th>
+                                  <th className="px-4 py-3">Marks</th>
+                                  <th className="px-4 py-3">Result</th>
+                                  <th className="px-4 py-3">Date</th>
+                                  <th className="px-4 py-3">Actions</th>
+                                </tr>
+                              </thead>
+
+                              <tbody>
+                                {group.items.map((item, index) => (
+                                  <tr key={item.key} className="border-t border-gray-100">
+                                    <td className="px-4 py-3">{index + 1}</td>
+                                    <td className="px-4 py-3 font-medium">
+                                      {item.moduleName}
+                                    </td>
+                                    <td className="px-4 py-3">{item.examType}</td>
+                                    <td className="px-4 py-3">{item.marks}</td>
+                                    <td className="px-4 py-3">
+                                      <span
+                                        className={`rounded-lg border px-3 py-1 font-semibold ${gradeClass(
+                                          item.grade
+                                        )}`}
+                                      >
+                                        {item.grade}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      {formatDate(item.createdAt)}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <div className="flex gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => editResult(item.resultId)}
+                                          className="rounded-lg p-2 text-indigo-600 hover:bg-indigo-50"
+                                        >
+                                          <Edit2 className="h-4 w-4" />
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => deleteResult(item.resultId)}
+                                          className="rounded-lg p-2 text-red-500 hover:bg-red-50"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+
+              {groupedResults.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                    No results found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
