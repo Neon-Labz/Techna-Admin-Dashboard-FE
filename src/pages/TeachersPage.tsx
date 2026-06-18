@@ -120,14 +120,16 @@ export default function TeachersPage() {
   };
 
   const fetchBackendModules = async () => {
-    try {
-      const data = await getModules();
-      setBackendModules(data);
-    } catch (error: any) {
-      // Silent fail – the dropdown will just show "No modules available"
-      console.error('Failed to load modules:', error);
-    }
-  };
+  try {
+    const data = await getModules();
+
+    console.log('Modules API Response:', data);
+
+    setBackendModules(data);
+  } catch (error) {
+    console.error('Failed to load modules:', error);
+  }
+};
 
   const filtered = teachers.filter(t => {
     const term = search.toLowerCase();
@@ -291,7 +293,7 @@ export default function TeachersPage() {
   );
 
   return (
-    <div className="p-6">
+    <div className="p-3 pb-20 sm:p-6 sm:pb-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Teachers</h1>

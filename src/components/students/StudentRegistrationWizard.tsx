@@ -12,7 +12,6 @@ import {
   Trash2,
   User,
 } from 'lucide-react';
-import type { ApiModule } from '../../lib/api';
 import type { Student, OLResult } from '../../types';
 
 const DISTRICTS = [
@@ -130,15 +129,19 @@ const emptyForm: FormState = {
 };
 
 interface Props {
-  modules: ApiModule[];
-  modulesLoading: boolean;
+  modules: Array<{
+    id?: string;
+    _id?: string;
+    name: string;
+  }>;
+  modulesLoading?: boolean;
   onCancel: () => void;
   onSubmit: (payload: WizardPayload) => Promise<void>;
 }
 
 export default function StudentRegistrationWizard({
   modules,
-  modulesLoading,
+  modulesLoading = false,
   onCancel,
   onSubmit,
 }: Props) {
@@ -686,7 +689,7 @@ export default function StudentRegistrationWizard({
 
                   return (
                     <label
-                      key={module._id}
+                      key={module._id || module.id || module.name}
                       className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${
                         checked
                           ? 'border-indigo-500 bg-indigo-50 text-indigo-700'

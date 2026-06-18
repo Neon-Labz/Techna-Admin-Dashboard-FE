@@ -4,7 +4,7 @@ import { getModules, addResourceUrl, toggleResourcePublish, isAxiosError, type A
 import { validateVideoForm } from '@/lib/validation';
 
 import Modal from '@/components/ui/Modal';
-import { Play, Upload, Search, Filter, Video, Eye, EyeOff } from 'lucide-react';
+import { Play, Upload, Search, Video, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import Toast from '@/components/common/Toast';
 
@@ -178,7 +178,7 @@ export default function VideosPage() {
   };
 
   if (loading) return (
-    <div className="p-6">
+    <div className="p-3 pb-20 sm:p-6 sm:pb-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {[...Array(6)].map((_, i) => (
           <div key={i} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-pulse">
@@ -194,7 +194,7 @@ export default function VideosPage() {
   );
 
   return (
-    <div className="p-6">
+    <div className="p-3 pb-20 sm:p-6 sm:pb-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -214,7 +214,6 @@ export default function VideosPage() {
             className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white" />
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
           <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
             className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <option value="all">All Modules</option>
@@ -270,15 +269,23 @@ export default function VideosPage() {
       </div>
 
       {/* Play Modal */}
-      <Modal isOpen={!!playVideo} onClose={() => setPlayVideo(null)} title={playVideo?.title ?? ''} size="2xl">
+      <Modal
+        isOpen={!!playVideo}
+        onClose={() => setPlayVideo(null)}
+        title={playVideo?.title ?? ''}
+        size="lg"
+        height="content"
+      >
         {playVideo && (
-          <video
-            src={playVideo.url || playVideo.fileUrl}
-            controls
-            controlsList="nodownload"
-            onContextMenu={e => e.preventDefault()}
-            className="w-full rounded-xl max-h-[60vh]"
-          />
+          <div className="flex justify-center rounded-xl bg-black">
+            <video
+              src={playVideo.url || playVideo.fileUrl}
+              controls
+              controlsList="nodownload"
+              onContextMenu={e => e.preventDefault()}
+              className="max-h-[72dvh] w-full rounded-xl object-contain"
+            />
+          </div>
         )}
       </Modal>
 

@@ -8,7 +8,7 @@ export interface PaymentRecord {
   moduleId: string;
   moduleName: string;
   amount: number;
-  paidDate: string;        // YYYY-MM-DD
+  paidDate: string;
   method: 'cash' | 'bank' | 'online';
   status: 'paid' | 'pending' | 'overdue';
   receiptNo: string;
@@ -24,7 +24,7 @@ export interface CreatePaymentPayload {
   moduleId: string;
   moduleName?: string;
   amount: number;
-  paidDate: string;        // YYYY-MM-DD
+  paidDate: string;
   method: 'cash' | 'bank' | 'online';
   status?: 'paid' | 'pending' | 'overdue';
   receiptNo?: string;
@@ -42,72 +42,77 @@ export interface PaymentTrackingResult {
   payments: PaymentRecord[];
 }
 
-/**
- * lib/axios interceptor already unwraps the outer envelope one level:
- *   HTTP body  : { success, message, data: <controller_return>, timestamp, path }
- *   After axios: <controller_return>   (i.e. response.data.data)
- *
- * Payment controller returns: { success: true, payments: [...] }
- * So `result` here IS { success: true, payments: [...] } — no extra `.data` wrapper.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function extractPayments(result: any): PaymentRecord[] {
-  const list: unknown =
-    result?.payments ??   // { success, payments: [...] }  ← controller shape
-    result?.data ??        // raw array fallback
-    result;
-  return Array.isArray(list)
-    ? list.map((p) => ({ ...p, id: (p as { id?: string; _id?: string }).id ?? (p as { _id?: string })._id }))
-    : [];
+function unwrapResponse(result: any): any {
+  const body = result?.data ?? result;
+
+  if (
+    body &&
+    typeof body === 'object' &&
+    'success' in body &&
+    'data' in body
+  ) {
+    return body.data;
+  }
+
+  return body;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizePayment(payment: any): PaymentRecord {
+  return { ...payment, id: payment.id ?? payment._id };
+}
+
+function extractPayments(result: any): PaymentRecord[] {
+  const unwrapped = unwrapResponse(result);
+  const list =
+    unwrapped?.payments ??
+    unwrapped?.data ??
+    unwrapped;
+
+  return Array.isArray(list) ? list.map(normalizePayment) : [];
+}
+
 function extractRecord(result: any): PaymentRecord {
-  // controller returns { success: true, payment: { ... } }
-  const rec = result?.payment ?? result;
-  return { ...rec, id: rec.id ?? rec._id };
+  const unwrapped = unwrapResponse(result);
+  const payment = unwrapped?.payment ?? unwrapped;
+  return normalizePayment(payment);
 }
 
 export const paymentApi = {
-
-  // GET /api/payments — all payments (ADMIN only)
   async getAll(): Promise<PaymentRecord[]> {
-    const result = await (api.get('/payments') as unknown as Promise<unknown>);
+    const result = await api.get('/payments');
     return extractPayments(result);
   },
 
-  // GET /api/payments/student/:studentId
   async getByStudent(studentId: string): Promise<PaymentRecord[]> {
-    const result = await (api.get(`/payments/student/${studentId}`) as unknown as Promise<unknown>);
+    const result = await api.get(`/payments/student/${studentId}`);
     return extractPayments(result);
   },
 
-  // GET /api/payments/student/:studentId/tracking
   async getStudentTracking(
     studentId: string,
     params?: {
       year?: number;
       moduleId?: string;
-      from?: string;   // YYYY-MM
-      to?: string;     // YYYY-MM
-    }
+      from?: string;
+      to?: string;
+    },
   ): Promise<PaymentTrackingResult> {
-    const result = await (api.get(
-      `/payments/student/${studentId}/tracking`,
-      { params }
-    ) as unknown as Promise<PaymentTrackingResult>);
-    return result;
+    const result = await api.get(`/payments/student/${studentId}/tracking`, {
+      params,
+    });
+    return unwrapResponse(result) as PaymentTrackingResult;
   },
 
-  // POST /api/payments — create a new payment (ADMIN only)
   async create(payload: CreatePaymentPayload): Promise<PaymentRecord> {
-    const result = await (api.post('/payments', payload) as unknown as Promise<unknown>);
+    const result = await api.post('/payments', payload);
     return extractRecord(result);
   },
 
-  // PATCH /api/payments/:id — update an existing payment (ADMIN only)
-  async update(id: string, payload: Partial<CreatePaymentPayload>): Promise<PaymentRecord> {
-    const result = await (api.patch(`/payments/${id}`, payload) as unknown as Promise<unknown>);
+  async update(
+    id: string,
+    payload: Partial<CreatePaymentPayload>,
+  ): Promise<PaymentRecord> {
+    const result = await api.patch(`/payments/${id}`, payload);
     return extractRecord(result);
   },
 };

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Outlet } from 'react-router-dom';
 import Sidebar, { MobileMenuButton } from './Sidebar';
@@ -30,12 +30,16 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const pageName = pageNames[pathname ?? '/dashboard'] || 'Dashboard';
 
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
+
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-100 shadow-sm">
+        <header className="flex items-center justify-between px-3 py-3 bg-white border-b border-gray-100 shadow-sm sm:px-6">
           <div className="flex items-center gap-3">
             <MobileMenuButton onClick={() => setSidebarOpen(true)} />
             <h2 className="font-semibold text-gray-800 hidden sm:block">

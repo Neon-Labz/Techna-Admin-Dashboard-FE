@@ -1,6 +1,6 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
-// Backend wraps all responses in: { success, message, data, timestamp, path }
 interface ApiWrappedResponse<T = unknown> {
   success: boolean;
   message: string;
@@ -15,14 +15,15 @@ interface RequestOptions {
   headers?: Record<string, string>;
 }
 
-/**
- * Get the stored auth token from localStorage
- */
 export function getStoredToken(): string | null {
   if (typeof window === 'undefined') return null;
+
   try {
-    const stored = localStorage.getItem('edu-auth');
+    const stored =
+      localStorage.getItem('techna-auth') || localStorage.getItem('edu-auth');
+
     if (!stored) return null;
+
     const parsed = JSON.parse(stored);
     return parsed?.state?.token || null;
   } catch {
@@ -30,15 +31,11 @@ export function getStoredToken(): string | null {
   }
 }
 
-/**
- * Core API request function with automatic token attachment
- */
 export async function apiClient<T = unknown>(
   endpoint: string,
   options: RequestOptions = {},
 ): Promise<T> {
   const { method = 'GET', body, headers = {} } = options;
-
   const token = getStoredToken();
 
   const config: RequestInit = {
@@ -50,21 +47,23 @@ export async function apiClient<T = unknown>(
     },
   };
 
-  if (body) {
+  if (body !== undefined) {
     config.body = JSON.stringify(body);
   }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
 
-  // Handle 401 Unauthorized
   if (response.status === 401) {
     const errorData = await response.json().catch(() => ({}));
-    const message = errorData.message || 'Unauthorized';
+    const message =
+      errorData.message || 'Session expired. Please login again.';
 
-    // Only clear auth and redirect if this is NOT a login attempt
-    // (login failures also return 401 but shouldn't trigger redirect)
-    const isLoginRequest = endpoint.includes('/auth/login') || endpoint.includes('/auth/student/login');
+    const isLoginRequest =
+      endpoint.includes('/auth/login') ||
+      endpoint.includes('/auth/student/login');
+
     if (!isLoginRequest && typeof window !== 'undefined') {
+      localStorage.removeItem('techna-auth');
       localStorage.removeItem('edu-auth');
       window.location.href = '/login';
     }
@@ -74,13 +73,14 @@ export async function apiClient<T = unknown>(
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    const message = errorData.message || `Request failed with status ${response.status}`;
+    const message =
+      errorData.message || `Request failed with status ${response.status}`;
+
     throw new Error(Array.isArray(message) ? message[0] : message);
   }
 
   const json: ApiWrappedResponse<T> = await response.json();
 
-  // Unwrap the backend's ApiResponse wrapper to return just the data
   if (json && typeof json === 'object' && 'success' in json && 'data' in json) {
     return json.data as T;
   }
