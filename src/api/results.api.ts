@@ -16,7 +16,7 @@ const getObject = (res: any) => {
 
 export const resultsApi = {
   getStudents: async () => {
-    const res = await api.get('/students');
+    const res = await api.get('/students?status=approved');
 
     const students = getArray(res);
 
