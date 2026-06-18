@@ -83,3 +83,8 @@ export async function approveStudent(id: string): Promise<Student> {
   const student = await api.patch<Student, Student>(`/students/${id}/approve`);
   return student;
 }
+
+export async function rejectStudent(id: string, reason: string): Promise<Student> {
+  const student = await api.patch<Student, Student>(`/students/${id}/reject`, { reason });
+  return student;
+}

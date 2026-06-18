@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import {
   approveStudent as approveStudentRequest,
+  rejectStudent as rejectStudentRequest,
   createStudent,
   deleteStudent as deleteStudentRequest,
   getStudents,
@@ -47,11 +48,13 @@ function getSelectedSubjects(s: any): string[] {
 function generateStudentId(batch: string): string {
   const existing =
     JSON.parse(localStorage.getItem('edu-data') || '{}')?.students || [];
+
   const batchStudents = existing.filter((s: Student) => s.batch === batch);
   const num = (batchStudents.length + 1).toString().padStart(4, '0');
   const parts = batch.split(' ');
   const month = parts[0] || 'Jan';
   const year = parts[1] ? parts[1].slice(2) : '24';
+
   return `${month}${year}#${num}`;
 }
 
@@ -115,8 +118,30 @@ const SAMPLE_MODULES: Module[] = [
 ];
 
 const SAMPLE_TEACHERS: Teacher[] = [
-  { id: 't1', name: 'Ms. Sarah Johnson', email: 'sarah@eduadmin.com', phone: '+94771112222', subject: ['English', 'Mathematics'], qualification: 'B.Ed (English)', experience: '8 years', address: 'Colombo 03', joinDate: '2020-01-15', status: 'active' },
-  { id: 't2', name: 'Mr. David Silva', email: 'david@eduadmin.com', phone: '+94773334444', subject: ['Science', 'Physics'], qualification: 'B.Sc (Physics)', experience: '5 years', address: 'Colombo 05', joinDate: '2021-03-01', status: 'active' },
+  {
+    id: 't1',
+    name: 'Ms. Sarah Johnson',
+    email: 'sarah@eduadmin.com',
+    phone: '+94771112222',
+    subject: ['English', 'Mathematics'],
+    qualification: 'B.Ed (English)',
+    experience: '8 years',
+    address: 'Colombo 03',
+    joinDate: '2020-01-15',
+    status: 'active',
+  },
+  {
+    id: 't2',
+    name: 'Mr. David Silva',
+    email: 'david@eduadmin.com',
+    phone: '+94773334444',
+    subject: ['Science', 'Physics'],
+    qualification: 'B.Sc (Physics)',
+    experience: '5 years',
+    address: 'Colombo 05',
+    joinDate: '2021-03-01',
+    status: 'active',
+  },
 ];
 
 const SAMPLE_STUDENTS: Student[] = [];
@@ -171,12 +196,15 @@ interface DataStore {
   updateStudent: (id: string, s: Partial<Student>) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
   approveStudent: (id: string) => Promise<void>;
+  rejectStudent: (id: string, reason: string) => Promise<void>;
+
   updateAttendance: (
     studentId: string,
     moduleId: string,
     date: string,
     status: 'present' | 'absent',
   ) => void;
+
   addPayment: (studentId: string, payment: Omit<PaymentRecord, 'id'>) => void;
   updatePayment: (
     studentId: string,
@@ -255,79 +283,102 @@ function mapBackendStudent(s: any): Student {
   } as Student;
 }
 
+function mapRaceToBackend(race?: string): string | undefined {
+  if (!race) return undefined;
+
+  const raceMap: Record<string, string> = {
+    'Sri Lankan Tamil': 'Tamil',
+    'Indian Tamil': 'Tamil',
+  };
+
+  return raceMap[race] || race;
+}
+
+function mapReligionToBackend(religion?: string): string | undefined {
+  if (!religion) return undefined;
+
+  const religionMap: Record<string, string> = {
+    Christianity: 'Christianity(RC/Non.RC)',
+    Catholicism: 'Christianity(RC/Non.RC)',
+  };
+
+  return religionMap[religion] || religion;
+}
+
 function mapStudentToCreatePayload(
   s: Omit<Student, 'id' | 'studentId' | 'qrToken' | 'attendance' | 'payments'>,
   modules: Module[],
 ): CreateStudentRequestPayload {
   const selectedSubjects = getSelectedSubjects(s);
-  const fullNameEnglish = s.fullNameEnglish?.trim() || s.name.trim();
+  const fullNameEnglish = s.fullNameEnglish?.trim() || s.name?.trim() || '';
   const dob = s.dob?.trim() || s.dateOfBirth?.trim();
 
- return {
-  name: fullNameEnglish,
-  fullNameEnglish,
-  fullNameTamil: s.fullNameTamil?.trim(),
+  return {
+    name: fullNameEnglish,
+    fullNameEnglish,
+    fullNameTamil: s.fullNameTamil?.trim(),
 
-  email: s.email.trim(),
-  phone: s.whatsappNo?.trim() || s.phone?.trim(),
+    email: s.email.trim(),
+    phone: s.whatsappNo?.trim() || s.phone?.trim() || '',
 
-  whatsappNo: s.whatsappNo?.trim(),
-  parentsNo: s.parentsNo?.trim(),
+    whatsappNo: s.whatsappNo?.trim(),
+    parentsNo: s.parentsNo?.trim(),
 
-  batch: s.batch.trim(),
+    batch: s.batch.trim(),
 
-  modules: selectedSubjects,
-  subjects: selectedSubjects,
+    modules: selectedSubjects,
+    subjects: selectedSubjects,
 
-  address: s.address?.trim(),
-  permanentAddress: s.permanentAddress?.trim(),
-  contactAddress: s.contactAddress?.trim(),
+    address: s.address?.trim(),
+    permanentAddress: s.permanentAddress?.trim(),
+    contactAddress: s.contactAddress?.trim(),
 
-  administrativeDistrict: s.administrativeDistrict?.trim(),
-  postalCode: s.postalCode?.trim(),
+    administrativeDistrict: s.administrativeDistrict?.trim(),
+    postalCode: s.postalCode?.trim(),
 
-  dob,
-  dateOfBirth: dob,
+    dob,
+    dateOfBirth: dob,
 
-  nicNo: s.nicNo?.trim(),
-  school: s.school?.trim(),
+    nicNo: s.nicNo?.trim(),
+    school: s.school?.trim(),
 
-  parentName:
-    s.motherName?.trim() ||
-    s.fatherName?.trim() ||
-    s.guardianName?.trim() ||
-    s.parentName?.trim(),
-  parentPhone:
-    s.parentsNo?.trim() ||
-    s.guardianMobile?.trim() ||
-    s.parentPhone?.trim(),
+    parentName:
+      s.motherName?.trim() ||
+      s.fatherName?.trim() ||
+      s.guardianName?.trim() ||
+      s.parentName?.trim(),
 
-  fatherName: s.fatherName?.trim(),
-  motherName: s.motherName?.trim(),
-  guardianName: s.guardianName?.trim(),
+    parentPhone:
+      s.parentsNo?.trim() ||
+      s.guardianMobile?.trim() ||
+      s.parentPhone?.trim(),
 
-  guardianMobile: s.guardianMobile?.trim(),
-  guardianAddress: s.guardianAddress?.trim(),
-  guardianFixedTel: s.guardianFixedTel?.trim(),
+    fatherName: s.fatherName?.trim(),
+    motherName: s.motherName?.trim(),
+    guardianName: s.guardianName?.trim(),
 
-  fixedTelephone: s.fixedTelephone?.trim(),
-  residingSince: s.residingSince?.trim(),
+    guardianMobile: s.guardianMobile?.trim(),
+    guardianAddress: s.guardianAddress?.trim(),
+    guardianFixedTel: s.guardianFixedTel?.trim(),
 
-  race: s.race,
-  religion: s.religion,
-  citizenByDescent: s.citizenByDescent,
+    fixedTelephone: s.fixedTelephone?.trim(),
+    residingSince: s.residingSince?.trim(),
 
-  contactPerson: s.contactPerson,
+    race: mapRaceToBackend(s.race),
+    religion: mapReligionToBackend(s.religion),
+    citizenByDescent: s.citizenByDescent,
 
-  olCategory: s.olCategory,
-  olYear: s.olYear,
-  olIndexNumber: s.olIndexNumber,
-  olNameUsed: s.olNameUsed,
-  olAccept: s.olAccept,
-  olResults: cleanOlResults(s.olResults || []) as Student['olResults'],
+    contactPerson: s.contactPerson,
 
-  password: s.password?.trim() || '',
-} as CreateStudentRequestPayload;
+    olCategory: s.olCategory,
+    olYear: s.olYear,
+    olIndexNumber: s.olIndexNumber,
+    olNameUsed: s.olNameUsed,
+    olAccept: s.olAccept,
+    olResults: cleanOlResults(s.olResults || []),
+
+    password: s.password?.trim() || '',
+  } as CreateStudentRequestPayload;
 }
 
 function buildLocalStudentFallback(
@@ -357,25 +408,25 @@ export const useDataStore = create<DataStore>()(
       exams: SAMPLE_EXAMS,
 
       fetchStudents: async () => {
-  try {
-    const response = await getStudents();
+        try {
+          const response = await getStudents();
 
-    const studentsArray = Array.isArray(response)
-      ? response
-      : Array.isArray((response as any)?.data)
-        ? (response as any).data
-        : Array.isArray((response as any)?.students)
-          ? (response as any).students
-          : Array.isArray((response as any)?.data?.students)
-            ? (response as any).data.students
-            : [];
+          const studentsArray = Array.isArray(response)
+            ? response
+            : Array.isArray((response as any)?.data)
+              ? (response as any).data
+              : Array.isArray((response as any)?.students)
+                ? (response as any).students
+                : Array.isArray((response as any)?.data?.students)
+                  ? (response as any).data.students
+                  : [];
 
-    set({ students: studentsArray.map(mapBackendStudent) });
-  } catch (error) {
-    console.error('Failed to fetch students:', error);
-    set({ students: [] });
-  }
-},
+          set({ students: studentsArray.map(mapBackendStudent) });
+        } catch (error) {
+          console.error('Failed to fetch students:', error);
+          set({ students: [] });
+        }
+      },
 
       addTeacher: (t) =>
         set((state) => ({
@@ -396,7 +447,10 @@ export const useDataStore = create<DataStore>()(
 
       addStudent: async (s) => {
         try {
-          const created = await createStudent(mapStudentToCreatePayload(s, get().modules));
+          const created = await createStudent(
+            mapStudentToCreatePayload(s, get().modules),
+          );
+
           const mapped = created
             ? mapBackendStudent(created)
             : buildLocalStudentFallback(s);
@@ -411,10 +465,16 @@ export const useDataStore = create<DataStore>()(
 
       updateStudent: async (id, s) => {
         try {
+          const selectedSubjects = getSelectedSubjects(s);
+
           const payload = {
             ...s,
-            modules: getSelectedSubjects(s),
-            subjects: getSelectedSubjects(s),
+            ...(selectedSubjects.length > 0
+              ? {
+                  modules: selectedSubjects,
+                  subjects: selectedSubjects,
+                }
+              : {}),
           };
 
           const updated = await updateStudentRequest(id, payload);
@@ -445,24 +505,90 @@ export const useDataStore = create<DataStore>()(
 
       approveStudent: async (id) => {
         try {
+          const student = get().students.find((x) => x.id === id);
+
+          if (student) {
+            const fixPayload: Record<string, any> = {};
+
+            const validRaces = [
+              'Sinhala',
+              'Tamil',
+              'Muslim',
+              'Burgher',
+              'Malay',
+              'Other',
+            ];
+
+            if (student.race && !validRaces.includes(student.race)) {
+              fixPayload.race = mapRaceToBackend(student.race);
+            }
+
+            const validReligions = [
+              'Buddhism',
+              'Hinduism',
+              'Islam',
+              'Christianity(RC/Non.RC)',
+              'Other',
+            ];
+
+            if (student.religion && !validReligions.includes(student.religion)) {
+              fixPayload.religion = mapReligionToBackend(student.religion);
+            }
+
+            if (student.olResults && student.olResults.length > 0) {
+              fixPayload.olResults = cleanOlResults(student.olResults);
+            }
+
+            if (Object.keys(fixPayload).length > 0) {
+              await updateStudentRequest(id, fixPayload);
+            }
+          }
+
           const approved = await approveStudentRequest(id);
 
           set((state) => ({
-            students: state.students.map((x) =>
-              x.id === id
-                ? mapBackendStudent(
-                    approved || {
-                      ...x,
-                      _id: id,
-                      status: 'approved',
-                      approvedAt: new Date().toISOString(),
-                    },
-                  )
-                : x,
-            ),
+            students: state.students.map((x) => {
+              if (x.id !== id) return x;
+
+              if (approved) {
+                return mapBackendStudent(approved);
+              }
+
+              return {
+                ...x,
+                status: 'approved' as const,
+                approvedAt: new Date().toISOString(),
+              };
+            }),
           }));
         } catch (error) {
           console.error('Failed to approve student:', error);
+          const msg = getApiErrorMessage(error, 'Failed to approve student');
+          throw new Error(msg);
+        }
+      },
+
+      rejectStudent: async (id, reason) => {
+        try {
+          const rejected: any = await rejectStudentRequest(id, reason);
+
+          set((state) => ({
+            students: state.students.map((x) => {
+              if (x.id !== id) return x;
+
+              return {
+                ...x,
+                status: 'rejected' as const,
+                ...(rejected?.rejectionReason
+                  ? { rejectionReason: rejected.rejectionReason }
+                  : {}),
+              };
+            }),
+          }));
+        } catch (error) {
+          console.error('Failed to reject student:', error);
+          const msg = getApiErrorMessage(error, 'Failed to reject student');
+          throw new Error(msg);
         }
       },
 
@@ -474,6 +600,7 @@ export const useDataStore = create<DataStore>()(
             const existing = s.attendance.find(
               (a) => a.moduleId === moduleId && a.date === date,
             );
+
             const module = state.modules.find((m) => m.id === moduleId);
 
             if (existing) {
@@ -586,13 +713,14 @@ export const useDataStore = create<DataStore>()(
           exams: state.exams.filter((x) => x.id !== id),
         })),
     }),
-{
-  name: 'edu-data',
-  partialize: (state) => ({
-    teachers: state.teachers,
-    modules: state.modules,
-    videos: state.videos,
-    exams: state.exams,
-  }),
-},  ),
+    {
+      name: 'edu-data',
+      partialize: (state) => ({
+        teachers: state.teachers,
+        modules: state.modules,
+        videos: state.videos,
+        exams: state.exams,
+      }),
+    },
+  ),
 );
