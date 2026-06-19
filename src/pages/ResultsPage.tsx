@@ -136,14 +136,12 @@ export default function ResultsPage() {
   const studentOptions = useMemo(() => {
     const q = studentSearch.toLowerCase().trim();
 
-    return students
-      .filter((s) => {
-        const sid = s.studentId?.toLowerCase() || '';
-        const name = (s.fullNameEnglish || s.name || '').toLowerCase();
-        if (!q) return true;
-        return sid.includes(q) || name.includes(q);
-      })
-      .slice(0, 6);
+    return students.filter((s) => {
+      const sid = s.studentId?.toLowerCase() || '';
+      const name = (s.fullNameEnglish || s.name || '').toLowerCase();
+      if (!q) return true;
+      return sid.includes(q) || name.includes(q);
+    });
   }, [students, studentSearch]);
 
   const flatResults = useMemo(() => {
@@ -163,48 +161,51 @@ export default function ResultsPage() {
     );
   }, [results]);
 
-  const filteredResults = useMemo(() => {
+  const groupedResults = useMemo(() => {
     const q = search.toLowerCase().trim();
 
-    return flatResults.filter((r) => {
-      if (
-        q &&
-        !r.studentId.toLowerCase().includes(q) &&
-        !r.studentName.toLowerCase().includes(q)
-      ) {
-        return false;
-      }
+    return students
+      .filter((student) => {
+        if (q) {
+          const sid = (student.studentId || '').toLowerCase();
+          const name = (student.fullNameEnglish || student.name || '').toLowerCase();
+          if (!sid.includes(q) && !name.includes(q)) return false;
+        }
+        if (batchFilter !== 'all' && student.batch !== batchFilter) return false;
+        return true;
+      })
+      .map((student) => {
+        const allItems = flatResults.filter(
+          (r) => r.studentId === student.studentId,
+        );
 
-      if (batchFilter !== 'all' && r.batch !== batchFilter) return false;
-      if (moduleFilter !== 'all' && r.moduleName !== moduleFilter) return false;
-      if (examFilter !== 'all' && r.examType !== examFilter) return false;
+        const items = allItems.filter((item) => {
+          if (moduleFilter !== 'all' && item.moduleName !== moduleFilter) return false;
+          if (examFilter !== 'all' && item.examType !== examFilter) return false;
+          return true;
+        });
 
-      return true;
-    });
-  }, [flatResults, search, batchFilter, moduleFilter, examFilter]);
-
-  const groupedResults = useMemo(() => {
-    const map = new Map<string, typeof filteredResults>();
-
-    filteredResults.forEach((item) => {
-      const existing = map.get(item.studentId) || [];
-      existing.push(item);
-      map.set(item.studentId, existing);
-    });
-
-    return Array.from(map.entries()).map(([studentId, items]) => ({
-      studentId,
-      studentName: items[0]?.studentName || '-',
-      batch: items[0]?.batch || '-',
-      items,
-      total: items.length,
-      passed: items.filter((i) => i.grade !== 'F').length,
-      failed: items.filter((i) => i.grade === 'F').length,
-    }));
-  }, [filteredResults]);
+        return {
+          studentId: student.studentId || '',
+          studentName: student.fullNameEnglish || student.name || '-',
+          batch: student.batch || '-',
+          items,
+          total: items.length,
+          passed: items.filter((i) => i.grade !== 'F').length,
+          failed: items.filter((i) => i.grade === 'F').length,
+        };
+      })
+      .filter((group) => {
+        // When a module or exam-type filter is active, hide students with no matching items
+        if ((moduleFilter !== 'all' || examFilter !== 'all') && group.total === 0) {
+          return false;
+        }
+        return true;
+      });
+  }, [students, flatResults, search, batchFilter, moduleFilter, examFilter]);
 
   const batches = Array.from(
-    new Set(flatResults.map((r) => r.batch).filter(Boolean))
+    new Set(students.map((s) => s.batch).filter(Boolean))
   );
 
   const modules = Array.from(
