@@ -65,6 +65,7 @@ function mapApiTeacher(t: TeacherFromApi): Teacher {
     address: t.address,
     joinDate: t.joinDate,
     status: t.status,
+    photoUrl: t.photoUrl,
   };
 }
 
@@ -95,6 +96,8 @@ export default function TeachersPage() {
   const [deleting, setDeleting] = useState(false);
   const [subjectDropdownOpen, setSubjectDropdownOpen] = useState(false);
   const [subjectSearch, setSubjectSearch] = useState('');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   const subjectDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -172,6 +175,8 @@ export default function TeachersPage() {
     setEditTeacher(null);
     setSubjectDropdownOpen(false);
     setSubjectSearch('');
+    setPhotoFile(null);
+    setPhotoPreview(null);
     setModalOpen(true);
   };
 
@@ -190,7 +195,18 @@ export default function TeachersPage() {
     setEditTeacher(t);
     setSubjectDropdownOpen(false);
     setSubjectSearch('');
+    setPhotoFile(null);
+    setPhotoPreview(t.photoUrl || null);
     setModalOpen(true);
+  };
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setPhotoPreview(reader.result as string);
+    reader.readAsDataURL(file);
   };
 
   const toggleSubject = (subject: string) => {
@@ -235,12 +251,26 @@ export default function TeachersPage() {
       setSaving(true);
       const payload = mapFormToPayload(form);
 
+      let savedId: string;
       if (editTeacher) {
         await teacherApi.update(editTeacher.id, payload);
-        toast.success('Teacher updated!');
+        savedId = editTeacher.id;
       } else {
-        await teacherApi.create(payload);
-        toast.success('Teacher added!');
+        const created = await teacherApi.create(payload);
+        savedId = created._id;
+      }
+
+      if (photoFile && savedId) {
+        try {
+          await teacherApi.uploadPhoto(savedId, photoFile);
+          toast.success(editTeacher ? 'Teacher updated with photo!' : 'Teacher added with photo!');
+        } catch (photoErr) {
+          console.error('Photo upload error:', photoErr);
+          toast.success(editTeacher ? 'Teacher updated!' : 'Teacher added!');
+          toast.error('Photo upload failed — teacher saved without photo');
+        }
+      } else {
+        toast.success(editTeacher ? 'Teacher updated!' : 'Teacher added!');
       }
 
       setModalOpen(false);
@@ -343,7 +373,21 @@ export default function TeachersPage() {
             >
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-100">
+                  {t.photoUrl ? (
+                    <img
+                      src={t.photoUrl}
+                      alt={t.name}
+                      className="h-12 w-12 shrink-0 rounded-xl object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.nextElementSibling?.removeAttribute('style');
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-100"
+                    style={t.photoUrl ? { display: 'none' } : undefined}
+                  >
                     <span className="text-indigo-600 font-bold text-lg">
                       {t.name.charAt(0)}
                     </span>
@@ -567,6 +611,31 @@ export default function TeachersPage() {
           {inp('address', 'Address')}
           {inp('joinDate', 'Join Date', 'date')}
           {inp('status', 'Status', 'text', ['active', 'inactive'])}
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Profile Photo
+            </label>
+            <div className="flex items-center gap-4">
+              {photoPreview ? (
+                <img
+                  src={photoPreview}
+                  alt="Preview"
+                  className="w-16 h-16 rounded-full object-cover border-2 border-gray-200 shrink-0"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-2xl shrink-0">
+                  👤
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoChange}
+                className="text-sm text-gray-600"
+              />
+            </div>
+          </div>
 
           <div className="sticky bottom-0 -mx-3.5 flex gap-3 border-t border-gray-100 bg-white px-3.5 py-3 md:col-span-2 md:-mx-5 md:px-5">
             <button

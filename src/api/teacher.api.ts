@@ -1,4 +1,4 @@
-import { apiClient } from './axiosClient';
+import { apiClient, getStoredToken } from './axiosClient';
 
 export interface TeacherFromApi {
   _id: string;
@@ -11,6 +11,8 @@ export interface TeacherFromApi {
   address: string;
   joinDate: string;
   status: 'active' | 'inactive';
+  photoUrl?: string;
+  photoKey?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -40,6 +42,32 @@ function toApiBody(data: CreateTeacherPayload | UpdateTeacherPayload) {
   };
 }
 
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+
+async function uploadTeacherPhoto(
+  id: string,
+  file: File,
+): Promise<TeacherFromApi> {
+  const token = getStoredToken();
+  const formData = new FormData();
+  formData.append('photo', file);
+
+  const response = await fetch(`${API_BASE_URL}/teachers/${id}/upload-photo`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to upload photo');
+  }
+
+  const json = await response.json();
+  return json?.data ?? json;
+}
+
 export const teacherApi = {
   getAll: () => apiClient<TeacherFromApi[]>('/teachers'),
 
@@ -59,4 +87,6 @@ export const teacherApi = {
     apiClient<{ message: string }>(`/teachers/${id}`, {
       method: 'DELETE',
     }),
+
+  uploadPhoto: uploadTeacherPhoto,
 };

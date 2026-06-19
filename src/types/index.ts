@@ -20,6 +20,7 @@ export interface Teacher {
   joinDate: string;
   status: 'active' | 'inactive';
   avatar?: string;
+  photoUrl?: string;
 }
 
 export interface Module {
