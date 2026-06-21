@@ -13,6 +13,7 @@ export interface Teacher {
   name: string;
   email: string;
   phone: string;
+  gender?: 'male' | 'female' | '';
   subject: string[];
   qualification: string;
   experience: string;
