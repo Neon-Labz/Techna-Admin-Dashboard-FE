@@ -5,6 +5,7 @@ export interface TeacherFromApi {
   fullName: string;
   email: string;
   phone: string;
+  gender?: 'male' | 'female' | '';
   subject: string | string[];
   qualification: string;
   experience: string;
@@ -21,6 +22,7 @@ export interface CreateTeacherPayload {
   fullName: string;
   email: string;
   phone: string;
+  gender?: 'male' | 'female' | '';
   subject: string[];
   qualification: string;
   experience: string;
@@ -32,13 +34,17 @@ export interface CreateTeacherPayload {
 export type UpdateTeacherPayload = Partial<CreateTeacherPayload>;
 
 function toApiBody(data: CreateTeacherPayload | UpdateTeacherPayload) {
-  const { subject, ...rest } = data;
+  const { subject, gender, ...rest } = data;
 
   return {
     ...rest,
     ...(subject !== undefined
       ? { subject: Array.isArray(subject) ? subject.join(', ') : subject }
       : {}),
+    // Only send gender when a real value is selected. This avoids sending an
+    // empty string that backend enum/whitelist validation might reject, and
+    // keeps the request compatible with backends that don't define gender.
+    ...(gender ? { gender } : {}),
   };
 }
 

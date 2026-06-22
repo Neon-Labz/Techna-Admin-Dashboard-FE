@@ -32,6 +32,7 @@ const emptyTeacher: TeacherForm = {
   name: '',
   email: '',
   phone: '',
+  gender: '',
   subject: [],
   qualification: '',
   experience: '',
@@ -53,27 +54,126 @@ function formatSubjects(subjects: string[]): string {
   return subjects.join(', ');
 }
 
+function todayStr(): string {
+  const d = new Date();
+  const offset = d.getTimezoneOffset();
+  const local = new Date(d.getTime() - offset * 60 * 1000);
+  return local.toISOString().split('T')[0];
+}
+
+// The backend's R2 public base URL has a typo (".r2.devya" instead of
+// ".r2.dev"), so stored photo URLs don't resolve. Correct it on the client.
+function normalizePhotoUrl(url?: string): string {
+  if (!url) return '';
+  return url.trim().replace(/\.r2\.devya\b/gi, '.r2.dev');
+}
+
+const TITLE_PREFIXES = new Set([
+  'mr',
+  'mrs',
+  'ms',
+  'miss',
+  'dr',
+  'prof',
+  'mr.',
+  'mrs.',
+  'ms.',
+  'miss.',
+  'dr.',
+  'prof.',
+]);
+
+function stripTitle(name: string): string {
+  return (name || '')
+    .trim()
+    .split(/\s+/)
+    .filter((p) => !TITLE_PREFIXES.has(p.toLowerCase()))
+    .join(' ');
+}
+
+function titleFromGender(gender: Teacher['gender']): string {
+  if (gender === 'male') return 'Mr.';
+  if (gender === 'female') return 'Ms.';
+  return '';
+}
+
+// Common first names used to infer a title when the backend has no gender stored.
+const FEMALE_NAMES = new Set([
+  'nimali', 'geerthika', 'sara', 'sarah', 'mary', 'emma', 'olivia', 'sophia',
+  'priya', 'anjali', 'deepika', 'kavya', 'lakshmi', 'shanthi', 'malini',
+  'kumari', 'nisha', 'divya', 'ramya', 'thanuja', 'dilani', 'sandya',
+  'jane', 'linda', 'susan', 'jessica', 'amanda', 'fatima', 'aisha',
+]);
+
+const MALE_NAMES = new Set([
+  'michael', 'david', 'john', 'james', 'robert', 'william', 'hari', 'gowsikan',
+  'gowsi', 'joe', 'suka', 'siva', 'kumar', 'raj', 'ravi', 'arun', 'vijay',
+  'anil', 'sunil', 'mahesh', 'suresh', 'ramesh', 'athithya', 'kajan',
+  'mohamed', 'ahmed', 'thomas', 'daniel', 'peter', 'paul', 'mark',
+]);
+
+function inferGender(name: string): Teacher['gender'] {
+  const trimmed = (name || '').trim().toLowerCase();
+
+  // 1. Title prefix embedded in the stored name (how we persist gender).
+  if (/^(mr|dr|prof)\.?\s/.test(trimmed)) return 'male';
+  if (/^(mrs|ms|miss)\.?\s/.test(trimmed)) return 'female';
+
+  // 2. Fall back to a known first-name list.
+  const first = stripTitle(name).split(/\s+/)[0]?.toLowerCase() ?? '';
+  if (!first) return '';
+  if (FEMALE_NAMES.has(first)) return 'female';
+  if (MALE_NAMES.has(first)) return 'male';
+  return '';
+}
+
+function displayName(t: Teacher): string {
+  const clean = stripTitle(t.name);
+  const gender = t.gender || inferGender(t.name);
+  const title = titleFromGender(gender);
+  return title ? `${title} ${clean}` : clean;
+}
+
+function getInitials(name: string): string {
+  const parts = stripTitle(name)
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+
 function mapApiTeacher(t: TeacherFromApi): Teacher {
   return {
     id: t._id,
     name: t.fullName,
     email: t.email,
     phone: t.phone,
+    gender: t.gender || inferGender(t.fullName),
     subject: normalizeSubject(t.subject),
     qualification: t.qualification,
     experience: t.experience,
     address: t.address,
     joinDate: t.joinDate,
     status: t.status,
-    photoUrl: t.photoUrl,
+    photoUrl: normalizePhotoUrl(t.photoUrl),
   };
 }
 
 function mapFormToPayload(form: TeacherForm): CreateTeacherPayload {
+  // Persist gender by embedding the title into fullName (the backend stores
+  // fullName but has no dedicated gender field). e.g. "Mr. David Silva".
+  const cleanName = stripTitle(form.name).trim();
+  const title = titleFromGender(form.gender);
+  const fullName = title ? `${title} ${cleanName}` : cleanName;
+
   return {
-    fullName: form.name.trim(),
+    fullName,
     email: form.email.trim(),
     phone: form.phone.trim(),
+    gender: form.gender,
     subject: form.subject,
     qualification: form.qualification.trim(),
     experience: form.experience.trim(),
@@ -159,11 +259,15 @@ export default function TeachersPage() {
   };
 
   const filtered = teachers.filter((t) => {
-    const term = search.toLowerCase();
+    const term = search.trim().toLowerCase();
+    if (!term) return true;
 
     return (
       (t.name || '').toLowerCase().includes(term) ||
+      displayName(t).toLowerCase().includes(term) ||
       (t.email || '').toLowerCase().includes(term) ||
+      (t.phone || '').toLowerCase().includes(term) ||
+      (t.qualification || '').toLowerCase().includes(term) ||
       formatSubjects(t.subject).toLowerCase().includes(term)
     );
   });
@@ -182,9 +286,10 @@ export default function TeachersPage() {
 
   const openEdit = (t: Teacher) => {
     setForm({
-      name: t.name,
+      name: stripTitle(t.name),
       email: t.email,
       phone: t.phone,
+      gender: t.gender || inferGender(t.name),
       subject: t.subject,
       qualification: t.qualification,
       experience: t.experience,
@@ -241,6 +346,16 @@ export default function TeachersPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!form.gender) {
+      toast.error('Please select a gender');
+      return;
+    }
+
+    if (!editTeacher && form.joinDate && form.joinDate < todayStr()) {
+      toast.error('Join date cannot be in the past');
+      return;
+    }
 
     if (form.subject.length === 0) {
       toast.error('Please select at least one subject');
@@ -307,12 +422,14 @@ export default function TeachersPage() {
     opts?: string[],
   ) => (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+        {label}
+      </label>
       {opts ? (
         <select
           value={form[field] as string}
           onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
-          className="w-full min-w-0 max-w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base"
+          className="w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-base text-slate-800 shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
         >
           {opts.map((o) => (
             <option key={o} value={o}>
@@ -326,7 +443,8 @@ export default function TeachersPage() {
           value={form[field] as string}
           onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
           required
-          className="w-full min-w-0 max-w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base"
+          min={type === 'date' && !editTeacher ? todayStr() : undefined}
+          className="w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-base text-slate-800 shadow-sm transition-colors placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
         />
       )}
     </div>
@@ -389,12 +507,12 @@ export default function TeachersPage() {
                     style={t.photoUrl ? { display: 'none' } : undefined}
                   >
                     <span className="text-indigo-600 font-bold text-lg">
-                      {t.name.charAt(0)}
+                      {getInitials(t.name)}
                     </span>
                   </div>
 
                   <div className="min-w-0">
-                    <h3 className="break-words font-semibold text-gray-800">{t.name}</h3>
+                    <h3 className="break-words font-semibold text-gray-800">{displayName(t)}</h3>
                     <p className="break-words text-sm font-medium text-indigo-600">
                       {formatSubjects(t.subject)}
                     </p>
@@ -462,21 +580,46 @@ export default function TeachersPage() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editTeacher ? 'Edit Teacher' : 'Add New Teacher'}
+        size="2xl"
+        height="content"
         closeOnBackdrop={false}
       >
         <form
           onSubmit={handleSubmit}
           onKeyDown={preventEnterSubmit}
-          className="grid w-full min-w-0 max-w-full grid-cols-1 gap-4 md:grid-cols-2"
+          className="grid w-full min-w-0 max-w-full grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2"
         >
           {inp('name', 'Full Name')}
           {inp('email', 'Email', 'email')}
           {inp('phone', 'Phone')}
 
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+              Gender
+            </label>
+            <select
+              value={form.gender}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  gender: e.target.value as TeacherForm['gender'],
+                }))
+              }
+              required
+              className="w-full min-w-0 max-w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-base text-slate-800 shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="" disabled>
+                Select gender...
+              </option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+            </select>
+          </div>
+
           <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">
               Subjects{' '}
-              <span className="text-gray-400 font-normal">
+              <span className="font-normal text-slate-400">
                 (Select from modules, max 6)
               </span>
             </label>
@@ -485,11 +628,11 @@ export default function TeachersPage() {
               <button
                 type="button"
                 onClick={() => setSubjectDropdownOpen(!subjectDropdownOpen)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base text-left flex items-center justify-between bg-white"
+                className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-left text-base shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               >
                 <span
                   className={
-                    form.subject.length === 0 ? 'text-gray-400' : 'text-gray-700'
+                    form.subject.length === 0 ? 'text-slate-400' : 'text-slate-800'
                   }
                 >
                   {form.subject.length === 0
@@ -612,19 +755,20 @@ export default function TeachersPage() {
           {inp('joinDate', 'Join Date', 'date')}
           {inp('status', 'Status', 'text', ['active', 'inactive'])}
 
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">
               Profile Photo
             </label>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-2.5">
               {photoPreview ? (
                 <img
                   src={photoPreview}
                   alt="Preview"
-                  className="w-16 h-16 rounded-full object-cover border-2 border-gray-200 shrink-0"
+                  className="h-12 w-12 shrink-0 rounded-full border-2 border-white object-cover shadow-sm"
+                  onError={() => setPhotoPreview(null)}
                 />
               ) : (
-                <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-2xl shrink-0">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xl text-slate-400">
                   👤
                 </div>
               )}
@@ -632,16 +776,16 @@ export default function TeachersPage() {
                 type="file"
                 accept="image/*"
                 onChange={handlePhotoChange}
-                className="text-sm text-gray-600"
+                className="min-w-0 flex-1 text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-2.5 file:py-1.5 file:text-xs file:font-medium file:text-indigo-600 hover:file:bg-indigo-100"
               />
             </div>
           </div>
 
-          <div className="sticky bottom-0 -mx-3.5 flex gap-3 border-t border-gray-100 bg-white px-3.5 py-3 md:col-span-2 md:-mx-5 md:px-5">
+          <div className="sticky bottom-0 -mx-3.5 mt-1 flex gap-3 border-t border-slate-100 bg-white px-3.5 py-3.5 md:col-span-2 md:-mx-4 md:px-4">
             <button
               type="button"
               onClick={() => setModalOpen(false)}
-              className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50"
+              className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
             >
               Cancel
             </button>
@@ -649,8 +793,9 @@ export default function TeachersPage() {
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-60"
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:opacity-60"
             >
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               {saving ? 'Saving...' : editTeacher ? 'Update Teacher' : 'Add Teacher'}
             </button>
           </div>
@@ -670,7 +815,7 @@ export default function TeachersPage() {
           </div>
 
           <h4 className="text-base font-semibold text-gray-900">
-            Remove {teacherToDelete?.name || 'this teacher'}?
+            Remove {teacherToDelete ? displayName(teacherToDelete) : 'this teacher'}?
           </h4>
 
           <p className="mt-2 text-sm leading-6 text-gray-500">
