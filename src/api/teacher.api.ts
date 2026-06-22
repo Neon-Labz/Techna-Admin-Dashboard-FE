@@ -7,6 +7,7 @@ export interface TeacherFromApi {
   lastName?: string;
   email: string;
   phone: string;
+  gender?: 'male' | 'female' | '';
   subject: string | string[];
   qualification?: string;
   experience: string;
@@ -30,6 +31,7 @@ export interface CreateTeacherPayload {
   lastName?: string;
   email: string;
   phone: string;
+  gender?: 'male' | 'female' | '';
   subject: string[];
   qualification?: string;
   experience: string;

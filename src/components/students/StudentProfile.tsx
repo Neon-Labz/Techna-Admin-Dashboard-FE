@@ -152,6 +152,7 @@ export default function StudentProfile({
       }
     );
   });
+  const olResults = Array.isArray(s.olResults) ? s.olResults : [];
 
   const qrData = JSON.stringify({
     studentId: s.studentId,
@@ -653,6 +654,74 @@ export default function StudentProfile({
                   value={s.administrativeDistrict || s.district}
                 />
                 <DetailItem label="Postal Code" value={s.postalCode} />
+              </div>
+            </ProfileSection>
+
+            <ProfileSection title="O/L Results">
+              <div className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-3">
+                <DetailItem label="O/L Category" value={s.olCategory} />
+                <DetailItem label="O/L Year" value={s.olYear} />
+                <DetailItem label="Index Number" value={s.olIndexNumber} />
+                <DetailItem
+                  label="Name Used"
+                  value={s.olNameUsed}
+                  className="md:col-span-2"
+                />
+                <DetailItem label="Accept Status" value={s.olAccept} />
+              </div>
+
+              <div className="mt-5 overflow-hidden rounded-xl border border-slate-100">
+                {olResults.length === 0 ? (
+                  <p className="bg-slate-50 p-4 text-[13px] text-slate-400">
+                    No O/L results added
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-[13px]">
+                      <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                        <tr>
+                          <th className="px-4 py-3">Year</th>
+                          <th className="px-4 py-3">Index No</th>
+                          <th className="px-4 py-3">English</th>
+                          <th className="px-4 py-3">Mathematics</th>
+                          <th className="px-4 py-3">Science</th>
+                          <th className="px-4 py-3">Sinhala</th>
+                          <th className="px-4 py-3">Tamil</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {olResults.map((row: any, index: number) => (
+                          <tr
+                            key={`${row.year || 'year'}-${row.indexNumber || index}`}
+                            className="border-t border-slate-100"
+                          >
+                            <td className="px-4 py-3 font-bold text-slate-800">
+                              {getValue(row.year)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              {getValue(row.indexNumber)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              {getValue(row.english)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              {getValue(row.mathematics)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              {getValue(row.science)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              {getValue(row.sinhala)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              {getValue(row.tamil)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </ProfileSection>
           </main>

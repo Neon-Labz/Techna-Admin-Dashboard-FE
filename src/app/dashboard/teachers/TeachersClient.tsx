@@ -104,6 +104,69 @@ function normalizeSubject(subject: TeacherFromApi['subject'] | string[]): string
   return subject.split(',').map(s => s.trim()).filter(Boolean);
 }
 
+function normalizePhotoUrl(url?: string): string {
+  if (!url) return '';
+  return url.trim().replace(/\.r2\.devya\b/gi, '.r2.dev');
+}
+
+const TITLE_PREFIXES = new Set([
+  'mr', 'mrs', 'ms', 'miss', 'dr', 'prof',
+  'mr.', 'mrs.', 'ms.', 'miss.', 'dr.', 'prof.',
+]);
+
+function stripTitle(name: string): string {
+  return (name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(p => !TITLE_PREFIXES.has(p.toLowerCase()))
+    .join(' ');
+}
+
+function titleFromGender(gender: Teacher['gender']): string {
+  if (gender === 'male') return 'Mr.';
+  if (gender === 'female') return 'Ms.';
+  return '';
+}
+
+const FEMALE_NAMES = new Set([
+  'nimali', 'geerthika', 'sara', 'sarah', 'mary', 'emma', 'olivia', 'sophia',
+  'priya', 'anjali', 'deepika', 'kavya', 'lakshmi', 'shanthi', 'malini',
+  'kumari', 'nisha', 'divya', 'ramya', 'thanuja', 'dilani', 'sandya',
+  'jane', 'linda', 'susan', 'jessica', 'amanda', 'fatima', 'aisha',
+]);
+
+const MALE_NAMES = new Set([
+  'michael', 'david', 'john', 'james', 'robert', 'william', 'hari', 'gowsikan',
+  'gowsi', 'joe', 'suka', 'siva', 'kumar', 'raj', 'ravi', 'arun', 'vijay',
+  'anil', 'sunil', 'mahesh', 'suresh', 'ramesh', 'athithya', 'kajan',
+  'mohamed', 'ahmed', 'thomas', 'daniel', 'peter', 'paul', 'mark',
+]);
+
+function inferGender(name: string): Teacher['gender'] {
+  const trimmed = (name || '').trim().toLowerCase();
+  if (/^(mr|dr|prof)\.?\s/.test(trimmed)) return 'male';
+  if (/^(mrs|ms|miss)\.?\s/.test(trimmed)) return 'female';
+  const first = stripTitle(name).split(/\s+/)[0]?.toLowerCase() ?? '';
+  if (!first) return '';
+  if (FEMALE_NAMES.has(first)) return 'female';
+  if (MALE_NAMES.has(first)) return 'male';
+  return '';
+}
+
+function displayName(t: Teacher): string {
+  const clean = stripTitle(t.name);
+  const gender = t.gender || inferGender(t.name);
+  const title = titleFromGender(gender);
+  return title ? `${title} ${clean}` : clean;
+}
+
+function getInitials(name: string): string {
+  const parts = stripTitle(name).split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+
 function mapApiTeacher(t: TeacherFromApi): Teacher {
   return {
     id: t._id,
@@ -112,13 +175,14 @@ function mapApiTeacher(t: TeacherFromApi): Teacher {
     lastName: t.lastName ?? '',
     email: t.email,
     phone: t.phone,
+    gender: t.gender || inferGender(t.fullName),
     subject: normalizeSubject(t.subject),
     qualification: t.qualification ?? '',
     experience: t.experience,
     address: t.address,
     joinDate: t.joinDate,
     status: t.status,
-    photoUrl: t.photoUrl,
+    photoUrl: normalizePhotoUrl(t.photoUrl),
     degree: t.degree ?? [],
     specializations: t.specializations ?? [],
     awards: t.awards ?? [],
@@ -193,7 +257,7 @@ export default function TeachersPage() {
   const [form, _setForm] = useState<TeacherForm>(emptyTeacher);
   const setForm = ((updater: TeacherForm | ((prev: TeacherForm) => TeacherForm)) => {
     const next = typeof updater === 'function' ? updater(formRef.current) : updater;
-    formRef.current = next; // synchronous — always has the latest value
+    formRef.current = next;
     _setForm(next);
   }) as React.Dispatch<React.SetStateAction<TeacherForm>>;
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -219,10 +283,14 @@ export default function TeachersPage() {
   };
 
   const filtered = teachers.filter(t => {
-    const term = search.toLowerCase();
+    const term = search.trim().toLowerCase();
+    if (!term) return true;
     return (
       (t.name || '').toLowerCase().includes(term) ||
+      displayName(t).toLowerCase().includes(term) ||
       (t.email || '').toLowerCase().includes(term) ||
+      (t.phone || '').toLowerCase().includes(term) ||
+      (t.qualification || '').toLowerCase().includes(term) ||
       formatSubjects(t.subject).toLowerCase().includes(term)
     );
   });
@@ -293,11 +361,8 @@ export default function TeachersPage() {
 
     try {
       setSaving(true);
-      // Read tag arrays from formRef.current (always the latest value) to avoid
-    // a React closure stale-state bug where onBlur updates aren't yet reflected
-    // in the captured `form` variable when handleSubmit runs.
-    const latest = formRef.current;
-    const payload = {
+      const latest = formRef.current;
+      const payload = {
         fullName,
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
@@ -425,10 +490,12 @@ export default function TeachersPage() {
                     className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-100"
                     style={t.photoUrl ? { display: 'none' } : undefined}
                   >
-                    <span className="text-indigo-600 font-bold text-lg">{t.name.charAt(0)}</span>
+                    <span className="text-indigo-600 font-bold text-lg">
+                      {getInitials(t.name)}
+                    </span>
                   </div>
                   <div className="min-w-0">
-                    <h3 className="break-words font-semibold text-gray-800">{t.name}</h3>
+                    <h3 className="break-words font-semibold text-gray-800">{displayName(t)}</h3>
                     <p className="break-words text-sm font-medium text-indigo-600">
                       {formatSubjects(t.subject)}
                     </p>
@@ -490,6 +557,7 @@ export default function TeachersPage() {
         onClose={() => setModalOpen(false)}
         title={editTeacher ? 'Edit Teacher' : 'Add New Teacher'}
         size="2xl"
+        height="content"
         closeOnBackdrop={false}
         titleClassName="text-2xl text-[#1E1B4B]"
       >
@@ -797,7 +865,7 @@ export default function TeachersPage() {
             <Trash2 className="h-6 w-6 text-red-600" />
           </div>
           <h4 className="text-base font-semibold text-gray-900">
-            Remove {teacherToDelete?.name || 'this teacher'}?
+            Remove {teacherToDelete ? displayName(teacherToDelete) : 'this teacher'}?
           </h4>
           <p className="mt-2 text-sm leading-6 text-gray-500">
             This will permanently delete the teacher profile and cannot be undone.

@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 import { attendanceApi } from '../api/attendance.api';
 import { paymentApi } from '../api/payment.api';
 import { getModules, type ApiModule } from '../lib/api';
+import { cleanOlResults, OL_GRADE_OPTIONS } from '../utils/studentPayload';
 
 const DISTRICT_OPTIONS = [
   'Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo', 'Galle',
@@ -39,6 +40,16 @@ const RELIGION_OPTIONS = [
   'Catholicism',
   'Other',
 ];
+
+const emptyOL = {
+  year: '',
+  indexNumber: '',
+  english: '',
+  mathematics: '',
+  science: '',
+  sinhala: '',
+  tamil: '',
+};
 
 const emptyStudent: any = {
   name: '',
@@ -68,6 +79,12 @@ const emptyStudent: any = {
   batch: '',
   modules: [],
   subjects: [],
+  olCategory: 'Local O/L',
+  olYear: '',
+  olIndexNumber: '',
+  olNameUsed: '',
+  olAccept: 'Accept',
+  olResults: [{ ...emptyOL }],
   status: 'pending',
   enrolledAt: new Date().toISOString(),
 };
@@ -203,6 +220,15 @@ export default function StudentsPage() {
       batch: s.batch || '',
       modules: selectedModules,
       subjects: selectedModules,
+      olCategory: s.olCategory || 'Local O/L',
+      olYear: s.olYear || '',
+      olIndexNumber: s.olIndexNumber || '',
+      olNameUsed: s.olNameUsed || '',
+      olAccept: s.olAccept || 'Accept',
+      olResults:
+        Array.isArray(s.olResults) && s.olResults.length > 0
+          ? s.olResults
+          : [{ ...emptyOL }],
       status: s.status || 'pending',
       enrolledAt: s.enrolledAt || new Date().toISOString(),
     });
@@ -238,6 +264,33 @@ export default function StudentsPage() {
     });
   };
 
+  const updateOlRow = (index: number, field: keyof typeof emptyOL, value: string) => {
+    setForm((prev: any) => ({
+      ...prev,
+      olResults: (prev.olResults || [{ ...emptyOL }]).map(
+        (row: typeof emptyOL, rowIndex: number) =>
+          rowIndex === index ? { ...row, [field]: value } : row,
+      ),
+    }));
+  };
+
+  const addOlRow = () => {
+    setForm((prev: any) => ({
+      ...prev,
+      olResults: [...(prev.olResults || []), { ...emptyOL }],
+    }));
+  };
+
+  const removeOlRow = (index: number) => {
+    setForm((prev: any) => ({
+      ...prev,
+      olResults:
+        (prev.olResults || []).length > 1
+          ? prev.olResults.filter((_: any, rowIndex: number) => rowIndex !== index)
+          : [{ ...emptyOL }],
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -259,6 +312,12 @@ export default function StudentsPage() {
       dob: form.dob || form.dateOfBirth,
       subjects: selectedModules,
       modules: selectedModules,
+      olCategory: form.olCategory || 'Local O/L',
+      olYear: form.olYear || '',
+      olIndexNumber: form.olIndexNumber || '',
+      olNameUsed: form.olNameUsed || '',
+      olAccept: form.olAccept || 'Accept',
+      olResults: cleanOlResults(form.olResults || []),
     };
 
     await updateStudent(editStudent.id, payload);
@@ -498,13 +557,22 @@ export default function StudentsPage() {
   const selectedModules =
     form.subjects?.length ? form.subjects : form.modules || [];
 
-  const isModuleSelected = (module: ApiModule) =>
-    selectedModules.some(
-      (selected: string) =>
-        selected === module.name ||
-        selected === module._id ||
-        selected === (module as any).id,
+  const normalizeModuleKey = (value?: string) =>
+    (value || '').trim().toLowerCase();
+
+  const isModuleSelected = (module: ApiModule) => {
+    const moduleKeys = [
+      module._id,
+      (module as any).id,
+      module.name,
+    ]
+      .map(normalizeModuleKey)
+      .filter(Boolean);
+
+    return selectedModules.some((selected: string) =>
+      moduleKeys.includes(normalizeModuleKey(selected)),
     );
+  };
 
   return (
     <div className="p-3 pb-20 sm:p-6 sm:pb-6">
@@ -705,6 +773,167 @@ export default function StudentsPage() {
                   placeholder="Enter batch"
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                 />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-100 bg-gray-50/60 p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800">
+                    O/L Results
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    Edit student O/L exam details and subject grades
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={addOlRow}
+                  className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Row
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    O/L Category
+                  </label>
+                  <select
+                    value={form.olCategory || 'Local O/L'}
+                    onChange={(e) => handleChange('olCategory', e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="Local O/L">Local O/L</option>
+                    <option value="London O/L">London O/L</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    O/L Year
+                  </label>
+                  <input
+                    value={form.olYear || ''}
+                    onChange={(e) => handleChange('olYear', e.target.value)}
+                    placeholder="e.g. 2024"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    O/L Index Number
+                  </label>
+                  <input
+                    value={form.olIndexNumber || ''}
+                    onChange={(e) =>
+                      handleChange('olIndexNumber', e.target.value)
+                    }
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Name Used
+                  </label>
+                  <input
+                    value={form.olNameUsed || ''}
+                    onChange={(e) => handleChange('olNameUsed', e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Accept Status
+                  </label>
+                  <select
+                    value={form.olAccept || 'Accept'}
+                    onChange={(e) => handleChange('olAccept', e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="Accept">Accept</option>
+                    <option value="Change">Change</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {(form.olResults || [{ ...emptyOL }]).map(
+                  (row: typeof emptyOL, index: number) => (
+                    <div
+                      key={index}
+                      className="rounded-xl border border-gray-200 bg-white p-3"
+                    >
+                      <div className="mb-3 flex items-center justify-between">
+                        <p className="text-xs font-semibold text-gray-500">
+                          Result Row {index + 1}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => removeOlRow(index)}
+                          className="text-xs font-semibold text-red-500 hover:text-red-600"
+                        >
+                          Remove
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <input
+                          value={row.year || ''}
+                          onChange={(e) =>
+                            updateOlRow(index, 'year', e.target.value)
+                          }
+                          placeholder="Year"
+                          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <input
+                          value={row.indexNumber || ''}
+                          onChange={(e) =>
+                            updateOlRow(index, 'indexNumber', e.target.value)
+                          }
+                          placeholder="Index Number"
+                          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+
+                        {(
+                          [
+                            ['english', 'English'],
+                            ['mathematics', 'Mathematics'],
+                            ['science', 'Science'],
+                            ['sinhala', 'Sinhala'],
+                            ['tamil', 'Tamil'],
+                          ] as const
+                        ).map(([field, label]) => (
+                          <div key={field}>
+                            <label className="mb-1 block text-xs font-medium text-gray-500">
+                              {label}
+                            </label>
+                            <select
+                              value={row[field] || ''}
+                              onChange={(e) =>
+                                updateOlRow(index, field, e.target.value)
+                              }
+                              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                              <option value="">Select grade</option>
+                              {OL_GRADE_OPTIONS.map((grade) => (
+                                <option key={grade} value={grade}>
+                                  {grade}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ),
+                )}
               </div>
             </div>
 
