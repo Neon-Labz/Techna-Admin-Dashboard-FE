@@ -11,16 +11,23 @@ export interface User {
 export interface Teacher {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   phone: string;
   subject: string[];
-  qualification: string;
+  qualification?: string;
   experience: string;
   address: string;
   joinDate: string;
   status: 'active' | 'inactive';
   avatar?: string;
   photoUrl?: string;
+  degree?: string[];
+  specializations?: string[];
+  awards?: string[];
+  achievements?: string[];
+  biography?: string;
 }
 
 export interface Module {
