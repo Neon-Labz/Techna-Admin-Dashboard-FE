@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import toast from 'react-hot-toast';
 import {
   BookOpen,
   Check,
@@ -173,15 +174,73 @@ export default function StudentRegistrationWizard({
       if (!form.fullNameEnglish?.trim()) {
         nextErrors.fullNameEnglish = 'Full name English is required';
       }
-      if (!form.dob) nextErrors.dob = 'Date of birth is required';
-      if (!form.nicNo?.trim()) nextErrors.nicNo = 'NIC number is required';
+
+      // Email
+      if (!form.email.trim()) {
+        nextErrors.email = 'Email is required';
+      } else {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(form.email)) {
+          nextErrors.email = 'Enter a valid email address';
+        }
+      }
+
+      // NIC — old format: 9 digits + V/X; new format: 12 digits
+      if (!form.nicNo?.trim()) {
+        nextErrors.nicNo = 'NIC number is required';
+      } else {
+        const oldNic = /^[0-9]{9}[vVxX]$/;
+        const newNic = /^[0-9]{12}$/;
+        if (!oldNic.test(form.nicNo) && !newNic.test(form.nicNo)) {
+          nextErrors.nicNo = 'Enter a valid NIC (e.g. 991234567V or 199912345678)';
+        }
+      }
+
+      // WhatsApp / phone — 9-10 digits
       if (!form.whatsappNo?.trim()) {
         nextErrors.whatsappNo = 'WhatsApp number is required';
+      } else {
+        const phoneRegex = /^[0-9]{9,10}$/;
+        if (!phoneRegex.test(form.whatsappNo.replace(/\s/g, ''))) {
+          nextErrors.whatsappNo = 'Enter a valid phone number (9–10 digits)';
+        }
       }
-      if (!form.email.trim()) nextErrors.email = 'Email is required';
-      if (!form.password) nextErrors.password = 'Password is required';
+
+      // Password strength
+      if (!form.password) {
+        nextErrors.password = 'Password is required';
+      } else if (form.password.length < 8) {
+        nextErrors.password = 'Password must be at least 8 characters';
+      } else if (!/[A-Z]/.test(form.password)) {
+        nextErrors.password = 'Password must contain an uppercase letter';
+      } else if (!/[0-9]/.test(form.password)) {
+        nextErrors.password = 'Password must contain a number';
+      }
+
       if (form.password !== form.confirmPassword) {
         nextErrors.confirmPassword = 'Passwords do not match';
+      }
+
+      // Date of birth — must be in the past, age 10–30
+      if (!form.dob) {
+        nextErrors.dob = 'Date of birth is required';
+      } else {
+        const dob = new Date(form.dob);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (dob >= today) {
+          nextErrors.dob = 'Date of birth cannot be today or a future date';
+        } else {
+          const age = today.getFullYear() - dob.getFullYear();
+          if (age < 10 || age > 30) {
+            nextErrors.dob = 'Please verify the date of birth (expected age: 10–30 years)';
+          }
+        }
+      }
+
+      // Address
+      if (!form.address?.trim()) {
+        nextErrors.address = 'Address is required';
       }
     }
 
@@ -204,7 +263,13 @@ export default function StudentRegistrationWizard({
     }
 
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+
+    const errKeys = Object.keys(nextErrors);
+    if (errKeys.length > 0) {
+      toast.error(nextErrors[errKeys[0]]);
+    }
+
+    return errKeys.length === 0;
   };
 
   const updateOlRow = (index: number, key: keyof OLResult, value: string) => {
@@ -359,8 +424,11 @@ export default function StudentRegistrationWizard({
               value={form.address}
               onChange={(e) => set('address', e.target.value)}
               rows={2}
-              className={`${inputCls()} resize-none`}
+              className={`${inputCls(errors.address)} resize-none`}
             />
+            {errors.address && (
+              <p className="mt-1 text-xs text-red-500">{errors.address}</p>
+            )}
           </label>
         </div>
       )}
