@@ -46,7 +46,7 @@ export default function LoginPage() {
     }
 
     setLoading(true);
-    const res = await login(email.trim(), password);
+    const res = await login(email.trim(), password, remember);
     setLoading(false);
 
     if (res.success) {
@@ -58,35 +58,25 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center p-4 bg-gradient-to-br from-sky-400 via-blue-500 to-blue-600 overflow-hidden">
-<Toast toasts={toasts} removeToast={removeToast} />
+    <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden">
+      <Image
+        src="/login.png"
+        alt="Login background"
+        fill
+        priority
+        className="object-cover -z-10"
+      />
 
-      <div className="absolute inset-0 opacity-10 pointer-events-none">
-        <svg
-          className="absolute top-10 left-10 w-72 h-72 text-white"
-          fill="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zm0 13L4 11.18v3.64L12 19l8-4.18v-3.64L12 16z" />
-        </svg>
-
-        <svg
-          className="absolute bottom-10 right-10 w-80 h-80 text-white"
-          fill="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-6 2.5c1.38 0 2.5 1.12 2.5 2.5S13.38 9.5 12 9.5 9.5 8.38 9.5 7 10.62 4.5 12 4.5z" />
-        </svg>
-      </div>
+      <Toast toasts={toasts} removeToast={removeToast} />
 
       <div className="w-full max-w-md relative z-10">
         <div className="bg-white rounded-3xl shadow-2xl p-8 sm:p-10">
-          <div className="flex flex-col items-center mb-6">
+          <div className="flex flex-col items-center mb-1">
             <Image
               src="/logo.png"
               alt="Techna"
-              width={180}
-              height={180}
+              width={140}
+              height={140}
               className="object-contain"
               priority
             />
@@ -179,13 +169,13 @@ export default function LoginPage() {
                 Remember me
               </label>
 
-              <button
+              {/* <button
                 type="button"
                 onClick={() => router.push('/forgot-password')}
                 className="text-sm font-medium text-blue-600 hover:text-blue-700"
               >
                 Forgot password?
-              </button>
+              </button> */}
             </div>
 
             <button

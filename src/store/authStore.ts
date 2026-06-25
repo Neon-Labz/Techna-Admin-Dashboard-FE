@@ -1,6 +1,7 @@
 import { jwtDecode } from 'jwt-decode';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { setAuthToken } from '../api/axiosClient';
 import { authApi } from '../api';
 import type { User } from '../types';
 
@@ -16,11 +17,13 @@ interface AuthStore {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  rememberSession: boolean;
   _hasHydrated: boolean;
   setHasHydrated: (state: boolean) => void;
   login: (
     email: string,
-    password: string
+    password: string,
+    remember?: boolean
   ) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<User>) => void;
@@ -34,11 +37,12 @@ export const useAuthStore = create<AuthStore>()(
       user: null,
       token: null,
       isAuthenticated: false,
+      rememberSession: false,
       _hasHydrated: false,
 
       setHasHydrated: (state: boolean) => set({ _hasHydrated: state }),
 
-      login: async (email: string, password: string) => {
+      login: async (email: string, password: string, remember = false) => {
         try {
           const response = await authApi.login(email, password);
           const { access_token, role } = response;
@@ -67,10 +71,13 @@ export const useAuthStore = create<AuthStore>()(
             createdAt: new Date().toISOString(),
           };
 
+          setAuthToken(access_token);
+
           set({
             user,
             token: access_token,
             isAuthenticated: true,
+            rememberSession: remember,
           });
 
           return { success: true };
@@ -100,7 +107,9 @@ export const useAuthStore = create<AuthStore>()(
           user: null,
           token: null,
           isAuthenticated: false,
+          rememberSession: false,
         });
+        setAuthToken(null);
       },
 
       updateProfile: (data: Partial<User>) => {
@@ -126,7 +135,9 @@ export const useAuthStore = create<AuthStore>()(
             user: null,
             token: null,
             isAuthenticated: false,
+            rememberSession: false,
           });
+          setAuthToken(null);
           return;
         }
 
@@ -138,7 +149,9 @@ export const useAuthStore = create<AuthStore>()(
               user: null,
               token: null,
               isAuthenticated: false,
+              rememberSession: false,
             });
+            setAuthToken(null);
             return;
           }
 
@@ -155,12 +168,15 @@ export const useAuthStore = create<AuthStore>()(
             user,
             isAuthenticated: true,
           });
+          setAuthToken(token);
         } catch {
           set({
             user: null,
             token: null,
             isAuthenticated: false,
+            rememberSession: false,
           });
+          setAuthToken(null);
         }
       },
 
@@ -186,8 +202,33 @@ export const useAuthStore = create<AuthStore>()(
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
+        rememberSession: state.rememberSession,
       }),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<AuthStore> | undefined;
+
+        if (persisted && !persisted.rememberSession) {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('techna-auth');
+            localStorage.removeItem('edu-auth');
+          }
+
+          return {
+            ...currentState,
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            rememberSession: false,
+          };
+        }
+
+        return {
+          ...currentState,
+          ...persisted,
+        };
+      },
       onRehydrateStorage: () => (state) => {
+        setAuthToken(state?.token || null);
         state?.setHasHydrated(true);
       },
     }

@@ -261,10 +261,12 @@ export default function ModulesPage() {
       m.batch.toLowerCase().includes(search.toLowerCase()),
   );
 
+  const moduleToDelete = modules.find((m) => m._id === deleteId);
+
   // ── Render ──
 
   return (
-    <div className="p-6">
+    <div className="p-3 pb-20 sm:p-6 sm:pb-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -496,12 +498,14 @@ export default function ModulesPage() {
 
       {/* Delete confirmation */}
       <DeleteModal
-        open={!!deleteId}
-        message="Are you sure you want to delete this subject?"
-        loading={deleting}
-        onCancel={() => setDeleteId(null)}
-        onConfirm={handleDelete}
-      />
+  open={!!deleteId}
+  title="Delete Subject"
+  itemName={moduleToDelete?.name}
+  message="Are you sure you want to delete this subject? This action cannot be undone."
+  loading={deleting}
+  onCancel={() => setDeleteId(null)}
+  onConfirm={handleDelete}
+/>
       <Toast toasts={toasts} onRemove={removeToast} />
     </div>
   );

@@ -45,6 +45,34 @@ interface StudentTracking {
   payments: PaymentRecord[];
 }
 
+function extractArrayResponse(value: unknown): any[] {
+  if (Array.isArray(value)) return value;
+
+  if (!value || typeof value !== 'object') return [];
+
+  const data = (value as { data?: unknown }).data;
+  if (Array.isArray(data)) return data;
+
+  if (data && typeof data === 'object') {
+    const nestedData = (data as { data?: unknown }).data;
+    if (Array.isArray(nestedData)) return nestedData;
+
+    const students = (data as { students?: unknown }).students;
+    if (Array.isArray(students)) return students;
+
+    const modules = (data as { modules?: unknown }).modules;
+    if (Array.isArray(modules)) return modules;
+  }
+
+  const students = (value as { students?: unknown }).students;
+  if (Array.isArray(students)) return students;
+
+  const modules = (value as { modules?: unknown }).modules;
+  if (Array.isArray(modules)) return modules;
+
+  return [];
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 const statusIcon = (s: string) =>
   s === 'paid'    ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> :
@@ -101,10 +129,8 @@ function PaymentModal({
           api.get('/students'),
           api.get('/modules'),
         ]);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sArr: any[] = Array.isArray(sRaw) ? sRaw : (sRaw?.data ?? []);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mArr: any[] = Array.isArray(mRaw) ? mRaw : (mRaw?.data ?? []);
+        const sArr = extractArrayResponse(sRaw);
+        const mArr = extractArrayResponse(mRaw);
 
         setStudents(
           sArr.map(s => ({
@@ -621,6 +647,193 @@ function StudentTableRow({
   );
 }
 
+function PaymentMobileCard({
+  studentId,
+  studentName,
+  payments,
+  year,
+  token,
+  onDownloadSlip,
+  onEditPayment,
+}: {
+  studentId: string;
+  studentName: string;
+  payments: PaymentRecord[];
+  year: number;
+  token: string | null;
+  onDownloadSlip: (p: PaymentRecord) => void;
+  onEditPayment: (p: PaymentRecord) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [tracking, setTracking] = useState<StudentTracking | null>(null);
+  const [loadingTrack, setLoadingTrack] = useState(false);
+
+  const fromMonth = useMemo(() => {
+    if (payments.length === 0) return `${year}-01`;
+    const earliest = [...payments]
+      .sort((a, b) => a.paidDate.localeCompare(b.paidDate))[0]
+      .paidDate.slice(0, 7);
+    const [eYear] = earliest.split('-').map(Number);
+    if (eYear < year) return `${year}-01`;
+    if (eYear > year) return `${year}-12`;
+    return earliest;
+  }, [payments, year]);
+
+  const toggleTracking = useCallback(async () => {
+    if (tracking) {
+      setExpanded(e => !e);
+      return;
+    }
+
+    setLoadingTrack(true);
+    try {
+      const res = await fetch(
+        `http://localhost:4000/api/payments/student/${studentId}/tracking?year=${year}&from=${fromMonth}&to=${year}-12`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const json = await res.json();
+      setTracking(json.data ?? json);
+      setExpanded(true);
+    } catch {
+      toast.error('Failed to load tracking for ' + studentId);
+    } finally {
+      setLoadingTrack(false);
+    }
+  }, [fromMonth, studentId, token, tracking, year]);
+
+  const paidSet = useMemo(() => new Set(tracking?.paidMonths ?? []), [tracking]);
+  const pendingSet = useMemo(() => new Set(tracking?.pendingMonths ?? []), [tracking]);
+  const firstPayment = payments[0];
+
+  if (!firstPayment) return null;
+
+  return (
+    <article className="overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm">
+      <div className="p-3">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold text-indigo-600">
+              {firstPayment.receiptNo}
+              {payments.length > 1 && (
+                <span className="ml-1 text-indigo-400">+{payments.length - 1}</span>
+              )}
+            </p>
+            <h3 className="mt-1 truncate text-sm font-bold uppercase leading-tight text-gray-800">
+              {studentName}
+            </h3>
+            <p className="text-[11px] font-medium text-gray-500">{studentId}</p>
+          </div>
+          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ${statusColor(firstPayment.status)}`}>
+            {statusIcon(firstPayment.status)}
+            {firstPayment.status}
+          </span>
+        </div>
+
+        <div className="mb-3 grid grid-cols-[1fr_auto] gap-4 border-b border-gray-100 pb-3">
+          <div>
+            <p className="text-[10px] font-medium text-gray-400">Amount</p>
+            <p className="text-base font-bold text-gray-900">
+              LKR {firstPayment.amount.toLocaleString()}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-medium text-gray-400">Method</p>
+            <p className="text-xs font-semibold capitalize text-gray-700">{firstPayment.method}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => onDownloadSlip(firstPayment)}
+              className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600"
+            >
+              <Download className="h-3 w-3" /> Slip
+            </button>
+            <button
+              type="button"
+              onClick={() => onEditPayment(firstPayment)}
+              className="flex items-center gap-1 text-[11px] font-semibold text-gray-500"
+            >
+              <Edit2 className="h-3 w-3" /> Edit
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={toggleTracking}
+            className="rounded p-1 text-gray-500"
+            aria-label="Toggle payment history"
+          >
+            {loadingTrack ? (
+              <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+            ) : expanded ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="border-t border-indigo-50 bg-indigo-50/40 px-3 py-4">
+          <p className="mb-3 text-[10px] font-bold uppercase tracking-wide text-indigo-600">
+            12-Month Payment Status - {year}
+          </p>
+          <div className="mb-4 grid grid-cols-6 gap-2">
+            {MONTHS.map(({ num, label }) => {
+              const key = `${year}-${num}`;
+              const isPaid = paidSet.has(key);
+              const isPending = pendingSet.has(key);
+              const isBeforeJoin = tracking && key < fromMonth;
+
+              return (
+                <div key={num} className="flex flex-col items-center gap-1">
+                  <span className="text-[9px] font-semibold text-gray-400">{label.charAt(0)}</span>
+                  <span className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold ${
+                    isBeforeJoin
+                      ? 'border border-dashed border-gray-200 bg-white text-gray-200'
+                      : isPaid
+                        ? 'bg-emerald-500 text-white'
+                        : isPending
+                          ? 'bg-amber-100 text-amber-600'
+                          : 'bg-gray-100 text-gray-300'
+                  }`}>
+                    {isPaid ? <CheckCircle className="h-3.5 w-3.5" /> : label.charAt(0)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-indigo-600">
+            History
+          </p>
+          <div className="space-y-2">
+            {payments.map(p => (
+              <div key={p.id} className="rounded-md border border-indigo-50 bg-white px-3 py-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold text-gray-700">{p.moduleName}</p>
+                    <p className="text-[10px] text-gray-400">{p.paidDate}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-gray-800">LKR {p.amount.toLocaleString()}</p>
+                    <p className={`text-[9px] font-bold uppercase ${p.status === 'paid' ? 'text-emerald-500' : 'text-amber-500'}`}>
+                      {p.status}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function PaymentsPage() {
   const [payments,     setPayments]     = useState<PaymentRecord[]>([]);
@@ -1092,30 +1305,30 @@ export default function PaymentsPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-3 pb-20 sm:p-6 sm:pb-6">
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Payments</h1>
-          <p className="text-gray-500 text-sm">{payments.length} total records</p>
+    <div className="mb-4 flex flex-row items-start justify-between gap-3 sm:mb-6 sm:items-center">
+          <div>
+          <h1 className="text-lg font-bold text-gray-800 sm:text-2xl">Payments</h1>
+          <p className="text-xs text-gray-500 sm:text-sm">{payments.length} total records</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {loading && (
-            <div className="flex items-center gap-2 text-indigo-500 text-sm">
+            <div className="hidden items-center gap-2 text-sm text-indigo-500 sm:flex">
               <Loader2 className="w-4 h-4 animate-spin" /> Loading…
             </div>
           )}
           <button onClick={fetchPayments} disabled={loading}
-            className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-3 py-2 rounded-xl hover:bg-gray-50 disabled:opacity-50 text-sm">
+            className="hidden items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 sm:flex sm:px-4">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
           <button onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+            className="flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-indigo-700 sm:gap-2 sm:rounded-xl sm:px-4 sm:text-sm">
             <Plus className="w-4 h-4" /> Add Payment
           </button>
           <button onClick={generateAllPDF}
-            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-800 border border-gray-200 px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+            className="hidden items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-50 sm:flex">
             <Download className="w-4 h-4" /> Export PDF
           </button>
         </div>
@@ -1126,51 +1339,80 @@ export default function PaymentsPage() {
       )}
 
       {/* ── Summary cards ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+      <div className="mb-4 grid grid-cols-1 gap-2 md:mb-6 md:grid-cols-3 md:gap-4">
+        <div className="rounded-lg border border-gray-100 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-emerald-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 sm:h-10 sm:w-10 sm:rounded-xl">
+              <CheckCircle className="h-4 w-4 text-emerald-600 sm:h-5 sm:w-5" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Total Collected</p>
-              <p className="text-xl font-bold text-gray-800">LKR {totalPaid.toLocaleString()}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 sm:text-sm sm:font-normal sm:normal-case sm:tracking-normal">Total Collected</p>
+              <p className="text-lg font-bold text-gray-800 sm:text-xl">LKR {totalPaid.toLocaleString()}</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+        <div className="rounded-lg border border-gray-100 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
-              <Clock className="w-5 h-5 text-amber-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 sm:h-10 sm:w-10 sm:rounded-xl">
+              <Clock className="h-4 w-4 text-amber-600 sm:h-5 sm:w-5" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Pending / Overdue</p>
-              <p className="text-xl font-bold text-gray-800">LKR {totalPending.toLocaleString()}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 sm:text-sm sm:font-normal sm:normal-case sm:tracking-normal">Pending / Overdue</p>
+              <p className="text-lg font-bold text-gray-800 sm:text-xl">LKR {totalPending.toLocaleString()}</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+        <div className="rounded-lg border border-gray-100 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
-              <CreditCard className="w-5 h-5 text-indigo-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-100 sm:h-10 sm:w-10 sm:rounded-xl">
+              <CreditCard className="h-4 w-4 text-indigo-600 sm:h-5 sm:w-5" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Filtered Records</p>
-              <p className="text-xl font-bold text-gray-800">{filtered.length}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 sm:text-sm sm:font-normal sm:normal-case sm:tracking-normal">Filtered Records</p>
+              <p className="text-lg font-bold text-gray-800 sm:text-xl">{filtered.length}</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* ── Filters ── */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
+      <div className="mb-4 flex flex-row gap-2 sm:mb-5 sm:flex-row sm:gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search student name or receipt no…"
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white" />
+            className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl sm:text-sm" />
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <details className="relative sm:hidden">
+          <summary className="flex h-full w-11 cursor-pointer list-none items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500">
+            <Filter className="h-4 w-4" />
+          </summary>
+          <div className="absolute right-0 z-20 mt-2 grid w-52 gap-2 rounded-lg border border-gray-100 bg-white p-3 shadow-lg">
+            <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              {BATCHES.map(b => <option key={b} value={b}>{b || 'All Batches'}</option>)}
+            </select>
+            <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">All Modules</option>
+              {allModules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">All Status</option>
+              <option value="paid">Paid</option>
+              <option value="pending">Pending</option>
+              <option value="overdue">Overdue</option>
+            </select>
+            <select value={trackingYear} onChange={e => setTrackingYear(Number(e.target.value))}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              {[2024, 2025, 2026, 2027].map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+        </details>
+        <div className="hidden items-center gap-2 flex-wrap sm:flex">
           <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
           <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)}
             className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -1198,7 +1440,32 @@ export default function PaymentsPage() {
       </div>
 
       {/* ── Table ── */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="space-y-3 md:hidden">
+        {studentGroups.map(s => (
+          <PaymentMobileCard
+            key={s.studentId}
+            studentId={s.studentId}
+            studentName={s.studentName}
+            payments={s.payments}
+            year={trackingYear}
+            token={token}
+            onDownloadSlip={generatePaymentSlip}
+            onEditPayment={setEditPayment}
+          />
+        ))}
+
+        {!loading && studentGroups.length === 0 && (
+          <div className="rounded-lg border border-gray-100 bg-white py-12 text-center text-gray-400">
+            <Users className="mx-auto mb-3 h-10 w-10 opacity-30" />
+            <p className="text-sm">No payment records found</p>
+            {payments.length > 0 && (
+              <p className="mt-1 text-xs">Try adjusting your filters</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm md:block">
         <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
           <p className="text-xs text-gray-500">
             Click on a student row to view their 12-month payment history
@@ -1245,6 +1512,15 @@ export default function PaymentsPage() {
       </div>
 
       {/* ── Add Payment Modal ── */}
+      <button
+        type="button"
+        onClick={() => setShowAddModal(true)}
+        className="fixed bottom-5 right-5 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-200 md:hidden"
+        aria-label="Add payment"
+      >
+        <CreditCard className="h-5 w-5" />
+      </button>
+
       {showAddModal && (
         <PaymentModal
           onClose={() => setShowAddModal(false)}

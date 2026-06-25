@@ -1,6 +1,6 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
-// Backend wraps all responses in: { success, message, data, timestamp, path }
 interface ApiWrappedResponse<T = unknown> {
   success: boolean;
   message: string;
@@ -15,14 +15,23 @@ interface RequestOptions {
   headers?: Record<string, string>;
 }
 
-/**
- * Get the stored auth token from localStorage
- */
+let authToken: string | null = null;
+
+export function setAuthToken(token: string | null): void {
+  authToken = token;
+}
+
 export function getStoredToken(): string | null {
+  if (authToken) return authToken;
+
   if (typeof window === 'undefined') return null;
+
   try {
-    const stored = localStorage.getItem('edu-auth');
+    const stored =
+      localStorage.getItem('techna-auth') || localStorage.getItem('edu-auth');
+
     if (!stored) return null;
+
     const parsed = JSON.parse(stored);
     return parsed?.state?.token || null;
   } catch {
@@ -30,15 +39,11 @@ export function getStoredToken(): string | null {
   }
 }
 
-/**
- * Core API request function with automatic token attachment
- */
 export async function apiClient<T = unknown>(
   endpoint: string,
   options: RequestOptions = {},
 ): Promise<T> {
   const { method = 'GET', body, headers = {} } = options;
-
   const token = getStoredToken();
 
   const config: RequestInit = {
@@ -50,30 +55,41 @@ export async function apiClient<T = unknown>(
     },
   };
 
-  if (body) {
+  if (body !== undefined) {
     config.body = JSON.stringify(body);
   }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
 
-  // Handle 401 Unauthorized - clear auth and redirect to login
   if (response.status === 401) {
-    if (typeof window !== 'undefined') {
+    const errorData = await response.json().catch(() => ({}));
+    const message =
+      errorData.message || 'Session expired. Please login again.';
+
+    const isLoginRequest =
+      endpoint.includes('/auth/login') ||
+      endpoint.includes('/auth/student/login');
+
+    if (!isLoginRequest && typeof window !== 'undefined') {
+      setAuthToken(null);
+      localStorage.removeItem('techna-auth');
       localStorage.removeItem('edu-auth');
       window.location.href = '/login';
     }
-    throw new Error('Session expired. Please login again.');
+
+    throw new Error(Array.isArray(message) ? message[0] : message);
   }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    const message = errorData.message || `Request failed with status ${response.status}`;
+    const message =
+      errorData.message || `Request failed with status ${response.status}`;
+
     throw new Error(Array.isArray(message) ? message[0] : message);
   }
 
   const json: ApiWrappedResponse<T> = await response.json();
 
-  // Unwrap the backend's ApiResponse wrapper to return just the data
   if (json && typeof json === 'object' && 'success' in json && 'data' in json) {
     return json.data as T;
   }

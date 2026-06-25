@@ -77,7 +77,7 @@ export default function StudentAttendancePage() {
   const studentName = studentId;
 
   if (loading) return (
-    <div className="p-6">
+    <div className="p-3 pb-20 sm:p-6 sm:pb-6">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6 animate-pulse">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-full bg-gray-200" />
@@ -99,7 +99,7 @@ export default function StudentAttendancePage() {
   );
 
   return (
-    <div className="p-6">
+    <div className="p-3 pb-20 sm:p-6 sm:pb-6">
       {/* Header card */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
         <div className="flex items-center gap-4">
