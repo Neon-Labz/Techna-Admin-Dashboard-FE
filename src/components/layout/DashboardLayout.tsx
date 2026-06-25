@@ -11,7 +11,7 @@ const pageNames: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/dashboard/teachers': 'Teachers',
   '/dashboard/students': 'Students',
-  '/dashboard/modules': 'Modules',
+  '/dashboard/modules': 'Subjects',
   '/dashboard/payments': 'Payments',
   '/dashboard/exams': 'Exams',
   '/dashboard/attendance': 'Attendance',

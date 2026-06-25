@@ -25,7 +25,7 @@ const navItems = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/dashboard/teachers', icon: GraduationCap, label: 'Teachers' },
   { path: '/dashboard/students', icon: Users, label: 'Students' },
-  { path: '/dashboard/modules', icon: BookOpen, label: 'Modules' },
+  { path: '/dashboard/modules', icon: BookOpen, label: 'Subjects' },
   { path: '/dashboard/videos', icon: Play, label: 'Videos' },
   { path: '/dashboard/payments', icon: CreditCard, label: 'Payments' },
   { path: '/dashboard/exams', icon: ClipboardList, label: 'Exams' },
