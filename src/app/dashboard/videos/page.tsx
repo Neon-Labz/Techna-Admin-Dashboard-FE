@@ -1,9 +1,10 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getModules, addResourceUrl, toggleResourcePublish, isAxiosError, type ApiModule, type ApiResource } from '@/lib/api';
+import { validateVideoForm } from '@/lib/validation';
 
 import Modal from '@/components/ui/Modal';
-import { Play, Upload, Search, Filter, Video, Eye, EyeOff } from 'lucide-react';
+import { Play, Upload, Search, Video, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import Toast from '@/components/common/Toast';
 
@@ -131,6 +132,16 @@ export default function VideosPage() {
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!uploadModuleId || !videoUrl) return;
+
+    const validationError = validateVideoForm({
+      title: uploadTitle,
+      description: description,
+    });
+    if (validationError) {
+      addToast(validationError, 'error');
+      return;
+    }
+
     setUploading(true);
     try {
       await addResourceUrl(uploadModuleId, {
@@ -167,7 +178,7 @@ export default function VideosPage() {
   };
 
   if (loading) return (
-    <div className="p-6">
+    <div className="p-3 pb-20 sm:p-6 sm:pb-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {[...Array(6)].map((_, i) => (
           <div key={i} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-pulse">
@@ -183,7 +194,7 @@ export default function VideosPage() {
   );
 
   return (
-    <div className="p-6">
+    <div className="p-3 pb-20 sm:p-6 sm:pb-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -203,7 +214,6 @@ export default function VideosPage() {
             className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white" />
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
           <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
             className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <option value="all">All Modules</option>
@@ -221,29 +231,29 @@ export default function VideosPage() {
       </div>
 
       {/* Video Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 items-start">
         {filtered.map(v => (
-          <div key={v._id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer" onClick={() => setPlayVideo(v)}>
-            <div className="aspect-video overflow-hidden">
+          <div key={v._id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden cursor-pointer flex flex-col h-full" onClick={() => setPlayVideo(v)}>
+            <div className="aspect-video w-full overflow-hidden flex-shrink-0">
               <VideoThumbnail
                 src={v.url || v.fileUrl || ''}
                 thumbnailUrl={v.thumbnailUrl}
                 title={v.title}
               />
             </div>
-            <div className="p-4">
-              <div className="flex items-start justify-between mb-2">
-                <h3 className="font-semibold text-gray-800 text-sm line-clamp-2 flex-1 pr-2">{v.title}</h3>
-                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 flex-shrink-0">{capitalizeWords(v.moduleName)}</span>
+            <div className="p-4 flex flex-col flex-1 gap-2">
+              <h3 title={v.title} className="font-semibold text-gray-800 text-sm line-clamp-2 min-h-[2.5rem]">{v.title}</h3>
+              <div className="mt-auto flex flex-col gap-2">
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 self-start">{capitalizeWords(v.moduleName)}</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleTogglePublish(v.moduleId, v._id); }}
+                  className={v.isPublished === true
+                    ? "w-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg py-2 text-sm font-medium flex items-center justify-center gap-1"
+                    : "w-full bg-gray-50 text-gray-500 hover:bg-gray-100 rounded-lg py-2 text-sm font-medium flex items-center justify-center gap-1"}>
+                  {v.isPublished === true ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                  {v.isPublished === true ? 'Published' : 'Unpublished'}
+                </button>
               </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleTogglePublish(v.moduleId, v._id); }}
-                className={v.isPublished === true
-                  ? "w-full mt-3 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg py-2 text-sm font-medium flex items-center justify-center gap-1"
-                  : "w-full mt-3 bg-gray-50 text-gray-500 hover:bg-gray-100 rounded-lg py-2 text-sm font-medium flex items-center justify-center gap-1"}>
-                {v.isPublished === true ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                {v.isPublished === true ? 'Published' : 'Unpublished'}
-              </button>
             </div>
           </div>
         ))}
@@ -259,15 +269,23 @@ export default function VideosPage() {
       </div>
 
       {/* Play Modal */}
-      <Modal isOpen={!!playVideo} onClose={() => setPlayVideo(null)} title={playVideo?.title ?? ''} size="2xl">
+      <Modal
+        isOpen={!!playVideo}
+        onClose={() => setPlayVideo(null)}
+        title={playVideo?.title ?? ''}
+        size="lg"
+        height="content"
+      >
         {playVideo && (
-          <video
-            src={playVideo.url || playVideo.fileUrl}
-            controls
-            controlsList="nodownload"
-            onContextMenu={e => e.preventDefault()}
-            className="w-full rounded-xl max-h-[60vh]"
-          />
+          <div className="flex justify-center rounded-xl bg-black">
+            <video
+              src={playVideo.url || playVideo.fileUrl}
+              controls
+              controlsList="nodownload"
+              onContextMenu={e => e.preventDefault()}
+              className="max-h-[72dvh] w-full rounded-xl object-contain"
+            />
+          </div>
         )}
       </Modal>
 

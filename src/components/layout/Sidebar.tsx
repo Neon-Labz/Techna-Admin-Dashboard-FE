@@ -17,6 +17,8 @@ import {
   Menu,
   QrCode,
   Play,
+  Award,
+  Megaphone,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast';
@@ -29,11 +31,12 @@ const navItems = [
   { path: '/dashboard/videos', icon: Play, label: 'Videos' },
   { path: '/dashboard/payments', icon: CreditCard, label: 'Payments' },
   { path: '/dashboard/exams', icon: ClipboardList, label: 'Exams' },
+  { path: '/dashboard/results', icon: Award, label: 'Results' },
+  { path: '/dashboard/announcements', icon: Megaphone, label: 'Announcements' },
   { path: '/dashboard/attendance', icon: Calendar, label: 'Attendance' },
   { path: '/dashboard/qr-scan', icon: QrCode, label: 'QR Scanner' },
   { path: '/dashboard/profile', icon: UserCircle, label: 'Profile' },
 ];
-
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (v: boolean) => void;

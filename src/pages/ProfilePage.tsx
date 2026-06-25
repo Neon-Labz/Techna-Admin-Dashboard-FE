@@ -44,7 +44,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="max-w-2xl p-3 pb-20 sm:p-6 sm:pb-6">
 
       {/* Page title */}
       <div className="mb-6">
