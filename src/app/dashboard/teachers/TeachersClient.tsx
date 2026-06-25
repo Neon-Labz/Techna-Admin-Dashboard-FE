@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Teacher } from '@/types';
 import { teacherApi, type TeacherFromApi } from '@/api/teacher.api';
+import { dashboardApi } from '@/api/dashboard.api';
 import Modal from '@/components/ui/Modal';
 import {
   Plus,
@@ -90,6 +91,124 @@ function TagInput({
   );
 }
 
+// ─── Validation helpers ───────────────────────────────────────────────────────
+function isValidEmail(email: string): boolean {
+  // Standard email regex: must have proper domain with TLD
+  return /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(email.trim());
+}
+
+function isValidPhone(phone: string): boolean {
+  // Allow digits, spaces, dashes, parens, and optional leading +
+  // Must contain between 7 and 15 actual digits
+  const digitsOnly = phone.replace(/[\s\-()+ ]/g, '');
+  if (!/^\d+$/.test(digitsOnly)) return false;
+  return digitsOnly.length >= 7 && digitsOnly.length <= 15;
+}
+
+function isValidJoinDate(dateStr: string): boolean {
+  if (!dateStr) return false;
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return false;
+  const minDate = new Date('1990-01-01');
+  const maxDate = new Date();
+  maxDate.setFullYear(maxDate.getFullYear() + 1); // allow up to 1 year in future
+  return date >= minDate && date <= maxDate;
+}
+
+function isValidSubject(subject: string): boolean {
+  // Subjects should only contain letters, spaces, ampersands, hyphens, and dots
+  // No pure numbers or special characters like @@@
+  const trimmed = subject.trim();
+  if (!trimmed) return false;
+  if (/^\d+$/.test(trimmed)) return false; // reject pure numbers
+  return /^[a-zA-Z][a-zA-Z0-9\s&.\-/()]+$/.test(trimmed) || /^[a-zA-Z]+$/.test(trimmed);
+}
+
+// ─── SubjectInput with autocomplete ──────────────────────────────────────────
+function SubjectInput({
+  value,
+  onChange,
+  availableSubjects,
+  error,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  availableSubjects: string[];
+  error?: string;
+}) {
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const currentSubjects = value.split(',').map(s => s.trim()).filter(Boolean);
+  const lastSegment = value.split(',').pop()?.trim().toLowerCase() ?? '';
+
+  const suggestions = availableSubjects.filter(
+    s => s.toLowerCase().includes(lastSegment) && !currentSubjects.includes(s)
+  );
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectSubject = (subject: string) => {
+    const parts = value.split(',').map(s => s.trim()).filter(Boolean);
+    // Replace the last (incomplete) segment with the selected subject
+    if (lastSegment) {
+      parts.pop();
+    }
+    parts.push(subject);
+    onChange(parts.join(', '));
+    setShowDropdown(false);
+  };
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={e => {
+          onChange(e.target.value);
+          setShowDropdown(true);
+        }}
+        onFocus={() => { setFocused(true); setShowDropdown(true); }}
+        onBlur={() => setFocused(false)}
+        placeholder="Mathematics, Physics"
+        className={`w-full border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base text-[#374151] placeholder:text-[#6B7280] bg-white ${error ? 'border-red-400' : 'border-[#E5E7EB]'}`}
+        style={{ height: '46px', paddingLeft: '13px', paddingRight: '40px' }}
+      />
+      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none" style={{ color: '#9CA3AF' }} />
+      {error && (
+        <p className="mt-1 text-xs text-red-500">{error}</p>
+      )}
+      <p className="mt-1" style={{ fontSize: '10px', lineHeight: '15px', color: '#9CA3AF' }}>
+        Separate multiple subjects with commas
+      </p>
+      {showDropdown && suggestions.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+          {suggestions.map((s, i) => (
+            <button
+              key={i}
+              type="button"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => selectSubject(s)}
+              className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function countWords(text: string): number {
   return text.trim() ? text.trim().split(/\s+/).length : 0;
@@ -105,8 +224,14 @@ function normalizeSubject(subject: TeacherFromApi['subject'] | string[]): string
 }
 
 function normalizePhotoUrl(url?: string): string {
-  if (!url) return '';
-  return url.trim().replace(/\.r2\.devya\b/gi, '.r2.dev');
+  if (!url || !url.trim()) return '';
+  const normalized = url.trim().replace(/\.r2\.devya\b/gi, '.r2.dev');
+  // Ensure the URL is absolute
+  if (normalized && !normalized.startsWith('http') && !normalized.startsWith('data:')) {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+    return `${baseUrl}${normalized.startsWith('/') ? '' : '/'}${normalized}`;
+  }
+  return normalized;
 }
 
 const TITLE_PREFIXES = new Set([
@@ -249,6 +374,8 @@ export default function TeachersPage() {
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editTeacher, setEditTeacher] = useState<Teacher | null>(null);
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // formRef stays in sync with form state but updated SYNCHRONOUSLY so that
   // handleSubmit always reads the latest tag arrays even when onBlur fires
@@ -268,7 +395,45 @@ export default function TeachersPage() {
 
   useEffect(() => {
     fetchTeachers();
+    fetchAvailableSubjects();
   }, []);
+
+  const fetchAvailableSubjects = async () => {
+    try {
+      const modules = await dashboardApi.getModules();
+      // Extract unique subject/module names
+      const subjects = new Set<string>();
+      if (Array.isArray(modules)) {
+        modules.forEach((m: any) => {
+          if (m.name) subjects.add(m.name);
+          if (m.subject) {
+            const s = Array.isArray(m.subject) ? m.subject : [m.subject];
+            s.forEach((sub: string) => { if (sub.trim()) subjects.add(sub.trim()); });
+          }
+        });
+      }
+      // Also collect subjects already assigned to teachers
+      teachers.forEach(t => {
+        t.subject.forEach(s => { if (s.trim()) subjects.add(s.trim()); });
+      });
+      setAvailableSubjects(Array.from(subjects).sort());
+    } catch {
+      // Silently fail - subject autocomplete is a nice-to-have
+    }
+  };
+
+  // Re-collect teacher subjects when teachers change
+  useEffect(() => {
+    if (teachers.length > 0) {
+      setAvailableSubjects(prev => {
+        const updated = new Set(prev);
+        teachers.forEach(t => {
+          t.subject.forEach(s => { if (s.trim()) updated.add(s.trim()); });
+        });
+        return Array.from(updated).sort();
+      });
+    }
+  }, [teachers]);
 
   const fetchTeachers = async () => {
     try {
@@ -303,6 +468,7 @@ export default function TeachersPage() {
     setPhotoFile(null);
     setPhotoPreview(null);
     setPhotoRemoved(false);
+    setFormErrors({});
     setModalOpen(true);
   };
 
@@ -327,8 +493,10 @@ export default function TeachersPage() {
     });
     setEditTeacher(t);
     setPhotoFile(null);
-    setPhotoPreview(t.photoUrl ?? null);
+    // Fix BUG-008: Ensure photoPreview is set properly from the teacher's photoUrl
+    setPhotoPreview(t.photoUrl && t.photoUrl.trim() ? t.photoUrl : null);
     setPhotoRemoved(false);
+    setFormErrors({});
     setModalOpen(true);
   };
 
@@ -344,20 +512,59 @@ export default function TeachersPage() {
   const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const subjects = form.subjectText.split(',').map(s => s.trim()).filter(Boolean);
-    if (subjects.length === 0) {
-      toast.error('Please enter at least one subject');
-      return;
-    }
-    if (form.biography && countWords(form.biography) > 100) {
-      toast.error('Bio must not exceed 100 words');
-      return;
-    }
+    // ─── Validate all fields (BUG-007) ───
+    const errors: Record<string, string> = {};
+
     const fullName = [form.firstName.trim(), form.lastName.trim()].filter(Boolean).join(' ');
     if (!fullName) {
-      toast.error('Please enter a first name');
+      errors.firstName = 'Please enter a first name';
+    }
+
+    // Email validation
+    if (!form.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!isValidEmail(form.email)) {
+      errors.email = 'Please enter a valid email address (e.g. name@domain.com)';
+    }
+
+    // Phone validation
+    if (!form.phone.trim()) {
+      errors.phone = 'Phone number is required';
+    } else if (!isValidPhone(form.phone)) {
+      errors.phone = 'Please enter a valid phone number (7-15 digits, no letters)';
+    }
+
+    // Subject validation
+    const subjects = form.subjectText.split(',').map(s => s.trim()).filter(Boolean);
+    if (subjects.length === 0) {
+      errors.subject = 'Please enter at least one subject';
+    } else {
+      const invalidSubjects = subjects.filter(s => !isValidSubject(s));
+      if (invalidSubjects.length > 0) {
+        errors.subject = `Invalid subject(s): "${invalidSubjects.join('", "')}". Subjects must start with a letter and contain only letters, numbers, spaces, and common punctuation.`;
+      }
+    }
+
+    // Join date validation
+    if (!form.joinDate) {
+      errors.joinDate = 'Join date is required';
+    } else if (!isValidJoinDate(form.joinDate)) {
+      errors.joinDate = 'Please enter a valid date (between 1990 and next year)';
+    }
+
+    // Bio validation
+    if (form.biography && countWords(form.biography) > 100) {
+      errors.biography = 'Bio must not exceed 100 words';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      const firstError = Object.values(errors)[0];
+      toast.error(firstError);
       return;
     }
+
+    setFormErrors({});
 
     try {
       setSaving(true);
@@ -667,36 +874,36 @@ export default function TeachersPage() {
             <input
               type="email"
               value={form.email}
-              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              onChange={e => { setForm(f => ({ ...f, email: e.target.value })); setFormErrors(err => ({ ...err, email: '' })); }}
               placeholder="john.doe@school.edu"
               required
-              className={INPUT_BASE}
+              className={`${INPUT_BASE} ${formErrors.email ? '!border-red-400' : ''}`}
               style={INPUT_STYLE}
             />
+            {formErrors.email && <p className="mt-1 text-xs text-red-500">{formErrors.email}</p>}
           </div>
           <div>
             <label style={LABEL}>Contact Number</label>
             <input
-              type="text"
+              type="tel"
               value={form.phone}
-              onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-              placeholder="+1 (555) 000-0000"
+              onChange={e => { setForm(f => ({ ...f, phone: e.target.value })); setFormErrors(err => ({ ...err, phone: '' })); }}
+              placeholder="+94 77 123 4567"
               required
-              className={INPUT_BASE}
+              className={`${INPUT_BASE} ${formErrors.phone ? '!border-red-400' : ''}`}
               style={INPUT_STYLE}
             />
+            {formErrors.phone && <p className="mt-1 text-xs text-red-500">{formErrors.phone}</p>}
           </div>
 
           {/* 4 ── Subject | Qualifications ── */}
           <div>
             <label style={LABEL}>Subject</label>
-            <input
-              type="text"
+            <SubjectInput
               value={form.subjectText}
-              onChange={e => setForm(f => ({ ...f, subjectText: e.target.value }))}
-              placeholder="Mathematics"
-              className={INPUT_BASE}
-              style={INPUT_STYLE}
+              onChange={val => { setForm(f => ({ ...f, subjectText: val })); setFormErrors(err => ({ ...err, subject: '' })); }}
+              availableSubjects={availableSubjects}
+              error={formErrors.subject}
             />
           </div>
           <div>
@@ -740,11 +947,14 @@ export default function TeachersPage() {
             <input
               type="date"
               value={form.joinDate}
-              onChange={e => setForm(f => ({ ...f, joinDate: e.target.value }))}
+              onChange={e => { setForm(f => ({ ...f, joinDate: e.target.value })); setFormErrors(err => ({ ...err, joinDate: '' })); }}
+              min="1990-01-01"
+              max={new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0]}
               required
-              className={INPUT_BASE}
+              className={`${INPUT_BASE} ${formErrors.joinDate ? '!border-red-400' : ''}`}
               style={INPUT_STYLE}
             />
+            {formErrors.joinDate && <p className="mt-1 text-xs text-red-500">{formErrors.joinDate}</p>}
           </div>
 
           {/* 7 ── Area of Specialization | Status ── */}
