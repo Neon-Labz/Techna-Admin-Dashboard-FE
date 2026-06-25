@@ -228,11 +228,14 @@ export default function StudentProfile({
       pdf.text(`Phone: ${getValue(s.phone || s.whatsappNo)}`, 14, 68);
       pdf.text(`Email: ${getValue(s.email)}`, 14, 74);
       pdf.text(`Status: ${getValue(s.status)}`, 14, 80);
-      pdf.text(
-        `Modules: ${studentModules.map((m: any) => m.name).join(', ') || 'N/A'}`,
-        14,
-        86,
-      );
+
+      const modulesText = `Modules: ${
+        studentModules.map((m: any) => m.name).join(', ') || 'N/A'
+      }`;
+
+const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
+
+      pdf.text(moduleLines, 14, 86);
 
       pdf.addImage(qrImage, 'PNG', pageWidth - 50, 38, 32, 32);
 

@@ -48,13 +48,7 @@ export default function DashboardLayout({
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="relative hidden md:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-              <input
-                placeholder="Quick search..."
-                className="pl-9 pr-4 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-48 bg-gray-50"
-              />
-            </div>
+           
 
             <button className="relative p-2 rounded-lg hover:bg-gray-100 text-gray-500">
               <Bell className="w-4 h-4" />
