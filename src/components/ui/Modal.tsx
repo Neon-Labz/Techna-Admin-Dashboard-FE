@@ -14,6 +14,8 @@ interface ModalProps {
   height?: 'screen' | 'content';
   closeOnBackdrop?: boolean;
   showCloseButton?: boolean;
+  titleClassName?: string;
+  titleStyle?: React.CSSProperties;
 }
 
 const sizeMap = {
@@ -33,6 +35,8 @@ export default function Modal({
   height = 'screen',
   closeOnBackdrop = true,
   showCloseButton = true,
+  titleClassName,
+  titleStyle,
 }: ModalProps) {
   const backdropPointerStarted = useRef(false);
   const [mounted, setMounted] = useState(false);
@@ -101,7 +105,10 @@ export default function Modal({
         onTouchEnd={stopModalEvent}
       >
         <div className="flex items-center justify-between gap-3 border-b border-gray-100 p-3.5 md:p-4">
-          <h3 className="min-w-0 flex-1 truncate text-base font-bold text-gray-800">
+          <h3
+            className={`min-w-0 flex-1 truncate font-bold ${titleClassName ?? 'text-base text-gray-800'}`}
+            style={titleStyle}
+          >
             {title}
           </h3>
 

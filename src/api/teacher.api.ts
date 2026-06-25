@@ -3,44 +3,49 @@ import { apiClient, getStoredToken } from './axiosClient';
 export interface TeacherFromApi {
   _id: string;
   fullName: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   phone: string;
+  gender?: 'male' | 'female' | '';
   subject: string | string[];
-  qualification: string;
+  qualification?: string;
   experience: string;
   address: string;
   joinDate: string;
   status: 'active' | 'inactive';
   photoUrl?: string;
   photoKey?: string;
+  degree?: string[];
+  specializations?: string[];
+  awards?: string[];
+  achievements?: string[];
+  biography?: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
 export interface CreateTeacherPayload {
   fullName: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   phone: string;
+  gender?: 'male' | 'female' | '';
   subject: string[];
-  qualification: string;
+  qualification?: string;
   experience: string;
   address: string;
   joinDate: string;
   status: 'active' | 'inactive';
+  degree?: string[];
+  specializations?: string[];
+  awards?: string[];
+  achievements?: string[];
+  biography?: string;
 }
 
 export type UpdateTeacherPayload = Partial<CreateTeacherPayload>;
-
-function toApiBody(data: CreateTeacherPayload | UpdateTeacherPayload) {
-  const { subject, ...rest } = data;
-
-  return {
-    ...rest,
-    ...(subject !== undefined
-      ? { subject: Array.isArray(subject) ? subject.join(', ') : subject }
-      : {}),
-  };
-}
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
@@ -61,11 +66,11 @@ async function uploadTeacherPhoto(
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.message || 'Failed to upload photo');
+    throw new Error((err as { message?: string }).message || 'Failed to upload photo');
   }
 
-  const json = await response.json();
-  return json?.data ?? json;
+  const json = await response.json() as { data?: TeacherFromApi } | TeacherFromApi;
+  return (json as { data?: TeacherFromApi }).data ?? (json as TeacherFromApi);
 }
 
 export const teacherApi = {
@@ -74,13 +79,13 @@ export const teacherApi = {
   create: (data: CreateTeacherPayload) =>
     apiClient<TeacherFromApi>('/teachers', {
       method: 'POST',
-      body: { ...toApiBody(data), password: 'Teacher@123' },
+      body: { ...data, password: 'Teacher@123' },
     }),
 
   update: (id: string, data: UpdateTeacherPayload) =>
     apiClient<TeacherFromApi>(`/teachers/${id}`, {
       method: 'PATCH',
-      body: toApiBody(data),
+      body: { ...data },
     }),
 
   delete: (id: string) =>
@@ -89,4 +94,7 @@ export const teacherApi = {
     }),
 
   uploadPhoto: uploadTeacherPhoto,
+
+  removePhoto: (id: string) =>
+    apiClient<TeacherFromApi>(`/teachers/${id}/photo`, { method: 'DELETE' }),
 };
