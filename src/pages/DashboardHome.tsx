@@ -288,8 +288,10 @@ export default function DashboardHome() {
       : [0, Math.ceil(maxModuleStudents / 2), maxModuleStudents];
   const moduleChartHeight = 240;
   const mobileModuleChartHeight = Math.max(220, moduleChartData.length * 42);
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+
   const upcomingExams = exams
     .filter((exam) => {
       const examDate = toDate(exam.date);
@@ -301,6 +303,7 @@ export default function DashboardHome() {
       return firstDate - secondDate;
     })
     .slice(0, 5);
+
   const recentStudents = [...students].slice(-4).reverse();
 
   const stats = [
@@ -416,106 +419,114 @@ export default function DashboardHome() {
             </div>
           ) : (
             <>
-            <div className="sm:hidden" style={{ height: mobileModuleChartHeight }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={moduleChartData}
-                  layout="vertical"
-                  margin={{ top: 6, right: 28, left: -18, bottom: 6 }}
-                  barCategoryGap={12}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="#eef2f7"
-                    horizontal={false}
-                  />
-                  <XAxis
-                    type="number"
-                    allowDecimals={false}
-                    domain={[0, maxModuleStudents]}
-                    ticks={moduleChartTicks}
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 11, fill: '#64748b' }}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={108}
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 11, fill: '#334155' }}
-                    tickFormatter={(name) => splitModuleName(name, 11).join(' ')}
-                  />
-                  <Tooltip
-                    cursor={{ fill: '#f8fafc' }}
-                    formatter={(value) => [`${value} students`, 'Enrolled']}
-                    labelFormatter={(label) => String(label)}
-                  />
-                  <Bar
-                    dataKey="students"
-                    fill="#6366f1"
-                    radius={[0, 7, 7, 0]}
-                    barSize={22}
-                    label={{
-                      position: 'right',
-                      fill: '#334155',
-                      fontSize: 11,
-                      fontWeight: 700,
-                    }}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+              <div
+                className="sm:hidden"
+                style={{ height: mobileModuleChartHeight }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={moduleChartData}
+                    layout="vertical"
+                    margin={{ top: 6, right: 28, left: -18, bottom: 6 }}
+                    barCategoryGap={12}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#eef2f7"
+                      horizontal={false}
+                    />
+                    <XAxis
+                      type="number"
+                      allowDecimals={false}
+                      domain={[0, maxModuleStudents]}
+                      ticks={moduleChartTicks}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: '#64748b' }}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={108}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: '#334155' }}
+                      tickFormatter={(name) =>
+                        splitModuleName(name, 11).join(' ')
+                      }
+                    />
+                    <Tooltip
+                      cursor={{ fill: '#f8fafc' }}
+                      formatter={(value) => [`${value} students`, 'Enrolled']}
+                      labelFormatter={(label) => String(label)}
+                    />
+                    <Bar
+                      dataKey="students"
+                      fill="#6366f1"
+                      radius={[0, 7, 7, 0]}
+                      barSize={22}
+                      label={{
+                        position: 'right',
+                        fill: '#334155',
+                        fontSize: 11,
+                        fontWeight: 700,
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
 
-            <div className="hidden sm:block" style={{ height: moduleChartHeight }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={moduleChartData}
-                  margin={{ top: 16, right: 18, left: -18, bottom: 50 }}
-                  barCategoryGap={18}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="#eef2f7"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="name"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={<ModuleAxisTick />}
-                    interval={0}
-                    height={56}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    domain={[0, maxModuleStudents]}
-                    ticks={moduleChartTicks}
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 12, fill: '#334155' }}
-                  />
-                  <Tooltip
-                    cursor={{ fill: '#f8fafc' }}
-                    formatter={(value) => [`${value} students`, 'Enrolled']}
-                    labelFormatter={(label) => String(label)}
-                  />
-                  <Bar
-                    dataKey="students"
-                    fill="#6366f1"
-                    radius={[8, 8, 0, 0]}
-                    maxBarSize={54}
-                    label={{
-                      position: 'top',
-                      fill: '#334155',
-                      fontSize: 12,
-                      fontWeight: 700,
-                    }}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+              <div
+                className="hidden sm:block"
+                style={{ height: moduleChartHeight }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={moduleChartData}
+                    margin={{ top: 16, right: 18, left: -18, bottom: 50 }}
+                    barCategoryGap={18}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#eef2f7"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="name"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={<ModuleAxisTick />}
+                      interval={0}
+                      height={56}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      domain={[0, maxModuleStudents]}
+                      ticks={moduleChartTicks}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 12, fill: '#334155' }}
+                    />
+                    <Tooltip
+                      cursor={{ fill: '#f8fafc' }}
+                      formatter={(value) => [`${value} students`, 'Enrolled']}
+                      labelFormatter={(label) => String(label)}
+                    />
+                    <Bar
+                      dataKey="students"
+                      fill="#6366f1"
+                      radius={[8, 8, 0, 0]}
+                      maxBarSize={54}
+                      label={{
+                        position: 'top',
+                        fill: '#334155',
+                        fontSize: 12,
+                        fontWeight: 700,
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </>
           )}
         </div>

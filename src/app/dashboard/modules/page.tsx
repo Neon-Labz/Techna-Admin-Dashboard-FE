@@ -498,14 +498,14 @@ export default function ModulesPage() {
 
       {/* Delete confirmation */}
       <DeleteModal
-  open={!!deleteId}
-  title="Delete Subject"
-  itemName={moduleToDelete?.name}
-  message="Are you sure you want to delete this subject? This action cannot be undone."
-  loading={deleting}
-  onCancel={() => setDeleteId(null)}
-  onConfirm={handleDelete}
-/>
+        open={!!deleteId}
+        title="Delete Subject"
+        itemName={moduleToDelete?.name}
+        message="Are you sure you want to delete this subject? This action cannot be undone."
+        loading={deleting}
+        onCancel={() => setDeleteId(null)}
+        onConfirm={handleDelete}
+      />
       <Toast toasts={toasts} onRemove={removeToast} />
     </div>
   );

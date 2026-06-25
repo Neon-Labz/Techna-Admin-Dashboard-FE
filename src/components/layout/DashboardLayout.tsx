@@ -7,7 +7,14 @@ import Sidebar, { MobileMenuButton } from './Sidebar';
 import { useAuthStore } from '../../store/authStore';
 import { announcementApi } from '@/api/announcement.api';
 import { dashboardApi } from '@/api/dashboard.api';
-import { Bell, CalendarDays, CreditCard, Megaphone, Search, UserCheck } from 'lucide-react';
+import {
+  Bell,
+  CalendarDays,
+  CreditCard,
+  Megaphone,
+  Search,
+  UserCheck,
+} from 'lucide-react';
 
 const pageNames: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -93,7 +100,9 @@ export default function DashboardLayout({
     () => readStoredNotificationIds(),
   );
   const [notificationsLoading, setNotificationsLoading] = useState(false);
-  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  const [notificationsError, setNotificationsError] = useState<string | null>(
+    null,
+  );
   const notificationsRef = useRef<HTMLDivElement>(null);
   const { user } = useAuthStore();
 
@@ -139,16 +148,20 @@ export default function DashboardLayout({
         const pendingStudents = Array.isArray(students)
           ? students.filter((student: any) => student.status === 'pending')
           : [];
+
         const paymentAlerts = Array.isArray(payments)
           ? payments.filter((payment: any) =>
               ['pending', 'overdue'].includes(payment.status),
             )
           : [];
+
         const upcomingExams = Array.isArray(exams)
-          ? exams.filter((exam: any) =>
-              exam.status === 'upcoming' || isWithinNextDays(exam.date, 14),
+          ? exams.filter(
+              (exam: any) =>
+                exam.status === 'upcoming' || isWithinNextDays(exam.date, 14),
             )
           : [];
+
         const recentAnnouncements = Array.isArray(announcements)
           ? [...announcements]
               .sort(
@@ -164,10 +177,14 @@ export default function DashboardLayout({
         if (pendingStudents.length > 0) {
           nextNotifications.push({
             id: `student-approvals-${pendingStudents
-              .map((student: any, index: number) => getEntityId(student, `pending-${index}`))
+              .map((student: any, index: number) =>
+                getEntityId(student, `pending-${index}`),
+              )
               .sort()
               .join('-')}`,
-            title: `${pendingStudents.length} student approval${pendingStudents.length === 1 ? '' : 's'} pending`,
+            title: `${pendingStudents.length} student approval${
+              pendingStudents.length === 1 ? '' : 's'
+            } pending`,
             description: pendingStudents
               .slice(0, 2)
               .map((student: any) => student.name || student.email || 'New student')
@@ -180,7 +197,10 @@ export default function DashboardLayout({
         }
 
         paymentAlerts.slice(0, 3).forEach((payment: any) => {
-          const paymentId = getEntityId(payment, `${payment.studentName}-${payment.moduleName}`);
+          const paymentId = getEntityId(
+            payment,
+            `${payment.studentName}-${payment.moduleName}`,
+          );
 
           nextNotifications.push({
             id: `payment-${payment.status}-${paymentId}`,
@@ -221,8 +241,11 @@ export default function DashboardLayout({
           nextNotifications.push({
             id: `announcement-${announcementId}`,
             title: announcement.title || 'Recent announcement',
-            description: announcement.batch || announcement.audience || 'All Students',
-            meta: formatDate(announcement.createdAt || announcement.date) || 'Announcement',
+            description:
+              announcement.batch || announcement.audience || 'All Students',
+            meta:
+              formatDate(announcement.createdAt || announcement.date) ||
+              'Announcement',
             href: '/dashboard/announcements',
             tone: 'indigo',
             icon: 'announcement',
@@ -283,9 +306,7 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!notificationsOpen || notifications.length === 0) return;
 
-    markNotificationIdsRead(
-      notifications.map((notification) => notification.id),
-    );
+    markNotificationIdsRead(notifications.map((notification) => notification.id));
   }, [notificationsOpen, notifications]);
 
   const iconMap = useMemo(
@@ -338,7 +359,9 @@ export default function DashboardLayout({
                 <Bell className="w-4 h-4" />
                 {unreadNotificationCount > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 bg-red-500 text-white text-[10px] leading-4 rounded-full text-center">
-                    {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                    {unreadNotificationCount > 9
+                      ? '9+'
+                      : unreadNotificationCount}
                   </span>
                 )}
               </button>
@@ -429,9 +452,7 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto">
-          {children || <Outlet />}
-        </main>
+        <main className="flex-1 overflow-y-auto">{children || <Outlet />}</main>
       </div>
     </div>
   );
