@@ -93,7 +93,7 @@ export default function Modal({
     >
       <div
         className={`relative mx-auto flex w-full min-w-0 ${sizeMap[size]} flex-col overflow-hidden rounded-xl bg-white shadow-2xl sm:w-[95vw] sm:rounded-2xl md:w-full ${
-          height === 'screen'
+          height === 'content'
             ? 'h-[calc(100dvh-1.5rem)] max-h-[calc(100dvh-1.5rem)] sm:h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-2rem)]'
             : 'max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]'
         }`}

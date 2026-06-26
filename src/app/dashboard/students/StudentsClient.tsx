@@ -74,6 +74,7 @@ export default function StudentsPage() {
     updateStudent,
     deleteStudent,
     approveStudent,
+    rejectStudent,
   } = useDataStore();
 
   const [search, setSearch] = useState('');
@@ -85,6 +86,9 @@ export default function StudentsPage() {
   const [form, setForm] = useState<any>(emptyStudent);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [rejectDialog, setRejectDialog] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
   const [moduleOptions, setModuleOptions] = useState<ApiModule[]>([]);
   const [modulesLoading, setModulesLoading] = useState(true);
 
@@ -342,13 +346,15 @@ export default function StudentsPage() {
     id: string,
     status: 'pending' | 'approved' | 'rejected',
   ) => {
-    await updateStudent(id, {
-      status,
-      ...(status === 'approved'
-        ? { approvedAt: new Date().toISOString() }
-        : {}),
-    });
-    toast.success(`Student ${status}!`);
+    if (status === 'approved') {
+      await handleApprove(id);
+    } else if (status === 'rejected') {
+      setRejectReason('');
+      setRejectDialog(id);
+    } else {
+      await updateStudent(id, { status: 'pending' });
+      toast.success('Student set to pending');
+    }
   };
 
   const handleAttendanceUpdate = (
@@ -813,6 +819,57 @@ export default function StudentsPage() {
           }
         }}
       />
+
+      <Modal
+        isOpen={!!rejectDialog}
+        onClose={() => setRejectDialog(null)}
+        title="Reject Student"
+        size="sm"
+        height="content"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Please provide a reason for rejecting this student. This will be sent to the student by email.
+          </p>
+          <textarea
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:border-indigo-400 focus:outline-none resize-none"
+            rows={3}
+            placeholder="e.g. Incomplete documentation, seat not available..."
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setRejectDialog(null)}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={rejecting || !rejectReason.trim()}
+              onClick={async () => {
+                if (!rejectDialog) return;
+                setRejecting(true);
+                try {
+                  await rejectStudent(rejectDialog, rejectReason.trim());
+                  const s: any = students.find((x) => x.id === rejectDialog);
+                  toast.success(`${getStudentName(s)} rejected`);
+                  setRejectDialog(null);
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : 'Failed to reject student');
+                } finally {
+                  setRejecting(false);
+                }
+              }}
+              className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
+            >
+              {rejecting ? 'Rejecting...' : 'Reject & Send Email'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

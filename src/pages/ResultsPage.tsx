@@ -1,4 +1,5 @@
 'use client';
+
 import toast from 'react-hot-toast';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -95,7 +96,9 @@ export default function ResultsPage() {
   const [batchFilter, setBatchFilter] = useState('all');
   const [moduleFilter, setModuleFilter] = useState('all');
   const [examFilter, setExamFilter] = useState('all');
-  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
+  const [expandedStudentId, setExpandedStudentId] = useState<string | null>(
+    null,
+  );
 
   const loadData = async () => {
     try {
@@ -117,21 +120,21 @@ export default function ResultsPage() {
   }, []);
 
   useEffect(() => {
-  const handleClickOutside = (event: MouseEvent) => {
-    if (
-      dropdownRef.current &&
-      !dropdownRef.current.contains(event.target as Node)
-    ) {
-      setStudentDropdown(false);
-    }
-  };
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setStudentDropdown(false);
+      }
+    };
 
-  document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
 
-  return () => {
-    document.removeEventListener('mousedown', handleClickOutside);
-  };
-}, []);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const studentOptions = useMemo(() => {
     const q = studentSearch.toLowerCase().trim();
@@ -157,7 +160,7 @@ export default function ResultsPage() {
         examType: module.examType,
         marks: module.marks,
         grade: module.grade,
-      }))
+      })),
     );
   }, [results]);
 
@@ -168,10 +171,19 @@ export default function ResultsPage() {
       .filter((student) => {
         if (q) {
           const sid = (student.studentId || '').toLowerCase();
-          const name = (student.fullNameEnglish || student.name || '').toLowerCase();
+          const name = (
+            student.fullNameEnglish ||
+            student.name ||
+            ''
+          ).toLowerCase();
+
           if (!sid.includes(q) && !name.includes(q)) return false;
         }
-        if (batchFilter !== 'all' && student.batch !== batchFilter) return false;
+
+        if (batchFilter !== 'all' && student.batch !== batchFilter) {
+          return false;
+        }
+
         return true;
       })
       .map((student) => {
@@ -180,8 +192,14 @@ export default function ResultsPage() {
         );
 
         const items = allItems.filter((item) => {
-          if (moduleFilter !== 'all' && item.moduleName !== moduleFilter) return false;
-          if (examFilter !== 'all' && item.examType !== examFilter) return false;
+          if (moduleFilter !== 'all' && item.moduleName !== moduleFilter) {
+            return false;
+          }
+
+          if (examFilter !== 'all' && item.examType !== examFilter) {
+            return false;
+          }
+
           return true;
         });
 
@@ -195,21 +213,15 @@ export default function ResultsPage() {
           failed: items.filter((i) => i.grade === 'F').length,
         };
       })
-      .filter((group) => {
-        // When a module or exam-type filter is active, hide students with no matching items
-        if ((moduleFilter !== 'all' || examFilter !== 'all') && group.total === 0) {
-          return false;
-        }
-        return true;
-      });
+      .filter((group) => group.total > 0);
   }, [students, flatResults, search, batchFilter, moduleFilter, examFilter]);
 
   const batches = Array.from(
-    new Set(students.map((s) => s.batch).filter(Boolean))
+    new Set(students.map((s) => s.batch).filter(Boolean)),
   );
 
   const modules = Array.from(
-    new Set(flatResults.map((r) => r.moduleName).filter(Boolean))
+    new Set(flatResults.map((r) => r.moduleName).filter(Boolean)),
   );
 
   const selectStudent = async (student: Student) => {
@@ -230,7 +242,9 @@ export default function ResultsPage() {
         },
       ]);
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || 'Failed to fetch student modules');
+      toast.error(
+        error?.response?.data?.message || 'Failed to fetch student modules',
+      );
     }
   };
 
@@ -247,7 +261,7 @@ export default function ResultsPage() {
 
   const updateRow = (index: number, key: keyof FormRow, value: string) => {
     setRows((prev) =>
-      prev.map((row, i) => (i === index ? { ...row, [key]: value } : row))
+      prev.map((row, i) => (i === index ? { ...row, [key]: value } : row)),
     );
   };
 
@@ -282,13 +296,13 @@ export default function ResultsPage() {
     }
 
     const invalid = modulesPayload.find(
-      (r) => Number.isNaN(r.marks) || r.marks < 0 || r.marks > 100
+      (r) => Number.isNaN(r.marks) || r.marks < 0 || r.marks > 100,
     );
 
     if (invalid) {
-  toast.error('Marks must be between 0 and 100');
-  return;
-}
+      toast.error('Marks must be between 0 and 100');
+      return;
+    }
 
     setSaving(true);
 
@@ -330,7 +344,7 @@ export default function ResultsPage() {
           moduleName: m.moduleName,
           examType: m.examType,
           marks: String(m.marks),
-        }))
+        })),
       );
       setEditingId(resultId);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -340,14 +354,15 @@ export default function ResultsPage() {
   };
 
   const deleteResult = async (resultId: string) => {
-  try {
-    await resultsApi.remove(resultId);
-    await loadData();
-    toast.success('Result deleted');
-  } catch {
-    toast.error('Failed to delete result');
-  }
-};
+    try {
+      await resultsApi.remove(resultId);
+      await loadData();
+      toast.success('Result deleted');
+    } catch {
+      toast.error('Failed to delete result');
+    }
+  };
+
   return (
     <div className="mx-auto w-full max-w-[1280px] space-y-5 px-4 py-5 sm:px-5">
       <div>
@@ -366,8 +381,8 @@ export default function ResultsPage() {
               Student ID
             </label>
 
-              <div className="relative" ref={dropdownRef}>
-                <input
+            <div className="relative" ref={dropdownRef}>
+              <input
                 value={studentSearch}
                 onChange={(e) => {
                   setStudentSearch(e.target.value);
@@ -436,7 +451,7 @@ export default function ResultsPage() {
           </div>
         </div>
 
-        <div className="mt-4 overflow-x-auto rounded-lg border border-gray-100">
+        <div className="mt-4 hidden overflow-x-auto rounded-lg border border-gray-100 lg:block">
           <table className="w-full min-w-[850px] text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
               <tr>
@@ -452,12 +467,12 @@ export default function ResultsPage() {
               {rows.map((row, index) => {
                 const marks = Number(row.marks);
                 const grade =
-                    row.marks !== '' &&
-                    !Number.isNaN(marks) &&
-                    marks >= 0 &&
-                    marks <= 100
-                      ? calculateGrade(marks)
-                      : '-';
+                  row.marks !== '' &&
+                  !Number.isNaN(marks) &&
+                  marks >= 0 &&
+                  marks <= 100
+                    ? calculateGrade(marks)
+                    : '-';
 
                 return (
                   <tr key={index} className="border-t border-gray-100">
@@ -485,7 +500,7 @@ export default function ResultsPage() {
                           updateRow(
                             index,
                             'examType',
-                            e.target.value as 'Mid exam' | 'Final exam'
+                            e.target.value as 'Mid exam' | 'Final exam',
                           )
                         }
                         className="w-full rounded-lg border border-gray-200 px-3 py-1.5 outline-none focus:border-blue-500"
@@ -511,7 +526,7 @@ export default function ResultsPage() {
                     <td className="px-4 py-2">
                       <span
                         className={`inline-flex min-w-12 justify-center rounded-lg border px-3 py-1 font-semibold ${gradeClass(
-                          grade
+                          grade,
                         )}`}
                       >
                         {grade}
@@ -532,6 +547,114 @@ export default function ResultsPage() {
               })}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-4 space-y-4 lg:hidden">
+          {rows.map((row, index) => {
+            const marks = Number(row.marks);
+            const grade =
+              row.marks !== '' &&
+              !Number.isNaN(marks) &&
+              marks >= 0 &&
+              marks <= 100
+                ? calculateGrade(marks)
+                : '-';
+
+            return (
+              <div
+                key={index}
+                className="rounded-xl border border-gray-100 bg-slate-50/70 p-4"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-bold text-slate-800">
+                    Subject {index + 1}
+                  </p>
+
+                  {rows.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeRow(index)}
+                      className="rounded-lg p-1.5 text-red-500 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">
+                      Module / Subject
+                    </label>
+                    <select
+                      value={row.moduleName}
+                      onChange={(e) =>
+                        updateRow(index, 'moduleName', e.target.value)
+                      }
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+                    >
+                      <option value="">Search module...</option>
+                      {(selectedStudent?.modules || []).map((module) => (
+                        <option key={module} value={module}>
+                          {module}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">
+                      Exam Type
+                    </label>
+                    <select
+                      value={row.examType}
+                      onChange={(e) =>
+                        updateRow(
+                          index,
+                          'examType',
+                          e.target.value as 'Mid exam' | 'Final exam',
+                        )
+                      }
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+                    >
+                      <option value="Mid exam">Mid exam</option>
+                      <option value="Final exam">Final exam</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">
+                      Marks
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={row.marks}
+                      onChange={(e) =>
+                        updateRow(index, 'marks', e.target.value)
+                      }
+                      placeholder="Enter marks"
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">
+                      Result
+                    </label>
+                    <span
+                      className={`inline-flex min-w-12 justify-center rounded-lg border px-3 py-1.5 text-sm font-semibold ${gradeClass(
+                        grade,
+                      )}`}
+                    >
+                      {grade}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -563,7 +686,11 @@ export default function ResultsPage() {
               className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-60"
             >
               <Send className="h-4 w-4" />
-              {saving ? 'Saving...' : editingId ? 'Update Result' : 'Publish Result'}
+              {saving
+                ? 'Saving...'
+                : editingId
+                  ? 'Update Result'
+                  : 'Publish Result'}
             </button>
           </div>
         </div>
@@ -571,7 +698,9 @@ export default function ResultsPage() {
 
       <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
         <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center">
-          <h2 className="mr-auto text-lg font-bold text-slate-900">Results List</h2>
+          <h2 className="mr-auto text-lg font-bold text-slate-900">
+            Results List
+          </h2>
 
           <input
             value={search}
@@ -622,149 +751,297 @@ export default function ResultsPage() {
           </button>
         </div>
 
-        <div className="overflow-x-auto rounded-xl border border-gray-100">
-          <table className="w-full min-w-[1000px] text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+       {/* Desktop Results Table */}
+<div className="hidden overflow-hidden rounded-xl border border-gray-100 xl:block">
+  <table className="w-full text-sm">
+    <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+      <tr>
+        <th className="px-4 py-3">Student ID</th>
+        <th className="px-4 py-3">Student Name</th>
+        <th className="px-4 py-3">Batch</th>
+        <th className="px-4 py-3">Total</th>
+        <th className="px-4 py-3">Passed</th>
+        <th className="px-4 py-3">Failed</th>
+        <th className="px-4 py-3 text-center">Action</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      {groupedResults.map((group) => {
+        const isOpen = expandedStudentId === group.studentId;
+
+        return (
+          <Fragment key={group.studentId}>
+            <tr className="border-t border-gray-100">
+              <td className="px-4 py-4">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedStudentId(isOpen ? null : group.studentId)
+                  }
+                  className="font-bold text-blue-600 underline-offset-4 hover:underline"
+                >
+                  {group.studentId}
+                </button>
+              </td>
+
+              <td className="px-4 py-4 font-semibold text-slate-900">
+                {group.studentName}
+              </td>
+
+              <td className="px-4 py-4 text-slate-600">{group.batch}</td>
+
+              <td className="px-4 py-4">{group.total}</td>
+
+              <td className="px-4 py-4">
+                <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-bold text-green-700">
+                  {group.passed}
+                </span>
+              </td>
+
+              <td className="px-4 py-4">
+                <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
+                  {group.failed}
+                </span>
+              </td>
+
+              <td className="px-4 py-4 text-center">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedStudentId(isOpen ? null : group.studentId)
+                  }
+                  className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
+                >
+                  {isOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </button>
+              </td>
+            </tr>
+
+            {isOpen && (
               <tr>
-                <th className="px-4 py-3">Student ID</th>
-                <th className="px-4 py-3">Student Name</th>
-                <th className="px-4 py-3">Batch</th>
-                <th className="px-4 py-3">Total</th>
-                <th className="px-4 py-3">Passed</th>
-                <th className="px-4 py-3">Failed</th>
-                <th className="px-4 py-3 text-center">Action</th>
+                <td colSpan={7} className="bg-slate-50 px-6 py-4">
+                  <div className="rounded-xl border border-gray-100 bg-white">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3">#</th>
+                          <th className="px-4 py-3">Module</th>
+                          <th className="px-4 py-3">Exam Type</th>
+                          <th className="px-4 py-3">Marks</th>
+                          <th className="px-4 py-3">Result</th>
+                          <th className="px-4 py-3">Date</th>
+                          <th className="px-4 py-3">Actions</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {group.items.map((item, index) => (
+                          <tr key={item.key} className="border-t border-gray-100">
+                            <td className="px-4 py-3">{index + 1}</td>
+                            <td className="px-4 py-3 font-medium">
+                              {item.moduleName}
+                            </td>
+                            <td className="px-4 py-3">{item.examType}</td>
+                            <td className="px-4 py-3">{item.marks}</td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`rounded-lg border px-3 py-1 font-semibold ${gradeClass(
+                                  item.grade,
+                                )}`}
+                              >
+                                {item.grade}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              {formatDate(item.createdAt)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => editResult(item.resultId)}
+                                  className="rounded-lg p-2 text-indigo-600 hover:bg-indigo-50"
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => deleteResult(item.resultId)}
+                                  className="rounded-lg p-2 text-red-500 hover:bg-red-50"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </td>
               </tr>
-            </thead>
+            )}
+          </Fragment>
+        );
+      })}
 
-            <tbody>
-              {groupedResults.map((group) => {
-                const isOpen = expandedStudentId === group.studentId;
+      {groupedResults.length === 0 && (
+        <tr>
+          <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+            No results found.
+          </td>
+        </tr>
+      )}
+    </tbody>
+  </table>
+</div>
 
-                return (
-                  <Fragment key={group.studentId}>
-                    <tr className="border-t border-gray-100">
-                      <td className="px-4 py-4">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpandedStudentId(isOpen ? null : group.studentId)
-                          }
-                          className="font-bold text-blue-600 underline-offset-4 hover:underline"
-                        >
-                          {group.studentId}
-                        </button>
-                      </td>
-                      <td className="px-4 py-4 font-semibold text-slate-900">
-                        {group.studentName}
-                      </td>
-                      <td className="px-4 py-4 text-slate-600">{group.batch}</td>
-                      <td className="px-4 py-4">{group.total}</td>
-                      <td className="px-4 py-4">
-                        <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-bold text-green-700">
-                          {group.passed}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
-                          {group.failed}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpandedStudentId(isOpen ? null : group.studentId)
-                          }
-                          className="rounded-lg p-2 text-blue-600 hover:bg-blue-50"
-                        >
-                          {isOpen ? (
-                            <ChevronUp className="h-4 w-4" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4" />
-                          )}
-                        </button>
-                      </td>
-                    </tr>
+{/* Mobile + iPad Results Cards */}
+<div className="space-y-3 xl:hidden">
+  {groupedResults.map((group) => {
+    const isOpen = expandedStudentId === group.studentId;
 
-                    {isOpen && (
-                      <tr>
-                        <td colSpan={7} className="bg-slate-50 px-6 py-4">
-                          <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white">
-                            <table className="w-full text-sm">
-                              <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-                                <tr>
-                                  <th className="px-4 py-3">#</th>
-                                  <th className="px-4 py-3">Module</th>
-                                  <th className="px-4 py-3">Exam Type</th>
-                                  <th className="px-4 py-3">Marks</th>
-                                  <th className="px-4 py-3">Result</th>
-                                  <th className="px-4 py-3">Date</th>
-                                  <th className="px-4 py-3">Actions</th>
-                                </tr>
-                              </thead>
+    return (
+      <div
+        key={group.studentId}
+        className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <button
+              type="button"
+              onClick={() =>
+                setExpandedStudentId(isOpen ? null : group.studentId)
+              }
+              className="text-base font-bold text-blue-600"
+            >
+              {group.studentId}
+            </button>
 
-                              <tbody>
-                                {group.items.map((item, index) => (
-                                  <tr key={item.key} className="border-t border-gray-100">
-                                    <td className="px-4 py-3">{index + 1}</td>
-                                    <td className="px-4 py-3 font-medium">
-                                      {item.moduleName}
-                                    </td>
-                                    <td className="px-4 py-3">{item.examType}</td>
-                                    <td className="px-4 py-3">{item.marks}</td>
-                                    <td className="px-4 py-3">
-                                      <span
-                                        className={`rounded-lg border px-3 py-1 font-semibold ${gradeClass(
-                                          item.grade
-                                        )}`}
-                                      >
-                                        {item.grade}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      {formatDate(item.createdAt)}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      <div className="flex gap-2">
-                                        <button
-                                          type="button"
-                                          onClick={() => editResult(item.resultId)}
-                                          className="rounded-lg p-2 text-indigo-600 hover:bg-indigo-50"
-                                        >
-                                          <Edit2 className="h-4 w-4" />
-                                        </button>
+            <p className="mt-1 break-words font-semibold text-slate-900">
+              {group.studentName}
+            </p>
 
-                                        <button
-                                          type="button"
-                                          onClick={() => deleteResult(item.resultId)}
-                                          className="rounded-lg p-2 text-red-500 hover:bg-red-50"
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
+            <p className="mt-1 text-xs text-slate-500">
+              Batch : {group.batch}
+            </p>
+          </div>
 
-              {groupedResults.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
-                    No results found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <button
+            type="button"
+            onClick={() =>
+              setExpandedStudentId(isOpen ? null : group.studentId)
+            }
+            className="shrink-0 rounded-lg bg-slate-100 p-2 text-blue-600"
+          >
+            {isOpen ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </button>
         </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <div className="rounded-lg bg-slate-50 p-3 text-center">
+            <p className="text-xs text-slate-500">Total</p>
+            <p className="mt-1 font-bold text-slate-900">{group.total}</p>
+          </div>
+
+          <div className="rounded-lg bg-green-50 p-3 text-center">
+            <p className="text-xs text-green-700">Passed</p>
+            <p className="mt-1 font-bold text-green-700">{group.passed}</p>
+          </div>
+
+          <div className="rounded-lg bg-red-50 p-3 text-center">
+            <p className="text-xs text-red-700">Failed</p>
+            <p className="mt-1 font-bold text-red-700">{group.failed}</p>
+          </div>
+        </div>
+
+        {isOpen && (
+          <div className="mt-4 space-y-3">
+            {group.items.length > 0 ? (
+              group.items.map((item, index) => (
+                <div
+                  key={item.key}
+                  className="rounded-xl border border-gray-100 bg-slate-50 p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-400">
+                        #{index + 1}
+                      </p>
+
+                      <p className="mt-1 break-words text-sm font-bold text-slate-900">
+                        {item.moduleName}
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        {item.examType} • {formatDate(item.createdAt)}
+                      </p>
+                    </div>
+
+                    <span
+                      className={`shrink-0 rounded-lg border px-3 py-1 text-sm font-semibold ${gradeClass(
+                        item.grade,
+                      )}`}
+                    >
+                      {item.grade}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between">
+                    <p className="text-sm text-slate-600">
+                      Marks:{' '}
+                      <span className="font-bold text-slate-900">
+                        {item.marks}
+                      </span>
+                    </p>
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => editResult(item.resultId)}
+                        className="rounded-lg bg-white p-2 text-indigo-600"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => deleteResult(item.resultId)}
+                        className="rounded-lg bg-white p-2 text-red-500"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="rounded-lg bg-slate-50 p-3 text-center text-sm text-slate-400">
+                No result records.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  })}
+
+  {groupedResults.length === 0 && (
+    <p className="rounded-xl border border-gray-100 bg-white px-4 py-8 text-center text-slate-400">
+      No results found.
+    </p>
+  )}
+</div>
       </div>
     </div>
   );

@@ -173,7 +173,7 @@ export default function ModulesPage() {
 
       {/* Module Add/Edit Modal */}
       <Modal isOpen={modModalOpen} onClose={() => setModModalOpen(false)} title={editModule ? 'Edit Module' : 'Create New Module'} size="xl">
-        <form onSubmit={handleModSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form onSubmit={handleModSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
             { field: 'name', label: 'Module Name' },
             { field: 'description', label: 'Description' },
@@ -213,7 +213,7 @@ export default function ModulesPage() {
               <option value="inactive">Inactive</option>
             </select>
           </div>
-          <div className="md:col-span-2 flex gap-3 pt-2">
+          <div className="md:col-span-2 flex gap-3 pt-1">
             <button type="button" onClick={() => setModModalOpen(false)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50">Cancel</button>
             <button type="submit" className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700">{editModule ? 'Update' : 'Create'} Module</button>
           </div>
