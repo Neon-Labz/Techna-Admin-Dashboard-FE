@@ -229,8 +229,8 @@ export const updatePayment = (id: string, data: Partial<ApiPayment>): Promise<Ap
 
 // ─── Modules ───────────────────────────────────────────────────────────────────
 
-export const getModules = (): Promise<ApiModule[]> =>
-  api.get<ApiModule[]>('/api/modules').then((r) => r.data);
+export const getModules = (status?: string): Promise<ApiModule[]> =>
+  api.get<ApiModule[]>('/api/modules', { params: status ? { status } : undefined }).then((r) => r.data);
 
 export const getModuleById = (id: string): Promise<ApiModule> =>
   api.get<ApiModule>(`/api/modules/${id}`).then((r) => r.data);
@@ -246,8 +246,8 @@ export const deleteModule = (id: string): Promise<{ message: string }> =>
 
 // ─── Teachers ──────────────────────────────────────────────────────────────────
 
-export const getTeachers = (): Promise<ApiTeacher[]> =>
-  api.get<ApiTeacher[]>('/api/teachers').then((r) => r.data);
+export const getTeachers = (status?: string): Promise<ApiTeacher[]> =>
+  api.get<ApiTeacher[]>('/api/teachers', { params: status ? { status } : undefined }).then((r) => r.data);
 
 // ─── Students ──────────────────────────────────────────────────────────────────
 

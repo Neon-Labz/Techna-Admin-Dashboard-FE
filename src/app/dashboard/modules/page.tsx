@@ -126,7 +126,7 @@ export default function ModulesPage() {
       try {
         await Promise.all([
           fetchModules(),
-          getTeachers().then(setTeachers),
+          getTeachers('active').then(setTeachers),
         ]);
       } catch (err) {
         addToast(extractErrorMessage(err), 'error');
@@ -438,6 +438,9 @@ export default function ModulesPage() {
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
               >
                 <option value="">Select teacher...</option>
+                {form.teacherId && !teachers.find((t) => t._id === form.teacherId) && (
+                  <option value={form.teacherId}>{form.teacherName} (Inactive)</option>
+                )}
                 {teachers.map((t) => (
                   <option key={t._id} value={t._id}>{t.fullName}</option>
                 ))}

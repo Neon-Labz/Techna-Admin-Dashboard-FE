@@ -217,7 +217,7 @@ export default function VideosPage() {
           <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
             className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <option value="all">All Modules</option>
-            {modules.map(m => <option key={m._id} value={m._id}>{capitalizeWords(m.name)}</option>)}
+            {modules.filter(m => m.status === 'active').map(m => <option key={m._id} value={m._id}>{capitalizeWords(m.name)}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -297,7 +297,7 @@ export default function VideosPage() {
             <select required value={uploadModuleId} onChange={e => setUploadModuleId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
               <option value="">Select module...</option>
-              {modules.map(m => <option key={m._id} value={m._id}>{capitalizeWords(m.name)} ({m.batch})</option>)}
+              {modules.filter(m => m.status === 'active').map(m => <option key={m._id} value={m._id}>{capitalizeWords(m.name)} ({m.batch})</option>)}
             </select>
           </div>
           <div>
