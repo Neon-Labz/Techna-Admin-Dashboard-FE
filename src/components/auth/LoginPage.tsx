@@ -46,7 +46,7 @@ export default function LoginPage() {
     }
 
     setLoading(true);
-    const res = await login(email.trim(), password);
+    const res = await login(email.trim(), password, remember);
     setLoading(false);
 
     if (res.success) {
@@ -169,13 +169,13 @@ export default function LoginPage() {
                 Remember me
               </label>
 
-              <button
+              {/* <button
                 type="button"
                 onClick={() => router.push('/forgot-password')}
                 className="text-sm font-medium text-blue-600 hover:text-blue-700"
               >
                 Forgot password?
-              </button>
+              </button> */}
             </div>
 
             <button
