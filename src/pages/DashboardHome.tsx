@@ -99,6 +99,91 @@ const toArray = (data: any) => {
   return [];
 };
 
+const toDate = (value: unknown) => {
+  if (!value) return null;
+
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const startOfMonth = (date: Date) =>
+  new Date(date.getFullYear(), date.getMonth(), 1);
+
+const endOfMonth = (date: Date) =>
+  new Date(date.getFullYear(), date.getMonth() + 1, 1);
+
+const isWithinRange = (date: Date | null, start: Date, end: Date) =>
+  Boolean(date && date >= start && date < end);
+
+const pickDate = (item: any, keys: string[]) => {
+  for (const key of keys) {
+    const date = toDate(item?.[key]);
+    if (date) return date;
+  }
+
+  return null;
+};
+
+const formatMonthlyChange = (current: number, previous: number) => {
+  if (previous === 0) {
+    if (current === 0) return '0%';
+    return '+100%';
+  }
+
+  const change = ((current - previous) / previous) * 100;
+  const rounded = Math.round(change);
+
+  if (rounded > 0) return `+${rounded}%`;
+  return `${rounded}%`;
+};
+
+const isPaidPayment = (payment: any) => payment.status === 'paid';
+
+const getMonthlyCountChange = (
+  items: any[],
+  dateKeys: string[],
+  filter?: (item: any) => boolean,
+) => {
+  const now = new Date();
+  const currentStart = startOfMonth(now);
+  const nextStart = endOfMonth(now);
+  const previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  const filteredItems = filter ? items.filter(filter) : items;
+
+  const current = filteredItems.filter((item) =>
+    isWithinRange(pickDate(item, dateKeys), currentStart, nextStart),
+  ).length;
+  const previous = filteredItems.filter((item) =>
+    isWithinRange(pickDate(item, dateKeys), previousStart, currentStart),
+  ).length;
+
+  return formatMonthlyChange(current, previous);
+};
+
+const getMonthlyAmountChange = (
+  items: any[],
+  dateKeys: string[],
+  filter?: (item: any) => boolean,
+) => {
+  const now = new Date();
+  const currentStart = startOfMonth(now);
+  const nextStart = endOfMonth(now);
+  const previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  const filteredItems = filter ? items.filter(filter) : items;
+
+  const totalForRange = (start: Date, end: Date) =>
+    filteredItems
+      .filter((item) => isWithinRange(pickDate(item, dateKeys), start, end))
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+  return formatMonthlyChange(
+    totalForRange(currentStart, nextStart),
+    totalForRange(previousStart, currentStart),
+  );
+};
+
 export default function DashboardHome() {
   const [students, setStudents] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
@@ -137,7 +222,7 @@ export default function DashboardHome() {
       const safeExams = toArray(examsData);
 
       const revenue = safePayments
-        .filter((p: any) => p.status === 'paid')
+        .filter(isPaidPayment)
         .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
 
       setSummary(summaryData || {});
@@ -181,8 +266,10 @@ export default function DashboardHome() {
     };
   });
 
+  const paidPayments = payments.filter(isPaidPayment);
+
   const paymentByModule = Object.values(
-    payments.reduce((acc: any, payment: any) => {
+    paidPayments.reduce((acc: any, payment: any) => {
       const name = payment.moduleName || 'Unknown Module';
       const amount = Number(payment.amount || 0);
 
@@ -206,7 +293,21 @@ export default function DashboardHome() {
   const moduleChartHeight = 320;
   const mobileModuleChartHeight = Math.max(220, moduleChartData.length * 42);
 
-  const upcomingExams = exams.slice(0, 5);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const upcomingExams = exams
+    .filter((exam) => {
+      const examDate = toDate(exam.date);
+      return Boolean(examDate && examDate >= today);
+    })
+    .sort((a, b) => {
+      const firstDate = toDate(a.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const secondDate = toDate(b.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      return firstDate - secondDate;
+    })
+    .slice(0, 5);
+
   const recentStudents = [...students].slice(-4).reverse();
 
   const stats = [
@@ -215,42 +316,54 @@ export default function DashboardHome() {
       value: summary?.totalStudents ?? students.length,
       icon: Users,
       color: 'bg-indigo-500',
-      change: '+12%',
+      change: getMonthlyCountChange(students, ['enrolledAt', 'createdAt']),
     },
     {
       label: 'Approved',
       value: summary?.approvedStudents ?? approved,
       icon: UserCheck,
       color: 'bg-emerald-500',
-      change: '+5%',
+      change: getMonthlyCountChange(
+        students,
+        ['approvedAt', 'updatedAt', 'enrolledAt', 'createdAt'],
+        (student) => student.status === 'approved',
+      ),
     },
     {
       label: 'Pending',
       value: summary?.pendingStudents ?? pending,
       icon: Clock,
       color: 'bg-amber-500',
-      change: '-2%',
+      change: getMonthlyCountChange(
+        students,
+        ['enrolledAt', 'createdAt'],
+        (student) => student.status === 'pending',
+      ),
     },
     {
       label: 'Teachers',
       value: summary?.totalTeachers ?? teachers.length,
       icon: GraduationCap,
       color: 'bg-purple-500',
-      change: '+1%',
+      change: getMonthlyCountChange(teachers, ['joinDate', 'createdAt']),
     },
     {
       label: 'Modules',
       value: summary?.totalModules ?? modules.length,
       icon: BookOpen,
       color: 'bg-cyan-500',
-      change: '+3%',
+      change: getMonthlyCountChange(modules, ['createdAt', 'updatedAt']),
     },
     {
       label: 'Paid Payments',
       value: `${(paidRevenue / 1000).toFixed(0)}K`,
       icon: CreditCard,
       color: 'bg-rose-500',
-      change: '+18%',
+      change: getMonthlyAmountChange(
+        payments,
+        ['paidDate', 'createdAt'],
+        isPaidPayment,
+      ),
     },
   ];
 
@@ -367,7 +480,10 @@ export default function DashboardHome() {
                 </ResponsiveContainer>
               </div>
 
-              <div className="hidden sm:block" style={{ height: moduleChartHeight }}>
+              <div
+                className="hidden sm:block"
+                style={{ height: moduleChartHeight }}
+              >
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={moduleChartData}
