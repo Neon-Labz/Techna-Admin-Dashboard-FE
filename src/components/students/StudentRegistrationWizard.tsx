@@ -99,7 +99,6 @@ const emptyForm: FormState = {
   residingSince: '',
   race: '',
   religion: '',
-  citizenByDescent: 'YES',
   contactAddress: '',
   postalCode: '',
   fatherName: '',
@@ -424,13 +423,7 @@ export default function StudentRegistrationWizard({
             inputCls={inputCls}
           />
 
-          <Select
-            label="Citizen by Descent"
-            value={form.citizenByDescent || 'YES'}
-            options={['YES', 'NO']}
-            onChange={(value) => set('citizenByDescent', value)}
-            inputCls={inputCls}
-          />
+         
 
           <Field
             label="Postal Code"
