@@ -100,12 +100,20 @@ export default function StudentCard({
               src={student.avatar}
               alt={student.name}
               className="w-12 h-12 rounded-xl object-cover"
+              onError={(e) => {
+                const target = e.currentTarget;
+                target.style.display = 'none';
+                const fallback = target.nextElementSibling as HTMLElement | null;
+                if (fallback) fallback.style.display = 'flex';
+              }}
             />
-          ) : (
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
-              {student.name?.charAt(0)?.toUpperCase()}
-            </div>
-          )}
+          ) : null}
+          <div
+            className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg"
+            style={{ display: student.avatar ? 'none' : 'flex' }}
+          >
+            {student.name?.charAt(0)?.toUpperCase()}
+          </div>
 
           <div className="min-w-0">
             <h3 className="break-words text-sm font-semibold text-gray-800">
