@@ -1408,8 +1408,8 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* ── Mobile Cards ── */}
-      <div className="space-y-3 md:hidden">
+      {/* ── Table ── */}
+      <div className="space-y-3 min-[1300px]:hidden">
         {studentGroups.map(s => (
           <PaymentMobileCard
             key={s.studentId}
@@ -1434,8 +1434,7 @@ export default function PaymentsPage() {
         )}
       </div>
 
-      {/* ── Desktop Table ── */}
-      <div className="hidden overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm md:block">
+      <div className="hidden overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm min-[1300px]:block">
         <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
           <p className="text-xs text-gray-500">
             Click on a student row to view their 12-month payment history

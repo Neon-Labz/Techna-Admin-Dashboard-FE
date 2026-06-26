@@ -116,6 +116,7 @@ export default function AnnouncementsPage() {
       content: item.content || '',
       author: item.author || 'Super Admin',
     });
+
     requestAnimationFrame(() => {
       formRef.current?.scrollIntoView({
         behavior: 'smooth',
@@ -144,87 +145,95 @@ export default function AnnouncementsPage() {
   };
 
   return (
-    <div className="space-y-8 bg-slate-50 p-6">
-      <h1 className="text-lg font-semibold text-slate-900">Announcements</h1>
+    <div className="space-y-5 bg-slate-50 px-4 py-5 sm:p-6">
+      <h1 className="text-xl font-bold text-slate-900">Announcements</h1>
 
       <div
         ref={formRef}
-        className="rounded-lg border border-slate-200 bg-white p-7 shadow-sm"
+        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-7"
       >
-        <div className="mb-7 flex items-center gap-2">
+        <div className="mb-5 flex items-center gap-2">
           <Megaphone className="h-5 w-5 text-indigo-600" />
           <h2 className="text-base font-bold text-slate-900">
-            Create New Announcement
+            {editingId ? 'Edit Announcement' : 'Create New Announcement'}
           </h2>
         </div>
 
-        <div className="space-y-5">
-          <div className="grid grid-cols-1 items-center gap-2 md:grid-cols-[130px_1fr] md:gap-5">
-            <label className="text-xs font-bold text-slate-800">Title</label>
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-bold text-slate-800">
+              Title
+            </label>
             <input
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               placeholder="Title"
-              className="h-12 rounded border border-slate-300 px-4 text-sm text-slate-900 outline-none focus:border-indigo-500"
+              className="h-11 w-full rounded-lg border border-slate-300 px-4 text-sm text-slate-900 outline-none focus:border-indigo-500"
             />
           </div>
 
-          <div className="grid grid-cols-1 items-center gap-2 md:grid-cols-[130px_1fr_150px_1fr] md:gap-5">
-            <label className="text-xs font-bold text-slate-800">Date</label>
-            <input
-              type="date"
-              value={form.date}
-              onChange={(e) => setForm({ ...form, date: e.target.value })}
-              className="h-12 rounded border border-slate-300 px-4 text-sm text-slate-900 outline-none focus:border-indigo-500"
-            />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-xs font-bold text-slate-800">
+                Date
+              </label>
+              <input
+                type="date"
+                value={form.date}
+                onChange={(e) => setForm({ ...form, date: e.target.value })}
+                className="h-11 w-full rounded-lg border border-slate-300 px-4 text-sm text-slate-900 outline-none focus:border-indigo-500"
+              />
+            </div>
 
-            <label className="text-xs font-bold text-slate-800 md:justify-self-end">
-              Target Audience
-            </label>
-            <div className="relative">
-              <select
-                value={form.batch}
-                onClick={loadBatches}
-                onFocus={loadBatches}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    audience: 'All Students',
-                    batch: e.target.value,
-                  })
-                }
-                className="h-12 w-full appearance-none rounded border border-slate-300 px-4 pr-12 text-sm text-slate-900 outline-none focus:border-indigo-500"
-              >
-                <option value="None">All Students</option>
-                {batches.map((batch) => (
-                  <option key={batch} value={batch}>
-                    {batch}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-900" />
+            <div>
+              <label className="mb-1.5 block text-xs font-bold text-slate-800">
+                Target Audience
+              </label>
+              <div className="relative">
+                <select
+                  value={form.batch}
+                  onClick={loadBatches}
+                  onFocus={loadBatches}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      audience: 'All Students',
+                      batch: e.target.value,
+                    })
+                  }
+                  className="h-11 w-full appearance-none rounded-lg border border-slate-300 px-4 pr-10 text-sm text-slate-900 outline-none focus:border-indigo-500"
+                >
+                  <option value="None">All Students</option>
+                  {batches.map((batch) => (
+                    <option key={batch} value={batch}>
+                      {batch}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-700" />
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-[130px_1fr] md:gap-5">
-            <label className="pt-3 text-xs font-bold text-slate-800">
+          <div>
+            <label className="mb-1.5 block text-xs font-bold text-slate-800">
               Content
             </label>
             <textarea
               value={form.content}
               onChange={(e) => setForm({ ...form, content: e.target.value })}
-              placeholder="Typing..............."
-              rows={7}
-              className="resize-none rounded border border-slate-300 px-4 py-3 text-sm text-slate-900 outline-none focus:border-indigo-500"
+              placeholder="Typing..."
+              rows={5}
+              className="w-full resize-none rounded-lg border border-slate-300 px-4 py-3 text-sm text-slate-900 outline-none focus:border-indigo-500"
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-1">
+          <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:justify-end">
             {editingId && (
               <button
                 onClick={cancelEdit}
                 type="button"
-                className="rounded border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="h-11 rounded-lg border border-slate-300 px-5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Cancel
               </button>
@@ -233,7 +242,7 @@ export default function AnnouncementsPage() {
             <button
               onClick={handleSubmit}
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-md shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-6 text-sm font-semibold text-white shadow-md shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-60"
             >
               <CheckCircle2 className="h-4 w-4" />
               {editingId ? 'Update Announcement' : 'Post Announcement'}
@@ -242,19 +251,19 @@ export default function AnnouncementsPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="flex min-h-20 items-center justify-between border-b border-slate-100 px-7">
-          <h2 className="text-base font-bold text-slate-900">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+          <h2 className="text-lg font-bold text-slate-900">
             Recent Announcements
           </h2>
 
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <select
               value={filterBatch}
               onClick={loadBatches}
               onFocus={loadBatches}
               onChange={(e) => setFilterBatch(e.target.value)}
-              className="h-10 min-w-36 appearance-none rounded border border-slate-300 px-3 pr-10 text-sm text-slate-700 outline-none focus:border-indigo-500"
+              className="h-11 w-full appearance-none rounded-lg border border-slate-300 px-3 pr-10 text-sm text-slate-700 outline-none focus:border-indigo-500 sm:min-w-36"
             >
               <option value="All">All</option>
               <option value="All Students">All Students</option>
@@ -268,15 +277,76 @@ export default function AnnouncementsPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+        {/* Mobile card view */}
+        <div className="space-y-3 p-4 md:hidden">
+          {filteredAnnouncements.map((item) => (
+            <div
+              key={item._id || item.id}
+              className="rounded-xl border border-slate-100 bg-slate-50 p-4"
+            >
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="break-words text-sm font-bold text-slate-900">
+                    {item.title}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">{item.date}</p>
+                </div>
+
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    onClick={() => handleEdit(item)}
+                    className="rounded-lg bg-indigo-100 p-2 text-indigo-600"
+                    type="button"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    onClick={() => handleDelete(item)}
+                    className="rounded-lg bg-red-100 p-2 text-red-500"
+                    type="button"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 text-xs text-slate-600">
+                <p>
+                  <span className="font-bold text-slate-800">Audience:</span>{' '}
+                  {item.batch && item.batch !== 'None'
+                    ? item.batch
+                    : 'All Students'}
+                </p>
+                <p>
+                  <span className="font-bold text-slate-800">Author:</span>{' '}
+                  {item.author || 'Super Admin'}
+                </p>
+                <p className="break-words">
+                  <span className="font-bold text-slate-800">Content:</span>{' '}
+                  {item.content || '-'}
+                </p>
+              </div>
+            </div>
+          ))}
+
+          {filteredAnnouncements.length === 0 && (
+            <p className="py-8 text-center text-sm text-slate-500">
+              No announcements found
+            </p>
+          )}
+        </div>
+
+        {/* Desktop table view */}
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-14 py-5">Date Posted</th>
-                <th className="px-6 py-5">Announcement Title</th>
-                <th className="px-6 py-5">Audience</th>
-                <th className="px-6 py-5">Author</th>
-                <th className="px-6 py-5 text-center">Actions</th>
+                <th className="px-6 py-4">Date Posted</th>
+                <th className="px-6 py-4">Announcement Title</th>
+                <th className="px-6 py-4">Audience</th>
+                <th className="px-6 py-4">Author</th>
+                <th className="px-6 py-4 text-center">Actions</th>
               </tr>
             </thead>
 
@@ -286,7 +356,7 @@ export default function AnnouncementsPage() {
                   key={item._id || item.id}
                   className="border-t border-slate-100 text-xs"
                 >
-                  <td className="px-14 py-5 text-slate-600">{item.date}</td>
+                  <td className="px-6 py-5 text-slate-600">{item.date}</td>
                   <td className="px-6 py-5 font-semibold text-slate-900">
                     {item.title}
                   </td>
@@ -334,7 +404,7 @@ export default function AnnouncementsPage() {
           </table>
         </div>
 
-        <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4 text-xs text-slate-500">
+        <div className="flex items-center justify-between border-t border-slate-100 px-4 py-4 text-xs text-slate-500 sm:px-6">
           <span>
             Showing {filteredAnnouncements.length} of {announcements.length}{' '}
             entries
