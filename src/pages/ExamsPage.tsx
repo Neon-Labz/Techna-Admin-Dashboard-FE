@@ -17,29 +17,34 @@ import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 import { examApi } from '@/api/exam.api';
 import api from '@/lib/axios';
-const BATCHES = [
-  'May 2024 Batch',
-  'September 2024 Batch',
-  'January 2025 Batch',
-  'May 2025 Batch',
-];
-
-const emptyExam: Omit<Exam, 'id'> = {
-  title: '',
-  moduleId: '',
-  moduleName: '',
-  batch: BATCHES[0],
-  date: '',
-  startTime: '09:00',
-  endTime: '11:00',
-  venue: '',
-  description: '',
-  totalMarks: 100,
-  status: 'upcoming',
-  createdAt: new Date().toISOString(),
-};
+import { useDataStore } from '@/store/dataStore';
 
 export default function ExamsPage() {
+  // ✅ Pull students from the shared store (same source Students page uses)
+  const { students, fetchStudents } = useDataStore();
+
+  // ✅ Derive batch list dynamically from student records — no hardcode, no new API
+  const BATCHES = Array.from(
+    new Set(
+      students.map((s: any) => s.batch).filter(Boolean),
+    ),
+  );
+
+  const emptyExam: Omit<Exam, 'id'> = {
+    title: '',
+    moduleId: '',
+    moduleName: '',
+    batch: BATCHES[0] || '',
+    date: '',
+    startTime: '09:00',
+    endTime: '11:00',
+    venue: '',
+    description: '',
+    totalMarks: 100,
+    status: 'upcoming',
+    createdAt: new Date().toISOString(),
+  };
+
   const [modules, setModules] = useState<any[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [search, setSearch] = useState('');
@@ -53,6 +58,7 @@ export default function ExamsPage() {
   useEffect(() => {
     loadExams();
     loadModules();
+    fetchStudents(); // ✅ make sure students (and thus batches) are loaded
   }, []);
 
   const loadModules = async () => {
@@ -70,7 +76,7 @@ export default function ExamsPage() {
     try {
       const data = await examApi.getAll();
 
-const list = Array.isArray(data) ? data : [];
+      const list = Array.isArray(data) ? data : [];
 
       const formatted = list.map((e: any) => ({
         id: e.id || e._id,
@@ -494,6 +500,9 @@ const list = Array.isArray(data) ? data : [];
               {BATCHES.map((b) => (
                 <option key={b}>{b}</option>
               ))}
+              {form.batch && !BATCHES.includes(form.batch) && (
+                <option value={form.batch}>{form.batch}</option>
+              )}
             </select>
           </div>
 
