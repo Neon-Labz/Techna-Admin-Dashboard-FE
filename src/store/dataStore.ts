@@ -240,7 +240,7 @@ function mapBackendStudent(s: any): Student {
     modules: selectedSubjects,
     subjects: selectedSubjects,
     status: s.status || 'pending',
-    avatar: s.avatar,
+    avatar: s.avatar || s.profilePhoto,
     parentName: s.parentName || s.guardianName,
     parentPhone: s.parentPhone || s.parentsNo || s.guardianMobile,
     enrolledAt: s.enrolledAt || s.createdAt || new Date().toISOString(),
