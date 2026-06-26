@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Teacher } from '@/types';
 import { teacherApi, type TeacherFromApi } from '@/api/teacher.api';
-import { dashboardApi } from '@/api/dashboard.api';
+import { apiClient } from '@/api/axiosClient';
 import Modal from '@/components/ui/Modal';
 import {
   Plus,
@@ -15,6 +15,7 @@ import {
   Search,
   Loader2,
   ChevronDown,
+  Check,
   X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -97,12 +98,18 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(email.trim());
 }
 
-function isValidPhone(phone: string): boolean {
-  // Allow digits, spaces, dashes, parens, and optional leading +
-  // Must contain between 7 and 15 actual digits
-  const digitsOnly = phone.replace(/[\s\-()+ ]/g, '');
-  if (!/^\d+$/.test(digitsOnly)) return false;
-  return digitsOnly.length >= 7 && digitsOnly.length <= 15;
+function isValidSriLankanPhone(phone: string): boolean {
+  // Strip spaces, dashes and parentheses
+  let cleaned = phone.replace(/[\s\-()]/g, '');
+
+  // Normalise the various international prefixes to the local 0XXXXXXXXX form
+  if (cleaned.startsWith('+94')) cleaned = '0' + cleaned.slice(3);
+  else if (cleaned.startsWith('0094')) cleaned = '0' + cleaned.slice(4);
+  else if (cleaned.startsWith('94') && cleaned.length === 11) cleaned = '0' + cleaned.slice(2);
+
+  // Valid Sri Lankan number: exactly 10 digits, starts with 0,
+  // followed by a non-zero digit (covers mobile 07X and landlines 0XX)
+  return /^0[1-9][0-9]{8}$/.test(cleaned);
 }
 
 function isValidJoinDate(dateStr: string): boolean {
@@ -124,85 +131,177 @@ function isValidSubject(subject: string): boolean {
   return /^[a-zA-Z][a-zA-Z0-9\s&.\-/()]+$/.test(trimmed) || /^[a-zA-Z]+$/.test(trimmed);
 }
 
-// ─── SubjectInput with autocomplete ──────────────────────────────────────────
-function SubjectInput({
-  value,
+// ─── SubjectMultiSelect (loads module subjects, distinct, max selectable) ─────
+const MAX_SUBJECTS = 6;
+
+function SubjectMultiSelect({
+  selected,
   onChange,
-  availableSubjects,
+  options,
   error,
 }: {
-  value: string;
-  onChange: (val: string) => void;
-  availableSubjects: string[];
+  selected: string[];
+  onChange: (subjects: string[]) => void;
+  options: string[];
   error?: string;
 }) {
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [focused, setFocused] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const wrapperRef = useRef<HTMLDivElement>(null);
-
-  const currentSubjects = value.split(',').map(s => s.trim()).filter(Boolean);
-  const lastSegment = value.split(',').pop()?.trim().toLowerCase() ?? '';
-
-  const suggestions = availableSubjects.filter(
-    s => s.toLowerCase().includes(lastSegment) && !currentSubjects.includes(s)
-  );
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
+        setOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const selectSubject = (subject: string) => {
-    const parts = value.split(',').map(s => s.trim()).filter(Boolean);
-    // Replace the last (incomplete) segment with the selected subject
-    if (lastSegment) {
-      parts.pop();
+  const selectedLower = new Set(selected.map(s => s.toLowerCase()));
+  const q = query.trim().toLowerCase();
+
+  // Distinct options filtered by the search query (selected ones stay in the
+  // list so they can be toggled off via their checkbox).
+  const filtered = options.filter(o => o.toLowerCase().includes(q));
+
+  const reachedMax = selected.length >= MAX_SUBJECTS;
+
+  const isChecked = (subject: string) => selectedLower.has(subject.toLowerCase());
+
+  const toggleSubject = (subject: string) => {
+    const clean = subject.trim();
+    if (!clean) return;
+    if (isChecked(clean)) {
+      onChange(selected.filter(s => s.toLowerCase() !== clean.toLowerCase()));
+      return;
     }
-    parts.push(subject);
-    onChange(parts.join(', '));
-    setShowDropdown(false);
+    if (reachedMax) {
+      toast.error(`You can select up to ${MAX_SUBJECTS} subjects`);
+      return;
+    }
+    onChange([...selected, clean]);
   };
+
+  // Allow typing a subject that is not in the module list (e.g. a brand new one)
+  const canAddCustom =
+    q.length > 0 &&
+    !options.some(o => o.toLowerCase() === q) &&
+    !selectedLower.has(q) &&
+    isValidSubject(query.trim());
 
   return (
     <div ref={wrapperRef} className="relative">
-      <input
-        type="text"
-        value={value}
-        onChange={e => {
-          onChange(e.target.value);
-          setShowDropdown(true);
-        }}
-        onFocus={() => { setFocused(true); setShowDropdown(true); }}
-        onBlur={() => setFocused(false)}
-        placeholder="Mathematics, Physics"
-        className={`w-full border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base text-[#374151] placeholder:text-[#6B7280] bg-white ${error ? 'border-red-400' : 'border-[#E5E7EB]'}`}
-        style={{ height: '46px', paddingLeft: '13px', paddingRight: '40px' }}
-      />
-      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none" style={{ color: '#9CA3AF' }} />
-      {error && (
-        <p className="mt-1 text-xs text-red-500">{error}</p>
-      )}
+      {/* Trigger button */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={`w-full border rounded-lg bg-white flex items-center justify-between gap-2 text-left transition-colors hover:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${error ? 'border-red-400' : 'border-[#E5E7EB]'}`}
+        style={{ minHeight: '46px', padding: '6px 12px' }}
+      >
+        <span className="flex flex-wrap items-center gap-1.5">
+          {selected.length === 0 ? (
+            <span className="text-base text-[#6B7280]">Select subjects</span>
+          ) : (
+            selected.map((s, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium"
+              >
+                {s}
+                <span
+                  role="button"
+                  tabIndex={-1}
+                  onClick={e => { e.stopPropagation(); toggleSubject(s); }}
+                  className="hover:text-red-500 transition-colors cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </span>
+              </span>
+            ))
+          )}
+        </span>
+        <ChevronDown className={`w-5 h-5 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} style={{ color: '#9CA3AF' }} />
+      </button>
+
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
       <p className="mt-1" style={{ fontSize: '10px', lineHeight: '15px', color: '#9CA3AF' }}>
-        Separate multiple subjects with commas
+        {selected.length}/{MAX_SUBJECTS} selected · choose from module subjects
       </p>
-      {showDropdown && suggestions.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-          {suggestions.map((s, i) => (
+
+      {/* Dropdown panel */}
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+          {/* Search */}
+          <div className="p-2 border-b border-gray-100">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (canAddCustom) { toggleSubject(query.trim()); setQuery(''); }
+                  }
+                }}
+                placeholder="Search subjects..."
+                className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* Options list with checkboxes */}
+          <div className="max-h-56 overflow-y-auto">
+            {filtered.length === 0 && !canAddCustom && (
+              <p className="px-3 py-2 text-sm text-gray-400">
+                {options.length === 0 ? 'No module subjects available' : 'No matching subjects'}
+              </p>
+            )}
+            {filtered.map((o, i) => {
+              const checked = isChecked(o);
+              const disabled = !checked && reachedMax;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => toggleSubject(o)}
+                  disabled={disabled}
+                  className={`w-full flex items-center gap-2.5 text-left px-3 py-2 text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${checked ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                >
+                  <span
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${checked ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 bg-white'}`}
+                  >
+                    {checked && <Check className="w-3 h-3 text-white" />}
+                  </span>
+                  {o}
+                </button>
+              );
+            })}
+            {canAddCustom && (
+              <button
+                type="button"
+                onClick={() => { toggleSubject(query.trim()); setQuery(''); }}
+                className="w-full text-left px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 transition-colors"
+              >
+                + Add &quot;{query.trim()}&quot;
+              </button>
+            )}
+          </div>
+
+          {/* Footer with Done button */}
+          <div className="flex items-center justify-between gap-2 border-t border-gray-100 bg-white px-3 py-2">
+            <span className="text-xs text-gray-400">{selected.length}/{MAX_SUBJECTS} selected</span>
             <button
-              key={i}
               type="button"
-              onMouseDown={e => e.preventDefault()}
-              onClick={() => selectSubject(s)}
-              className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+              onClick={() => { setQuery(''); setOpen(false); }}
+              className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
             >
-              {s}
+              Done
             </button>
-          ))}
+          </div>
         </div>
       )}
     </div>
@@ -225,13 +324,30 @@ function normalizeSubject(subject: TeacherFromApi['subject'] | string[]): string
 
 function normalizePhotoUrl(url?: string): string {
   if (!url || !url.trim()) return '';
-  const normalized = url.trim().replace(/\.r2\.devya\b/gi, '.r2.dev');
+  let normalized = url.trim();
+  // Fix the known Cloudflare R2 public-base-url typo where the host ends with
+  // ".r2.devXXX" (e.g. ".r2.devya") instead of the correct ".r2.dev".
+  normalized = normalized.replace(/\.r2\.dev[a-z]+/gi, '.r2.dev');
   // Ensure the URL is absolute
   if (normalized && !normalized.startsWith('http') && !normalized.startsWith('data:')) {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
     return `${baseUrl}${normalized.startsWith('/') ? '' : '/'}${normalized}`;
   }
   return normalized;
+}
+
+// Remove duplicate strings ignoring case, keeping the first occurrence.
+function dedupeCaseInsensitive(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(value);
+    }
+  }
+  return out;
 }
 
 const TITLE_PREFIXES = new Set([
@@ -316,13 +432,63 @@ function mapApiTeacher(t: TeacherFromApi): Teacher {
   };
 }
 
-// ─── Form type ────────────────────────────────────────────────────────────────
+// ─── TeacherAvatar ────────────────────────────────────────────────────────────
+// Renders the teacher photo with graceful fallback. Uses React state (not direct
+// DOM mutation) so a transient load failure right after upload doesn't leave the
+// image permanently hidden. Retries a couple of times with a cache-bust param
+// before falling back to the initials badge.
+function TeacherAvatar({
+  src,
+  name,
+  className = '',
+}: {
+  src?: string;
+  name: string;
+  className?: string;
+}) {
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setAttempt(0);
+    setFailed(false);
+  }, [src]);
+
+  if (!src || !src.trim() || failed) {
+    return (
+      <div className={`flex items-center justify-center bg-indigo-100 ${className}`}>
+        <span className="text-indigo-600 font-bold text-lg">{getInitials(name)}</span>
+      </div>
+    );
+  }
+
+  const finalSrc = attempt > 0 ? `${src}${src.includes('?') ? '&' : '?'}r=${attempt}` : src;
+
+  return (
+    <img
+      key={finalSrc}
+      src={finalSrc}
+      alt={name}
+      className={`object-cover ${className}`}
+      onError={() => {
+        if (attempt < 2) {
+          // Retry shortly after — covers R2 eventual-consistency right after upload
+          setTimeout(() => setAttempt(a => a + 1), 600);
+        } else {
+          setFailed(true);
+        }
+      }}
+    />
+  );
+}
+
+
 type TeacherForm = {
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
-  subjectText: string;
+  subjects: string[];
   qualification: string[];
   address: string;
   experience: string;
@@ -339,7 +505,7 @@ const emptyTeacher: TeacherForm = {
   lastName: '',
   email: '',
   phone: '',
-  subjectText: '',
+  subjects: [],
   qualification: [],
   address: '',
   experience: '',
@@ -392,6 +558,7 @@ export default function TeachersPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoRemoved, setPhotoRemoved] = useState(false);
+  const [previewBroken, setPreviewBroken] = useState(false);
 
   useEffect(() => {
     fetchTeachers();
@@ -400,25 +567,24 @@ export default function TeachersPage() {
 
   const fetchAvailableSubjects = async () => {
     try {
-      const modules = await dashboardApi.getModules();
-      // Extract unique subject/module names
-      const subjects = new Set<string>();
+      // Use the same apiClient as the teacher list so the auth token matches
+      // (dashboardApi/lib-axios reads a different token key and can 401 → []).
+      const modules = await apiClient<any[]>('/modules');
+      // Load every module from the Modules page as a selectable subject.
+      const collected: string[] = [];
       if (Array.isArray(modules)) {
         modules.forEach((m: any) => {
-          if (m.name) subjects.add(m.name);
-          if (m.subject) {
+          if (m?.name && String(m.name).trim()) collected.push(String(m.name).trim());
+          if (m?.subject) {
             const s = Array.isArray(m.subject) ? m.subject : [m.subject];
-            s.forEach((sub: string) => { if (sub.trim()) subjects.add(sub.trim()); });
+            s.forEach((sub: string) => { if (sub && sub.trim()) collected.push(sub.trim()); });
           }
         });
       }
-      // Also collect subjects already assigned to teachers
-      teachers.forEach(t => {
-        t.subject.forEach(s => { if (s.trim()) subjects.add(s.trim()); });
-      });
-      setAvailableSubjects(Array.from(subjects).sort());
+      // Distinct (case-insensitive), alphabetically sorted
+      setAvailableSubjects(dedupeCaseInsensitive(collected).sort((a, b) => a.localeCompare(b)));
     } catch {
-      // Silently fail - subject autocomplete is a nice-to-have
+      // Silently fail - subject options are a nice-to-have
     }
   };
 
@@ -426,14 +592,15 @@ export default function TeachersPage() {
   useEffect(() => {
     if (teachers.length > 0) {
       setAvailableSubjects(prev => {
-        const updated = new Set(prev);
+        const merged = [...prev];
         teachers.forEach(t => {
-          t.subject.forEach(s => { if (s.trim()) updated.add(s.trim()); });
+          t.subject.forEach(s => { if (s.trim()) merged.push(s.trim()); });
         });
-        return Array.from(updated).sort();
+        return dedupeCaseInsensitive(merged).sort((a, b) => a.localeCompare(b));
       });
     }
   }, [teachers]);
+
 
   const fetchTeachers = async () => {
     try {
@@ -468,6 +635,7 @@ export default function TeachersPage() {
     setPhotoFile(null);
     setPhotoPreview(null);
     setPhotoRemoved(false);
+    setPreviewBroken(false);
     setFormErrors({});
     setModalOpen(true);
   };
@@ -480,7 +648,7 @@ export default function TeachersPage() {
       lastName,
       email: t.email,
       phone: t.phone,
-      subjectText: t.subject.join(', '),
+      subjects: dedupeCaseInsensitive(t.subject.map(s => s.trim()).filter(Boolean)),
       qualification: (t.qualification ?? '').split(',').map(s => s.trim()).filter(Boolean),
       address: t.address,
       experience: t.experience,
@@ -496,6 +664,7 @@ export default function TeachersPage() {
     // Fix BUG-008: Ensure photoPreview is set properly from the teacher's photoUrl
     setPhotoPreview(t.photoUrl && t.photoUrl.trim() ? t.photoUrl : null);
     setPhotoRemoved(false);
+    setPreviewBroken(false);
     setFormErrors({});
     setModalOpen(true);
   };
@@ -504,6 +673,7 @@ export default function TeachersPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setPhotoFile(file);
+    setPreviewBroken(false);
     const reader = new FileReader();
     reader.onload = () => setPhotoPreview(reader.result as string);
     reader.readAsDataURL(file);
@@ -527,17 +697,19 @@ export default function TeachersPage() {
       errors.email = 'Please enter a valid email address (e.g. name@domain.com)';
     }
 
-    // Phone validation
+    // Phone validation (Sri Lankan format)
     if (!form.phone.trim()) {
       errors.phone = 'Phone number is required';
-    } else if (!isValidPhone(form.phone)) {
-      errors.phone = 'Please enter a valid phone number (7-15 digits, no letters)';
+    } else if (!isValidSriLankanPhone(form.phone)) {
+      errors.phone = 'Enter a valid Sri Lankan phone number (e.g. 077 123 4567 or +94 77 123 4567)';
     }
 
     // Subject validation
-    const subjects = form.subjectText.split(',').map(s => s.trim()).filter(Boolean);
+    const subjects = dedupeCaseInsensitive(form.subjects.map(s => s.trim()).filter(Boolean));
     if (subjects.length === 0) {
-      errors.subject = 'Please enter at least one subject';
+      errors.subject = 'Please select at least one subject';
+    } else if (subjects.length > MAX_SUBJECTS) {
+      errors.subject = `You can select a maximum of ${MAX_SUBJECTS} subjects`;
     } else {
       const invalidSubjects = subjects.filter(s => !isValidSubject(s));
       if (invalidSubjects.length > 0) {
@@ -682,25 +854,11 @@ export default function TeachersPage() {
             <div key={t.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
-                  {t.photoUrl ? (
-                    <img
-                      src={t.photoUrl}
-                      alt={t.name}
-                      className="h-12 w-12 shrink-0 rounded-xl object-cover"
-                      onError={e => {
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.nextElementSibling?.removeAttribute('style');
-                      }}
-                    />
-                  ) : null}
-                  <div
-                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-100"
-                    style={t.photoUrl ? { display: 'none' } : undefined}
-                  >
-                    <span className="text-indigo-600 font-bold text-lg">
-                      {getInitials(t.name)}
-                    </span>
-                  </div>
+                  <TeacherAvatar
+                    src={t.photoUrl}
+                    name={t.name}
+                    className="h-12 w-12 shrink-0 rounded-xl"
+                  />
                   <div className="min-w-0">
                     <h3 className="break-words font-semibold text-gray-800">{displayName(t)}</h3>
                     <p className="break-words text-sm font-medium text-indigo-600">
@@ -773,11 +931,12 @@ export default function TeachersPage() {
           {/* 1 ── Profile Picture ── */}
           <div className="md:col-span-2 flex items-start gap-6 pb-5 border-b border-gray-100">
             <label htmlFor="teacher-photo-upload" className="cursor-pointer shrink-0">
-              {photoPreview ? (
+              {photoPreview && !previewBroken ? (
                 <img
                   src={photoPreview}
                   alt="Preview"
                   className="w-32 h-32 rounded-full object-cover"
+                  onError={() => setPreviewBroken(true)}
                 />
               ) : (
                 <div
@@ -899,10 +1058,10 @@ export default function TeachersPage() {
           {/* 4 ── Subject | Qualifications ── */}
           <div>
             <label style={LABEL}>Subject</label>
-            <SubjectInput
-              value={form.subjectText}
-              onChange={val => { setForm(f => ({ ...f, subjectText: val })); setFormErrors(err => ({ ...err, subject: '' })); }}
-              availableSubjects={availableSubjects}
+            <SubjectMultiSelect
+              selected={form.subjects}
+              onChange={subjects => { setForm(f => ({ ...f, subjects })); setFormErrors(err => ({ ...err, subject: '' })); }}
+              options={availableSubjects}
               error={formErrors.subject}
             />
           </div>
