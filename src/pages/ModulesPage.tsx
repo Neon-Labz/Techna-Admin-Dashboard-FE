@@ -20,7 +20,7 @@ import { validateModuleForm } from '@/lib/validation';
 import DeleteModal from '@/components/common/DeleteModal';
 import Modal from '@/components/ui/Modal';
 
-// ─── Types ─────────────────────────────────────────────────────────────────────
+
 
 interface FormState {
   name: string;
@@ -46,7 +46,7 @@ const EMPTY_FORM: FormState = {
   status: 'active',
 };
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
+
 
 const capitalizeWords = (str: string) =>
   str.trim().split(' ')
@@ -62,7 +62,7 @@ function extractErrorMessage(err: unknown): string {
   return 'Something went wrong';
 }
 
-// ─── Skeleton card ─────────────────────────────────────────────────────────────
+
 
 function SkeletonCard() {
   return (
@@ -87,7 +87,7 @@ function SkeletonCard() {
   );
 }
 
-// ─── Page ──────────────────────────────────────────────────────────────────────
+
 
 export default function ModulesPage() {
   const { toasts, addToast, removeToast } = useToast();
@@ -95,11 +95,7 @@ export default function ModulesPage() {
   const [teachers, setTeachers] = useState<ApiTeacher[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-
-  // ✅ Batches derived live from student records — no hardcode, no new API.
-  // Same source of truth as the Students page's own batch dropdown.
   const [batches, setBatches] = useState<string[]>([]);
-
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -109,7 +105,7 @@ export default function ModulesPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // ── Data fetching ──
+ 
 
   const fetchModules = useCallback(async () => {
     const data = await getModules();
@@ -150,7 +146,7 @@ export default function ModulesPage() {
     })();
   }, [fetchModules, fetchBatches]);
 
-  // ── Modal open/close ──
+ 
 
   const openAdd = () => {
     setEditId(null);
@@ -193,7 +189,7 @@ export default function ModulesPage() {
     setForm(EMPTY_FORM);
   };
 
-  // ── Form handlers ──
+  
 
   const handleTeacherChange = (teacherId: string) => {
     const teacher = teachers.find((t) => t._id === teacherId);
@@ -249,7 +245,7 @@ export default function ModulesPage() {
     }
   };
 
-  // ── Delete ──
+
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -266,7 +262,7 @@ export default function ModulesPage() {
     }
   };
 
-  // ── Filtered list ──
+
 
   const filtered = modules.filter(
     (m) =>
@@ -277,11 +273,11 @@ export default function ModulesPage() {
 
   const moduleToDelete = modules.find((m) => m._id === deleteId);
 
-  // ── Render ──
+  
 
   return (
     <div className="p-3 pb-20 sm:p-6 sm:pb-6">
-      {/* Header */}
+      
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Modules</h1>
@@ -297,7 +293,7 @@ export default function ModulesPage() {
         </button>
       </div>
 
-      {/* Search */}
+      
       <div className="relative mb-5">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
@@ -308,7 +304,7 @@ export default function ModulesPage() {
         />
       </div>
 
-      {/* Cards grid */}
+      
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         {loading ? (
           <>
@@ -367,7 +363,7 @@ export default function ModulesPage() {
         )}
       </div>
 
-      {/* Empty state */}
+      
       {!loading && filtered.length === 0 && (
         <div className="text-center py-16 text-gray-400">
           <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -383,7 +379,7 @@ export default function ModulesPage() {
         </div>
       )}
 
-      {/* Add / Edit Modal */}
+      
       <Modal
         isOpen={modalOpen}
         onClose={closeModal}
@@ -408,7 +404,7 @@ export default function ModulesPage() {
               />
             </div>
 
-            {/* 2. Description — full width */}
+            
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
               <input
@@ -419,7 +415,7 @@ export default function ModulesPage() {
               />
             </div>
 
-            {/* 3. Duration (left) + Fee (right) */}
+           
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Duration (e.g. 6 months)</label>
               <input
@@ -442,7 +438,7 @@ export default function ModulesPage() {
               />
             </div>
 
-            {/* 4. Teacher (left) + Batch (right) */}
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Teacher</label>
               <select
@@ -475,7 +471,7 @@ export default function ModulesPage() {
               </select>
             </div>
 
-            {/* 5. Status — left column only */}
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select
@@ -491,7 +487,7 @@ export default function ModulesPage() {
               </select>
             </div>
 
-            {/* Buttons — full width */}
+            
             <div className="md:col-span-2 flex gap-3 pt-2">
               <button
                 type="button"
@@ -514,7 +510,7 @@ export default function ModulesPage() {
         )}
       </Modal>
 
-      {/* Delete confirmation */}
+      
       <DeleteModal
         open={!!deleteId}
         title="Delete Module"

@@ -20,10 +20,10 @@ import api from '@/lib/axios';
 import { useDataStore } from '@/store/dataStore';
 
 export default function ExamsPage() {
-  // ✅ Pull students from the shared store (same source Students page uses)
+  
   const { students, fetchStudents } = useDataStore();
 
-  // ✅ Derive batch list dynamically from student records — no hardcode, no new API
+  
   const BATCHES = Array.from(
     new Set(
       students.map((s: any) => s.batch).filter(Boolean),
@@ -58,7 +58,7 @@ export default function ExamsPage() {
   useEffect(() => {
     loadExams();
     loadModules();
-    fetchStudents(); // ✅ make sure students (and thus batches) are loaded
+    fetchStudents(); 
   }, []);
 
   const loadModules = async () => {

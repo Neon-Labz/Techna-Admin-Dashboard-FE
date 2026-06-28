@@ -345,7 +345,7 @@ function PaymentModal({
             </select>
           </div>
 
-          {/* ✅ CHANGED: batch input → dynamic select from students store */}
+          
           <div className="flex flex-col gap-1">
             <Label text="Batch" />
             <select
@@ -393,7 +393,7 @@ function PaymentModal({
   );
 }
 
-// ── Student Row in TABLE view ──────────────────────────────────────────────────
+
 function StudentTableRow({
   studentId,
   studentName,
@@ -814,12 +814,12 @@ function PaymentMobileCard({
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+
 export default function PaymentsPage() {
-  // ✅ Pull students from shared store — same source as ExamsPage
+  
   const { students, fetchStudents } = useDataStore();
 
-  // ✅ Derive batch list dynamically — no hardcode
+  
   const BATCHES = Array.from(
     new Set(students.map((s: any) => s.batch).filter(Boolean))
   ) as string[];
@@ -858,7 +858,7 @@ export default function PaymentsPage() {
 
   useEffect(() => {
     fetchPayments();
-    fetchStudents(); // ✅ load students so BATCHES populates
+    fetchStudents(); 
   }, [fetchPayments]);
 
   const allModules = Array.from(
@@ -1270,7 +1270,7 @@ export default function PaymentsPage() {
   return (
     <div className="p-3 pb-20 sm:p-6 sm:pb-6">
 
-      {/* ── Header ── */}
+     
       <div className="mb-4 flex flex-row items-start justify-between gap-3 sm:mb-6 sm:items-center">
         <div>
           <h1 className="text-lg font-bold text-gray-800 sm:text-2xl">Payments</h1>
@@ -1352,7 +1352,7 @@ export default function PaymentsPage() {
             <Filter className="h-4 w-4" />
           </summary>
           <div className="absolute right-0 z-20 mt-2 grid w-52 gap-2 rounded-lg border border-gray-100 bg-white p-3 shadow-lg">
-            {/* ✅ Dynamic batch dropdown — mobile */}
+           
             <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)}
               className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="">All Batches</option>
@@ -1381,7 +1381,7 @@ export default function PaymentsPage() {
         {/* ── Desktop filters ── */}
         <div className="hidden items-center gap-2 flex-wrap sm:flex">
           <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          {/* ✅ Dynamic batch dropdown — desktop */}
+          
           <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)}
             className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <option value="">All Batches</option>
@@ -1408,7 +1408,7 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* ── Table ── */}
+     
       <div className="space-y-3 min-[1300px]:hidden">
         {studentGroups.map(s => (
           <PaymentMobileCard
@@ -1480,7 +1480,7 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* ── Mobile FAB ── */}
+      
       <button
         type="button"
         onClick={() => setShowAddModal(true)}
@@ -1490,7 +1490,7 @@ export default function PaymentsPage() {
         <CreditCard className="h-5 w-5" />
       </button>
 
-      {/* ── Add Payment Modal ── */}
+      
       {showAddModal && (
         <PaymentModal
           batches={BATCHES}
@@ -1499,7 +1499,7 @@ export default function PaymentsPage() {
         />
       )}
 
-      {/* ── Edit Payment Modal ── */}
+      
       {editPayment && (
         <PaymentModal
           batches={BATCHES}
