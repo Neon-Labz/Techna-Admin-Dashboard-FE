@@ -14,6 +14,15 @@ import {
   User,
 } from 'lucide-react';
 import type { Student, OLResult } from '../../types';
+import {
+  getSubjectCategory,
+  countSubjectsByCategory,
+  subjectLabel,
+  MAIN_SUBJECTS,
+  BASKET_SUBJECTS,
+  MAX_MAIN_SUBJECTS,
+  MAX_BASKET_SUBJECTS,
+} from '../../utils/studentPayload';
 
 const DISTRICTS = [
   'Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo', 'Galle',
@@ -253,8 +262,9 @@ export default function StudentRegistrationWizard({
     }
 
     if (step === 5) {
-      if ((form.subjects || []).length === 0) {
-        nextErrors.subjects = 'Select at least one subject';
+      const counts = countSubjectsByCategory(form.subjects || []);
+      if (counts.main !== MAX_MAIN_SUBJECTS || counts.basket !== MAX_BASKET_SUBJECTS) {
+        nextErrors.subjects = `Select exactly ${MAX_MAIN_SUBJECTS} Main Subjects and ${MAX_BASKET_SUBJECTS} Basket Subject`;
       }
       if (!form.declarationRules || !form.declarationAccuracy) {
         nextErrors.declaration = 'Both declarations are required';
@@ -283,7 +293,25 @@ export default function StudentRegistrationWizard({
   const toggleSubject = (subject: string) => {
     setForm((prev) => {
       const current = prev.subjects || [];
-      const updated = current.includes(subject)
+      const alreadySelected = current.includes(subject);
+
+      if (!alreadySelected) {
+        const category = getSubjectCategory(subject);
+        const counts = countSubjectsByCategory(current);
+        const limit =
+          category === 'main' ? MAX_MAIN_SUBJECTS : MAX_BASKET_SUBJECTS;
+
+        if (counts[category] >= limit) {
+          toast.error(
+            category === 'main'
+              ? `You can select only ${MAX_MAIN_SUBJECTS} Main Subjects`
+              : `You can select only ${MAX_BASKET_SUBJECTS} Basket Subject`,
+          );
+          return prev;
+        }
+      }
+
+      const updated = alreadySelected
         ? current.filter((s) => s !== subject)
         : [...current, subject];
 
@@ -738,36 +766,79 @@ export default function StudentRegistrationWizard({
             <div className="mb-2 text-sm font-medium text-gray-700">
               Subject Selection
             </div>
+            <p className="mb-3 text-xs text-gray-500">
+              Select exactly {MAX_MAIN_SUBJECTS} Main Subjects and{' '}
+              {MAX_BASKET_SUBJECTS} Basket Subject.
+            </p>
 
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {modulesLoading ? (
-                <p className="text-sm text-gray-400">Loading modules...</p>
-              ) : modules.length === 0 ? (
-                <p className="text-sm text-gray-400">No modules found</p>
-              ) : (
-                modules.map((module) => {
-                  const checked = (form.subjects || []).includes(module.name);
+            {(() => {
+              const selected = form.subjects || [];
+              const counts = countSubjectsByCategory(selected);
 
-                  return (
-                    <label
-                      key={module._id || module.id || module.name}
-                      className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${
-                        checked
-                          ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                          : 'border-gray-200 bg-white text-gray-700'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleSubject(module.name)}
-                      />
-                      <span>{module.name}</span>
-                    </label>
-                  );
-                })
-              )}
-            </div>
+              const renderCategory = (
+                title: string,
+                items: string[],
+                limit: number,
+                category: 'main' | 'basket',
+              ) => (
+                <div className="mb-4" key={category}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+                      {title}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {counts[category]}/{limit} selected
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {items.map((subject) => {
+                      const checked = selected.includes(subject);
+                      const limitReached = counts[category] >= limit;
+                      const disabled = !checked && limitReached;
+
+                      return (
+                        <label
+                          key={subject}
+                          className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${
+                            checked
+                              ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                              : disabled
+                                ? 'cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400'
+                                : 'border-gray-200 bg-white text-gray-700'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={() => toggleSubject(subject)}
+                          />
+                          <span>{subjectLabel(subject)}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+
+              return (
+                <>
+                  {renderCategory(
+                    'Main Subjects',
+                    MAIN_SUBJECTS,
+                    MAX_MAIN_SUBJECTS,
+                    'main',
+                  )}
+                  {renderCategory(
+                    'Basket Subject',
+                    BASKET_SUBJECTS,
+                    MAX_BASKET_SUBJECTS,
+                    'basket',
+                  )}
+                </>
+              );
+            })()}
 
             {errors.subjects && (
               <p className="mt-1 text-xs text-red-500">{errors.subjects}</p>
@@ -788,7 +859,7 @@ export default function StudentRegistrationWizard({
               <span>
                 Subjects:{' '}
                 {(form.subjects || []).length > 0
-                  ? form.subjects.join(', ')
+                  ? form.subjects.map(subjectLabel).join(', ')
                   : '-'}
               </span>
             </div>
