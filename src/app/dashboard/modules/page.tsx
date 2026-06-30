@@ -40,6 +40,9 @@ interface FormState {
   fee: string;
   batch: string;
   status: 'active' | 'inactive';
+  term: string;
+  unit: string;
+  subjectCategory: 'main' | 'basket' | 'none';
 }
 
 const EMPTY_FORM: FormState = {
@@ -52,6 +55,9 @@ const EMPTY_FORM: FormState = {
   fee: '',
   batch: BATCHES[0],
   status: 'active',
+  term: '',
+  unit: '',
+  subjectCategory: 'none',
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -164,6 +170,9 @@ export default function ModulesPage() {
         fee: String(mod.fee),
         batch: mod.batch,
         status: mod.status,
+        term: mod.term ?? '',
+        unit: mod.unit != null ? String(mod.unit) : '',
+        subjectCategory: mod.subjectCategory ?? 'none',
       });
     } catch (err) {
       addToast(extractErrorMessage(err), 'error');
@@ -216,6 +225,9 @@ export default function ModulesPage() {
         fee: Number(form.fee),
         batch: form.batch,
         status: form.status,
+        term: form.term,
+        unit: form.unit !== '' ? Number(form.unit) : undefined,
+        subjectCategory: form.subjectCategory,
       };
 
       if (editId) {
@@ -331,6 +343,15 @@ export default function ModulesPage() {
                 <p>📅 {mod.batch}</p>
                 <p>⏱ {mod.duration}</p>
                 <p>💰 LKR {mod.fee.toLocaleString()}</p>
+                {mod.term && <p>🗓 {mod.term}</p>}
+                {mod.unit != null && mod.unit > 0 && <p>📘 {mod.unit} unit{mod.unit !== 1 ? 's' : ''}</p>}
+                <p>🏷{' '}
+                  {mod.subjectCategory === 'main'
+                    ? 'Main Subject'
+                    : mod.subjectCategory === 'basket'
+                    ? 'Basket Subject'
+                    : '—'}
+                </p>
                 <p>📎 {(mod.resources ?? []).length} resources</p>
               </div>
 
@@ -457,7 +478,7 @@ export default function ModulesPage() {
               </select>
             </div>
 
-            {/* 5. Status — left column only */}
+            {/* 5. Status (left) + Term (right) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select
@@ -470,6 +491,42 @@ export default function ModulesPage() {
               >
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Term</label>
+              <input
+                type="text"
+                value={form.term}
+                onChange={(e) => setForm((f) => ({ ...f, term: e.target.value }))}
+                placeholder="e.g. Term 1"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              />
+            </div>
+
+            {/* 6. Unit (left) + Subject Category (right) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+              <input
+                type="text"
+                value={form.unit}
+                onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+                placeholder="e.g. 3"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Subject Category</label>
+              <select
+                value={form.subjectCategory}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, subjectCategory: e.target.value as 'main' | 'basket' | 'none' }))
+                }
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              >
+                <option value="none">None</option>
+                <option value="main">Main Subject</option>
+                <option value="basket">Basket Subject</option>
               </select>
             </div>
 
