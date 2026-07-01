@@ -99,7 +99,7 @@ export default function StudentsPage() {
   const fetchModuleOptions = async () => {
     setModulesLoading(true);
     try {
-      const fetchedModules = await getModules();
+      const fetchedModules = await getModules('active');
       setModuleOptions(Array.isArray(fetchedModules) ? fetchedModules : []);
     } catch (error) {
       console.error('Failed to load modules:', error);

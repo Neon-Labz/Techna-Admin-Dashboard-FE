@@ -63,7 +63,7 @@ export default function ExamsPage() {
 
   const loadModules = async () => {
     try {
-      const res: any = await api.get('/modules');
+      const res: any = await api.get('/modules', { params: { status: 'active' } });
       // Interceptor returns the unwrapped value directly, not an AxiosResponse
       const list = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
       setModules(list);
