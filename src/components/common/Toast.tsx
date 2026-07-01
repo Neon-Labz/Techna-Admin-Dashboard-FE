@@ -43,7 +43,7 @@ function ToastItem({ toast, onRemove }: {
 export default function Toast({ toasts, onRemove }: ToastProps) {
   if (!toasts.length) return null;
   return (
-    <div className="fixed top-5 right-5 z-50 flex flex-col gap-2">
+    <div className="fixed top-5 right-5 z-[200] flex flex-col gap-2">
       {toasts.map((t) => (
         <ToastItem key={t.id} toast={t} onRemove={onRemove} />
       ))}
