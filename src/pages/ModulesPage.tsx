@@ -1,279 +1,526 @@
 'use client';
-import { useState } from 'react';
-import { useDataStore } from '../store/dataStore';
-import type { Module, LectureVideo } from '../types';
-import Modal from '../components/ui/Modal';
-import { Plus, Edit2, Trash2, BookOpen, Play, Upload, Search } from 'lucide-react';
-import toast from 'react-hot-toast';
 
-const BATCHES = ['May 2024 Batch', 'September 2024 Batch', 'January 2025 Batch', 'May 2025 Batch'];
+import { useCallback, useEffect, useState } from 'react';
+import { BookOpen, Edit2, Loader2, Plus, Search, Trash2 } from 'lucide-react';
+import { useToast } from '@/hooks/useToast';
+import Toast from '@/components/common/Toast';
+
+import type { ApiModule, ApiTeacher, CreateModuleDto, UpdateModuleDto } from '@/lib/api';
+import {
+  createModule,
+  deleteModule,
+  getModuleById,
+  getModules,
+  getTeachers,
+  isAxiosError,
+  updateModule,
+} from '@/lib/api';
+import { getStudents } from '@/api/studentApi';
+import { validateModuleForm } from '@/lib/validation';
+import DeleteModal from '@/components/common/DeleteModal';
+import Modal from '@/components/ui/Modal';
+
+
+
+interface FormState {
+  name: string;
+  description: string;
+  subject: string;
+  teacherId: string;
+  teacherName: string;
+  duration: string;
+  fee: string;
+  batch: string;
+  status: 'active' | 'inactive';
+}
+
+const EMPTY_FORM: FormState = {
+  name: '',
+  description: '',
+  subject: '',
+  teacherId: '',
+  teacherName: '',
+  duration: '',
+  fee: '',
+  batch: '',
+  status: 'active',
+};
+
+
+
+const capitalizeWords = (str: string) =>
+  str.trim().split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+
+function extractErrorMessage(err: unknown): string {
+  if (isAxiosError(err)) {
+    const msg = err.response?.data?.message;
+    if (typeof msg === 'string') return msg;
+    if (Array.isArray(msg) && msg.length > 0) return msg[0] as string;
+  }
+  return 'Something went wrong';
+}
+
+
+
+function SkeletonCard() {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 animate-pulse">
+      <div className="flex items-start justify-between mb-3">
+        <div className="w-10 h-10 rounded-xl bg-gray-200" />
+        <div className="h-5 w-16 bg-gray-200 rounded-full" />
+      </div>
+      <div className="h-5 w-3/4 bg-gray-200 rounded mb-2" />
+      <div className="h-4 w-full bg-gray-200 rounded mb-4" />
+      <div className="space-y-2">
+        <div className="h-3 w-2/3 bg-gray-200 rounded" />
+        <div className="h-3 w-1/2 bg-gray-200 rounded" />
+        <div className="h-3 w-3/5 bg-gray-200 rounded" />
+        <div className="h-3 w-2/5 bg-gray-200 rounded" />
+      </div>
+      <div className="flex gap-2 mt-4">
+        <div className="flex-1 h-9 bg-gray-200 rounded-lg" />
+        <div className="flex-1 h-9 bg-gray-200 rounded-lg" />
+      </div>
+    </div>
+  );
+}
+
+
 
 export default function ModulesPage() {
-  const { modules, teachers, videos, addModule, updateModule, deleteModule, addVideo, deleteVideo, students } = useDataStore();
-  const [tab, setTab] = useState<'modules' | 'videos'>('modules');
+  const { toasts, addToast, removeToast } = useToast();
+  const [modules, setModules] = useState<ApiModule[]>([]);
+  const [teachers, setTeachers] = useState<ApiTeacher[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [modModalOpen, setModModalOpen] = useState(false);
-  const [vidModalOpen, setVidModalOpen] = useState(false);
-  const [editModule, setEditModule] = useState<Module | null>(null);
-  const [deleteConfirmMod, setDeleteConfirmMod] = useState<string | null>(null);
+  const [batches, setBatches] = useState<string[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [formLoading, setFormLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const [modForm, setModForm] = useState<Omit<Module, 'id' | 'videos'>>({
-    name: '', teacherId: '', teacherName: '', description: '', duration: '', fee: 0, batch: BATCHES[0], status: 'active', createdAt: new Date().toISOString().split('T')[0],
-  });
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  const [vidForm, setVidForm] = useState<Omit<LectureVideo, 'id'>>({
-    title: '', moduleId: '', moduleName: '', batch: BATCHES[0], thumbnailUrl: '', videoUrl: '', s3Key: '', uploadedAt: new Date().toISOString(), duration: '',
-  });
+ 
 
-  const filteredMods = modules.filter(m => m.name.toLowerCase().includes(search.toLowerCase()) || m.batch.toLowerCase().includes(search.toLowerCase()));
-  const filteredVids = videos.filter(v => v.title.toLowerCase().includes(search.toLowerCase()) || v.moduleName.toLowerCase().includes(search.toLowerCase()));
+  const fetchModules = useCallback(async () => {
+    const data = await getModules();
+    setModules(data);
+  }, []);
 
-  const openAddMod = () => {
-    setModForm({ name: '', teacherId: '', teacherName: '', description: '', duration: '', fee: 0, batch: BATCHES[0], status: 'active', createdAt: new Date().toISOString().split('T')[0] });
-    setEditModule(null);
-    setModModalOpen(true);
+  const fetchBatches = useCallback(async () => {
+    try {
+      const studentList = await getStudents();
+      const distinctBatches = Array.from(
+        new Set(
+          (studentList ?? [])
+            .map((s: any) => s.batch)
+            .filter(Boolean),
+        ),
+      );
+      setBatches(distinctBatches);
+    } catch (err) {
+      console.error('Failed to load batches from students:', err);
+      setBatches([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        await Promise.all([
+          fetchModules(),
+          getTeachers().then(setTeachers),
+          fetchBatches(),
+        ]);
+      } catch (err) {
+        addToast(extractErrorMessage(err), 'error');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [fetchModules, fetchBatches]);
+
+ 
+
+  const openAdd = () => {
+    setEditId(null);
+    setForm({ ...EMPTY_FORM, batch: batches[0] ?? '' });
+    setModalOpen(true);
   };
-  const openEditMod = (m: Module) => { setModForm({ ...m }); setEditModule(m); setModModalOpen(true); };
 
-  const handleModSubmit = (e: React.FormEvent) => {
+  const openEdit = async (id: string) => {
+    setEditId(id);
+    setForm(EMPTY_FORM);
+    setModalOpen(true);
+    setFormLoading(true);
+    try {
+      const mod = await getModuleById(id);
+      const teacher = teachers.find((t) => t._id === mod.teacherId);
+      const teacherSubject = teacher?.subject;
+      const subjectStr = Array.isArray(teacherSubject) ? teacherSubject.join(', ') : (teacherSubject ?? '');
+      setForm({
+        name: mod.name,
+        description: mod.description,
+        subject: subjectStr,
+        teacherId: mod.teacherId,
+        teacherName: mod.teacherName,
+        duration: mod.duration,
+        fee: String(mod.fee),
+        batch: mod.batch,
+        status: mod.status,
+      });
+    } catch (err) {
+      addToast(extractErrorMessage(err), 'error');
+      setModalOpen(false);
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditId(null);
+    setForm(EMPTY_FORM);
+  };
+
+  
+
+  const handleTeacherChange = (teacherId: string) => {
+    const teacher = teachers.find((t) => t._id === teacherId);
+    const teacherSubject = teacher?.subject;
+    const subjectStr = Array.isArray(teacherSubject) ? teacherSubject.join(', ') : (teacherSubject ?? '');
+    setForm((f) => ({
+      ...f,
+      teacherId,
+      teacherName: teacher?.fullName ?? '',
+      subject: subjectStr,
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const teacher = teachers.find(t => t.id === modForm.teacherId);
-    const updated = { ...modForm, teacherName: teacher?.name || '' };
-    if (editModule) { updateModule(editModule.id, updated); toast.success('Module updated!'); }
-    else { addModule(updated); toast.success('Module created!'); }
-    setModModalOpen(false);
+
+    const validationError = validateModuleForm({
+      name: form.name,
+      description: form.description,
+    });
+    if (validationError) {
+      addToast(validationError, 'error');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const base: CreateModuleDto = {
+        name: capitalizeWords(form.name),
+        teacherId: form.teacherId,
+        teacherName: form.teacherName,
+        description: form.description.trim(),
+        duration: form.duration.trim(),
+        fee: Number(form.fee),
+        batch: form.batch,
+        status: form.status,
+      };
+
+      if (editId) {
+        const patch: UpdateModuleDto = { ...base };
+        await updateModule(editId, patch);
+        addToast('Module updated!', 'success');
+      } else {
+        await createModule(base);
+        addToast('Module created!', 'success');
+      }
+      closeModal();
+      await fetchModules();
+    } catch (err) {
+      addToast(extractErrorMessage(err), 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleVidSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const mod = modules.find(m => m.id === vidForm.moduleId);
-    addVideo({ ...vidForm, moduleName: mod?.name || '', batch: mod?.batch || BATCHES[0], uploadedAt: new Date().toISOString() });
-    toast.success('Lecture video added!');
-    setVidModalOpen(false);
-    setVidForm({ title: '', moduleId: '', moduleName: '', batch: BATCHES[0], thumbnailUrl: '', videoUrl: '', s3Key: '', uploadedAt: new Date().toISOString(), duration: '' });
+
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    setDeleting(true);
+    try {
+      await deleteModule(deleteId);
+      setModules((prev) => prev.filter((m) => m._id !== deleteId));
+      addToast('Module deleted', 'success');
+      setDeleteId(null);
+    } catch (err) {
+      addToast(extractErrorMessage(err), 'error');
+    } finally {
+      setDeleting(false);
+    }
   };
+
+
+
+  const filtered = modules.filter(
+    (m) =>
+      m.name.toLowerCase().includes(search.toLowerCase()) ||
+      m.teacherName.toLowerCase().includes(search.toLowerCase()) ||
+      m.batch.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const moduleToDelete = modules.find((m) => m._id === deleteId);
+
+  
 
   return (
     <div className="p-3 pb-20 sm:p-6 sm:pb-6">
-      {/* Header */}
+      
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Modules & Lectures</h1>
-          <p className="text-gray-500 text-sm">{modules.length} modules · {videos.length} videos</p>
+          <h1 className="text-2xl font-bold text-gray-800">Modules</h1>
+          <p className="text-gray-500 text-sm">
+            {loading ? '…' : `${modules.length} total modules`}
+          </p>
         </div>
-        <div className="flex gap-2">
-          {tab === 'modules' ? (
-            <button onClick={openAddMod} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium">
-              <Plus className="w-4 h-4" /> New Module
-            </button>
-          ) : (
-            <button onClick={() => setVidModalOpen(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium">
-              <Upload className="w-4 h-4" /> Upload Video
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-5">
-        <button onClick={() => setTab('modules')} className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'modules' ? 'bg-white shadow-sm text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}>
-          <span className="flex items-center gap-2"><BookOpen className="w-4 h-4" /> Modules</span>
-        </button>
-        <button onClick={() => setTab('videos')} className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'videos' ? 'bg-white shadow-sm text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}>
-          <span className="flex items-center gap-2"><Play className="w-4 h-4" /> Lecture Videos</span>
+        <button
+          onClick={openAdd}
+          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Add Module
         </button>
       </div>
 
-      {/* Search */}
+      
       <div className="relative mb-5">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..."
-          className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search modules..."
+          className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+        />
       </div>
 
-      {/* Modules Tab */}
-      {tab === 'modules' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {filteredMods.map(m => {
-            const enrolled = students.filter(s => s.modules.includes(m.id)).length;
-            return (
-              <div key={m.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
-                    <BookOpen className="w-5 h-5 text-indigo-600" />
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${m.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{m.status}</span>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        {loading ? (
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
+        ) : (
+          filtered.map((mod) => (
+            <div key={mod._id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <div className="flex items-start justify-between mb-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                  <BookOpen className="w-5 h-5 text-indigo-600" />
                 </div>
-                <h3 className="font-bold text-gray-800 text-lg">{m.name}</h3>
-                <p className="text-sm text-gray-500 mt-1 mb-3">{m.description}</p>
-                <div className="space-y-1.5 text-sm text-gray-600">
-                  <p>👨‍🏫 {m.teacherName}</p>
-                  <p>📅 {m.batch}</p>
-                  <p>⏱ {m.duration}</p>
-                  <p>💰 LKR {m.fee.toLocaleString()}</p>
-                  <p>👥 {enrolled} students enrolled</p>
-                  <p>🎬 {m.videos.length} videos</p>
-                </div>
-                <div className="flex gap-2 mt-4">
-                  <button onClick={() => openEditMod(m)} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg text-sm font-medium">
-                    <Edit2 className="w-3.5 h-3.5" /> Edit
-                  </button>
-                  <button onClick={() => setDeleteConfirmMod(m.id)} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-medium">
-                    <Trash2 className="w-3.5 h-3.5" /> Delete
-                  </button>
-                </div>
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    mod.status === 'active'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
+                  {mod.status}
+                </span>
               </div>
-            );
-          })}
-          {filteredMods.length === 0 && (
-            <div className="col-span-3 text-center py-16 text-gray-400"><BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" /><p>No modules found</p></div>
+
+              <h3 className="font-bold text-gray-800 text-lg">{mod.name}</h3>
+              <p className="text-sm text-gray-500 mt-1 mb-3 line-clamp-2">{mod.description}</p>
+
+              <div className="space-y-1.5 text-sm text-gray-600">
+                <p>👨‍🏫 {mod.teacherName}</p>
+                <p>📅 {mod.batch}</p>
+                <p>⏱ {mod.duration}</p>
+                <p>💰 LKR {mod.fee.toLocaleString()}</p>
+                <p>📎 {(mod.resources ?? []).length} resources</p>
+              </div>
+
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={() => openEdit(mod._id)}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Edit2 className="w-3.5 h-3.5" /> Edit
+                </button>
+                <button
+                  onClick={() => setDeleteId(mod._id)}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      
+      {!loading && filtered.length === 0 && (
+        <div className="text-center py-16 text-gray-400">
+          <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p>{search ? 'No modules match your search' : 'No modules yet'}</p>
+          {!search && (
+            <button
+              onClick={openAdd}
+              className="mt-3 inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add Module
+            </button>
           )}
         </div>
       )}
 
-      {/* Videos Tab */}
-      {tab === 'videos' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {filteredVids.map(v => (
-            <div key={v.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="relative bg-gray-900 h-36 flex items-center justify-center">
-                {v.thumbnailUrl ? (
-                  <img src={v.thumbnailUrl} alt={v.title} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="flex flex-col items-center text-gray-500">
-                    <Play className="w-10 h-10 mb-1 opacity-50" />
-                    <span className="text-xs">No thumbnail</span>
-                  </div>
+      
+      <Modal
+        isOpen={modalOpen}
+        onClose={closeModal}
+        title={editId ? 'Edit Module' : 'Create New Module'}
+        size="xl"
+      >
+        {formLoading ? (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 1. Module Name — full width */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Module Name</label>
+              <input
+                type="text"
+                required
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              />
+            </div>
+
+            
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <input
+                type="text"
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              />
+            </div>
+
+           
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Duration (e.g. 6 months)</label>
+              <input
+                type="text"
+                required
+                value={form.duration}
+                onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fee (LKR)</label>
+              <input
+                type="number"
+                required
+                min={0}
+                value={form.fee}
+                onChange={(e) => setForm((f) => ({ ...f, fee: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              />
+            </div>
+
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Teacher</label>
+              <select
+                required
+                value={form.teacherId}
+                onChange={(e) => handleTeacherChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              >
+                <option value="">Select teacher...</option>
+                {teachers.map((t) => (
+                  <option key={t._id} value={t._id}>{t.fullName}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Batch</label>
+              <select
+                required
+                value={form.batch}
+                onChange={(e) => setForm((f) => ({ ...f, batch: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              >
+                <option value="">Select batch...</option>
+                {batches.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+                {form.batch && !batches.includes(form.batch) && (
+                  <option value={form.batch}>{form.batch}</option>
                 )}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
-                    <Play className="w-5 h-5 text-white" />
-                  </div>
-                </div>
-              </div>
-              <div className="p-4">
-                <h3 className="font-semibold text-gray-800 text-sm">{v.title}</h3>
-                <p className="text-xs text-indigo-600 mt-1">{v.moduleName}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{v.batch}</p>
-                {v.s3Key && <p className="text-xs text-gray-400 mt-1 font-mono truncate">S3: {v.s3Key}</p>}
-                <div className="flex items-center justify-between mt-3">
-                  <span className="text-xs text-gray-400">{new Date(v.uploadedAt).toLocaleDateString()}</span>
-                  <button onClick={() => { deleteVideo(v.id); toast.success('Video removed'); }} className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1">
-                    <Trash2 className="w-3 h-3" /> Remove
-                  </button>
-                </div>
-              </div>
+              </select>
             </div>
-          ))}
-          {filteredVids.length === 0 && (
-            <div className="col-span-3 text-center py-16 text-gray-400"><Play className="w-12 h-12 mx-auto mb-3 opacity-30" /><p>No videos uploaded yet</p></div>
-          )}
-        </div>
-      )}
 
-      {/* Module Add/Edit Modal */}
-      <Modal isOpen={modModalOpen} onClose={() => setModModalOpen(false)} title={editModule ? 'Edit Module' : 'Create New Module'} size="xl">
-        <form onSubmit={handleModSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {[
-            { field: 'name', label: 'Module Name' },
-            { field: 'description', label: 'Description' },
-            { field: 'duration', label: 'Duration (e.g. 6 months)' },
-          ].map(({ field, label }) => (
-            <div key={field} className={field === 'description' ? 'md:col-span-2' : ''}>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-              <input type="text" value={(modForm as Record<string, unknown>)[field] as string || ''} onChange={e => setModForm(f => ({ ...f, [field]: e.target.value }))} required
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select
+                required
+                value={form.status}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, status: e.target.value as 'active' | 'inactive' }))
+                }
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
             </div>
-          ))}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Fee (LKR)</label>
-            <input type="number" value={modForm.fee} onChange={e => setModForm(f => ({ ...f, fee: Number(e.target.value) }))} required
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Teacher</label>
-            <select value={modForm.teacherId} onChange={e => setModForm(f => ({ ...f, teacherId: e.target.value }))} required
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
-              <option value="">Select teacher...</option>
-              {teachers.map(t => <option key={t.id} value={t.id}>{t.name} ({t.subject})</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Batch</label>
-            <select value={modForm.batch} onChange={e => setModForm(f => ({ ...f, batch: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
-              {BATCHES.map(b => <option key={b}>{b}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <select value={modForm.status} onChange={e => setModForm(f => ({ ...f, status: e.target.value as 'active' | 'inactive' }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
-          <div className="md:col-span-2 flex gap-3 pt-1">
-            <button type="button" onClick={() => setModModalOpen(false)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50">Cancel</button>
-            <button type="submit" className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700">{editModule ? 'Update' : 'Create'} Module</button>
-          </div>
-        </form>
+
+            
+            <div className="md:col-span-2 flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={closeModal}
+                disabled={submitting}
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-60"
+              >
+                {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {editId ? 'Update' : 'Create'} Module
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
 
-      {/* Video Upload Modal */}
-      <Modal isOpen={vidModalOpen} onClose={() => setVidModalOpen(false)} title="Upload Lecture Video" size="lg">
-        <form onSubmit={handleVidSubmit} className="space-y-4">
-          <div className="p-3 bg-blue-50 rounded-lg text-xs text-blue-600">
-            📦 Videos are stored on Amazon S3. Enter the S3 URL or key below.
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Video Title</label>
-            <input type="text" required value={vidForm.title} onChange={e => setVidForm(f => ({ ...f, title: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="e.g. Lesson 1 - Introduction" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Module</label>
-            <select required value={vidForm.moduleId} onChange={e => setVidForm(f => ({ ...f, moduleId: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
-              <option value="">Select module...</option>
-              {modules.map(m => <option key={m.id} value={m.id}>{m.name} ({m.batch})</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">S3 Video URL</label>
-            <input type="url" value={vidForm.videoUrl} onChange={e => setVidForm(f => ({ ...f, videoUrl: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="https://s3.amazonaws.com/bucket/video.mp4" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">S3 Thumbnail URL</label>
-            <input type="url" value={vidForm.thumbnailUrl} onChange={e => setVidForm(f => ({ ...f, thumbnailUrl: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="https://s3.amazonaws.com/bucket/thumb.jpg" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">S3 Key</label>
-            <input type="text" value={vidForm.s3Key} onChange={e => setVidForm(f => ({ ...f, s3Key: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-mono" placeholder="videos/english/lesson-1.mp4" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Duration</label>
-            <input type="text" value={vidForm.duration} onChange={e => setVidForm(f => ({ ...f, duration: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" placeholder="e.g. 45:00" />
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setVidModalOpen(false)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50">Cancel</button>
-            <button type="submit" className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700">Upload Video</button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* Delete Module Confirm */}
-      <Modal isOpen={!!deleteConfirmMod} onClose={() => setDeleteConfirmMod(null)} title="Delete Module" size="sm">
-        <p className="text-gray-600 text-sm mb-5">Delete this module? This cannot be undone.</p>
-        <div className="flex gap-3">
-          <button onClick={() => setDeleteConfirmMod(null)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium">Cancel</button>
-          <button onClick={() => { deleteConfirmMod && deleteModule(deleteConfirmMod); setDeleteConfirmMod(null); toast.success('Module deleted'); }} className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium">Delete</button>
-        </div>
-      </Modal>
+      
+      <DeleteModal
+        open={!!deleteId}
+        title="Delete Module"
+        itemName={moduleToDelete?.name}
+        message="This will permanently delete the module and cannot be undone."
+        loading={deleting}
+        onCancel={() => setDeleteId(null)}
+        onConfirm={handleDelete}
+      />
+      <Toast toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }
