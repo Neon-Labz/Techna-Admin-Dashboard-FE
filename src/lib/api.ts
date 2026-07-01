@@ -27,6 +27,9 @@ export interface ApiModule {
   fee: number;
   batch: string;
   status: 'active' | 'inactive';
+  term?: string;
+  unit?: number;
+  subjectCategory?: 'main' | 'basket' | 'none';
   resources: ApiResource[];
   createdAt: string;
   updatedAt: string;
@@ -109,6 +112,9 @@ export interface CreateModuleDto {
   fee: number;
   batch: string;
   status?: 'active' | 'inactive';
+  term?: string;
+  unit?: number;
+  subjectCategory?: 'main' | 'basket' | 'none';
 }
 
 export interface UpdateModuleDto {
@@ -120,6 +126,9 @@ export interface UpdateModuleDto {
   fee?: number;
   batch?: string;
   status?: 'active' | 'inactive';
+  term?: string;
+  unit?: number;
+  subjectCategory?: 'main' | 'basket' | 'none';
 }
 
 export interface CreateVideoDto {
