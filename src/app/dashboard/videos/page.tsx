@@ -199,7 +199,7 @@ export default function VideosPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Lecture Videos</h1>
-          <p className="text-gray-500 text-sm">{videos.length} videos · {modules.length} modules</p>
+          <p className="text-gray-500 text-sm">{videos.length} videos · {modules.length} subjects</p>
         </div>
         <button onClick={() => setUploadOpen(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium">
           <Upload className="w-4 h-4" /> Add Video
@@ -216,8 +216,8 @@ export default function VideosPage() {
         <div className="flex items-center gap-2">
           <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
             className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="all">All Modules</option>
-            {modules.filter(m => m.status === 'active').map(m => <option key={m._id} value={m._id}>{capitalizeWords(m.name)}</option>)}
+            <option value="all">All Subjects</option>
+            {modules.map(m => <option key={m._id} value={m._id}>{capitalizeWords(m.name)}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">
@@ -293,11 +293,11 @@ export default function VideosPage() {
       <Modal isOpen={uploadOpen} onClose={() => { if (!uploading) setUploadOpen(false); }} title="Add Lecture Video" size="lg">
         <form onSubmit={handleUpload} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Module</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
             <select required value={uploadModuleId} onChange={e => setUploadModuleId(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
-              <option value="">Select module...</option>
-              {modules.filter(m => m.status === 'active').map(m => <option key={m._id} value={m._id}>{capitalizeWords(m.name)} ({m.batch})</option>)}
+              <option value="">Select subject...</option>
+              {modules.map(m => <option key={m._id} value={m._id}>{capitalizeWords(m.name)} ({m.batch})</option>)}
             </select>
           </div>
           <div>
