@@ -32,6 +32,9 @@ interface FormState {
   fee: string;
   batch: string;
   status: 'active' | 'inactive';
+  term: string;
+  unit: number;
+  subjectCategory: 'main' | 'basket' | 'none';
 }
 
 const EMPTY_FORM: FormState = {
@@ -44,6 +47,9 @@ const EMPTY_FORM: FormState = {
   fee: '',
   batch: '',
   status: 'active',
+  term: '',
+  unit: 0,
+  subjectCategory: 'none',
 };
 
 
@@ -174,6 +180,9 @@ export default function ModulesPage() {
         fee: String(mod.fee),
         batch: mod.batch,
         status: mod.status,
+        term: mod.term ?? '',
+        unit: mod.unit ?? 0,
+        subjectCategory: mod.subjectCategory ?? 'none',
       });
     } catch (err) {
       addToast(extractErrorMessage(err), 'error');
@@ -226,6 +235,9 @@ export default function ModulesPage() {
         fee: Number(form.fee),
         batch: form.batch,
         status: form.status,
+        term: form.term.trim(),
+        unit: form.unit,
+        subjectCategory: form.subjectCategory,
       };
 
       if (editId) {
@@ -342,6 +354,8 @@ export default function ModulesPage() {
                 <p>⏱ {mod.duration}</p>
                 <p>💰 LKR {mod.fee.toLocaleString()}</p>
                 <p>📎 {(mod.resources ?? []).length} resources</p>
+                {mod.term && <p>🗓 {mod.term}</p>}
+                {mod.unit != null && mod.unit > 0 && <p>📚 {mod.unit} Units</p>}
               </div>
 
               <div className="flex gap-2 mt-4">
@@ -471,7 +485,44 @@ export default function ModulesPage() {
               </select>
             </div>
 
-            
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Term</label>
+              <input
+                type="text"
+                value={form.term}
+                onChange={(e) => setForm((f) => ({ ...f, term: e.target.value }))}
+                placeholder="e.g. Term 1"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+              <input
+                type="number"
+                min={0}
+                value={form.unit}
+                onChange={(e) => setForm((f) => ({ ...f, unit: Number(e.target.value) }))}
+                placeholder="e.g. 3"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              />
+            </div>
+
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Subject Category</label>
+              <select
+                value={form.subjectCategory}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, subjectCategory: e.target.value as 'main' | 'basket' | 'none' }))
+                }
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              >
+                <option value="none">None</option>
+                <option value="main">Main Subject</option>
+                <option value="basket">Basket Subject</option>
+              </select>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select
