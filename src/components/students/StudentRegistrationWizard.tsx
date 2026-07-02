@@ -14,6 +14,12 @@ import {
   User,
 } from 'lucide-react';
 import type { Student, OLResult } from '../../types';
+import {
+  MAIN_SUBJECTS,
+  BASKET_SUBJECTS,
+  MAX_MAIN_SUBJECTS,
+  MAX_BASKET_SUBJECTS,
+} from '../../utils/studentPayload';
 
 const DISTRICTS = [
   'Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo', 'Galle',
@@ -42,20 +48,6 @@ const RELIGIONS = [
 ];
 
 const GRADES = ['A', 'B', 'C', 'S', 'W', 'Absent'];
-
-// Hardcoded subject groups (single-select each)
-const MAIN_SUBJECTS = [
-  'Engineering Technology',
-  'Bio Systems Technology',
-  'Science For Technology',
-];
-
-const BASKET_SUBJECTS = [
-  'ICT',
-  'Agricultural Science',
-  'Mathematics',
-  'Geography',
-];
 
 const STEPS = [
   { id: 1, label: 'Basic Info', icon: User },
@@ -271,11 +263,11 @@ export default function StudentRegistrationWizard({
     }
 
     if (step === 5) {
-      if ((form.mainSubjects || []).length !== 2) {
-        nextErrors.mainSubjects = 'Select exactly 2 main subjects';
+      if ((form.mainSubjects || []).length !== MAX_MAIN_SUBJECTS) {
+        nextErrors.mainSubjects = `Select exactly ${MAX_MAIN_SUBJECTS} main subjects`;
       }
       if (!form.basketSubject) {
-        nextErrors.basketSubject = 'Select one basket subject';
+        nextErrors.basketSubject = `Select exactly ${MAX_BASKET_SUBJECTS} basket subject`;
       }
       if (!form.declarationRules || !form.declarationAccuracy) {
         nextErrors.declaration = 'Both declarations are required';
@@ -798,10 +790,16 @@ export default function StudentRegistrationWizard({
                 (select exactly 2) — {(form.mainSubjects || []).length}/2 selected
               </span>
             </div>
+            <p className="mb-3 text-xs text-gray-500">
+              Select exactly {MAX_MAIN_SUBJECTS} Main Subjects and{' '}
+              {MAX_BASKET_SUBJECTS} Basket Subject.
+            </p>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {MAIN_SUBJECTS.map((subject) => {
                 const checked = (form.mainSubjects || []).includes(subject);
+                const limitReached = (form.mainSubjects || []).length >= MAX_MAIN_SUBJECTS;
+                const disabled = !checked && limitReached;
 
                 return (
                   <label
@@ -809,12 +807,15 @@ export default function StudentRegistrationWizard({
                     className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${
                       checked
                         ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                        : 'border-gray-200 bg-white text-gray-700'
+                        : disabled
+                          ? 'cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400'
+                          : 'border-gray-200 bg-white text-gray-700'
                     }`}
                   >
                     <input
                       type="checkbox"
                       checked={checked}
+                      disabled={disabled}
                       onChange={() => toggleMainSubject(subject)}
                     />
                     <span>{subject}</span>
@@ -882,7 +883,8 @@ export default function StudentRegistrationWizard({
               <span>Batch: {form.batch || '-'}</span>
               <span>
                 Subjects:{' '}
-                {[...(form.mainSubjects || []), form.basketSubject].filter(Boolean)
+                {[...(form.mainSubjects || []), form.basketSubject]
+                  .filter(Boolean)
                   .length > 0
                   ? [...(form.mainSubjects || []), form.basketSubject]
                       .filter(Boolean)

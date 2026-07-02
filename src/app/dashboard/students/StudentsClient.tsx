@@ -15,6 +15,13 @@ import {
   cleanOlResults,
   normalizeAlSubjects,
   OL_GRADE_OPTIONS,
+  getSubjectCategory,
+  countSubjectsByCategory,
+  subjectLabel,
+  MAIN_SUBJECTS,
+  BASKET_SUBJECTS,
+  MAX_MAIN_SUBJECTS,
+  MAX_BASKET_SUBJECTS,
 } from '@/utils/studentPayload';
 
 const emptyOL = {
@@ -236,7 +243,25 @@ export default function StudentsPage() {
           ? prev.modules
           : [];
 
-      const updated = current.includes(moduleName)
+      const alreadySelected = current.includes(moduleName);
+
+      if (!alreadySelected) {
+        const category = getSubjectCategory(moduleName);
+        const counts = countSubjectsByCategory(current);
+        const limit =
+          category === 'main' ? MAX_MAIN_SUBJECTS : MAX_BASKET_SUBJECTS;
+
+        if (counts[category] >= limit) {
+          toast.error(
+            category === 'main'
+              ? `You can select only ${MAX_MAIN_SUBJECTS} Main Subjects`
+              : `You can select only ${MAX_BASKET_SUBJECTS} Basket Subject`,
+          );
+          return prev;
+        }
+      }
+
+      const updated = alreadySelected
         ? current.filter((m: string) => m !== moduleName)
         : [...current, moduleName];
 
@@ -406,21 +431,6 @@ export default function StudentsPage() {
 
   const normalizeModuleKey = (value?: string) =>
     normalizeAlSubjects([value || ''])[0]?.trim().toLowerCase() || '';
-
-  const isModuleSelected = (module: ApiModule) => {
-    const moduleKeys = [
-      module._id,
-      (module as any).id,
-      module.name,
-      normalizeAlSubjects([module.name])[0],
-    ]
-      .map(normalizeModuleKey)
-      .filter(Boolean);
-
-    return selectedModules.some((selected: string) =>
-      moduleKeys.includes(normalizeModuleKey(selected)),
-    );
-  };
 
   return (
     <div className="p-3 pb-20 sm:p-6 sm:pb-6">
@@ -746,37 +756,83 @@ export default function StudentsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Enrolled Modules
               </label>
+              <p className="mb-3 text-xs text-gray-500">
+                Select exactly {MAX_MAIN_SUBJECTS} Main Subjects and{' '}
+                {MAX_BASKET_SUBJECTS} Basket Subject.
+              </p>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {modulesLoading ? (
-                  <p className="text-sm text-gray-400">Loading modules...</p>
-                ) : moduleOptions.length === 0 ? (
-                  <p className="text-sm text-gray-400">No modules found</p>
-                ) : (
-                  moduleOptions.map((module) => {
-                    const checked = isModuleSelected(module);
+              {(() => {
+                const counts = countSubjectsByCategory(selectedModules);
+                const isSelected = (subject: string) =>
+                  selectedModules.some(
+                    (s: string) => normalizeModuleKey(s) === normalizeModuleKey(subject),
+                  );
 
-                    return (
-                      <label
-                        key={module._id}
-                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer text-sm ${
-                          checked
-                            ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
-                            : 'bg-white border-gray-200 text-gray-700'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleModule(module.name)}
-                          className="rounded border-gray-300"
-                        />
-                        {module.name}
-                      </label>
-                    );
-                  })
-                )}
-              </div>
+                const renderCategory = (
+                  title: string,
+                  items: string[],
+                  limit: number,
+                  category: 'main' | 'basket',
+                ) => (
+                  <div className="mb-4" key={category}>
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+                        {title}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {counts[category]}/{limit} selected
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {items.map((subject) => {
+                        const checked = isSelected(subject);
+                        const limitReached = counts[category] >= limit;
+                        const disabled = !checked && limitReached;
+
+                        return (
+                          <label
+                            key={subject}
+                            className={`flex items-center gap-3 p-3 rounded-xl border text-sm ${
+                              checked
+                                ? 'bg-indigo-50 border-indigo-500 text-indigo-700 cursor-pointer'
+                                : disabled
+                                  ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
+                                  : 'bg-white border-gray-200 text-gray-700 cursor-pointer'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={disabled}
+                              onChange={() => toggleModule(subject)}
+                              className="rounded border-gray-300"
+                            />
+                            {subjectLabel(subject)}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+
+                return (
+                  <>
+                    {renderCategory(
+                      'Main Subjects',
+                      MAIN_SUBJECTS,
+                      MAX_MAIN_SUBJECTS,
+                      'main',
+                    )}
+                    {renderCategory(
+                      'Basket Subject',
+                      BASKET_SUBJECTS,
+                      MAX_BASKET_SUBJECTS,
+                      'basket',
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             <div className="flex gap-3 pt-2 sticky bottom-0 bg-white">
