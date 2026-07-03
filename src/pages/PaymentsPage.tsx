@@ -21,12 +21,39 @@ const MONTHS = [
   { num: '11', label: 'Nov' }, { num: '12', label: 'Dec' },
 ];
 
+// ── Fee Structure ────────────────────────────────────────────────────────────
+const FEE_STRUCTURE = {
+  subjectFee: 1200,
+};
+
+// ── Additional (one-time) fees ──────────────────────────────────────────────
+// Each entry here is a fee that is NOT a subject a student studies (Admission
+// Fee, ID Card Fee, etc). These are sent to the backend with their own
+// `feeType` ('admission' | 'idcard') instead of a moduleId — the backend
+// treats them as one-time fees with no Module lookup and no monthly
+// (student, module, month) uniqueness check, so they never collide with a
+// subject's payment slot and never require a matching Module record.
+//
+// To add a new fee later (e.g. client asks for another one-time charge),
+// add an entry here with a matching `id`, and add that same id to the
+// feeType union type in payment.api.ts (CreatePaymentPayload / PaymentRecord)
+// and to the backend's feeType enum — no other frontend code changes needed.
+const ADDITIONAL_FEES: { id: string; label: string; defaultAmount: number }[] = [
+  { id: 'admission', label: 'Admission Fee', defaultAmount: 500 },
+  { id: 'idcard',    label: 'ID Card Fee',   defaultAmount: 300 },
+];
+
+interface ModuleRef {
+  id?: string;
+  name?: string;
+}
+
 interface StudentOption {
   _id:        string;
   studentId:  string;
   name:       string;
   batch:      string;
-  moduleRefs: string[];
+  moduleRefs: ModuleRef[];
   status:     string;
 }
 interface ModuleOption { id: string; name: string; }
@@ -36,6 +63,19 @@ interface StudentTracking {
   paidMonths: string[];
   pendingMonths: string[];
   payments: PaymentRecord[];
+}
+
+function isApprovedStudent(student: Record<string, unknown>): boolean {
+  const statusCandidates = [
+    student.status,
+    student.studentStatus,
+    student.approvalStatus,
+    student.applicationStatus,
+  ];
+
+  return statusCandidates.some((value) =>
+    String(value ?? '').trim().toLowerCase() === 'approved',
+  );
 }
 
 function extractArrayResponse(value: unknown): any[] {
@@ -79,6 +119,48 @@ const statusColor = (s: string) =>
 const normalizeModuleName = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 
+// ── Robust extraction of a single module reference (string | ObjectId | {_id,name,...}) ──
+function extractModuleRef(m: unknown): ModuleRef {
+  if (typeof m === 'string') {
+    return { id: m, name: m };
+  }
+  if (m && typeof m === 'object') {
+    const obj = m as Record<string, unknown>;
+    const id =
+      (obj._id ?? obj.id ?? obj.moduleId ?? obj.module_id) as string | undefined;
+    const name =
+      (obj.name ?? obj.moduleName ?? obj.module_name ?? obj.title) as string | undefined;
+    return {
+      id:   id ? String(id) : undefined,
+      name: name ? String(name) : undefined,
+    };
+  }
+  return {};
+}
+
+// ── Try several possible field names a student record might store enrolled modules under ──
+function extractStudentModules(s: Record<string, unknown>): unknown[] {
+  const candidates = [
+    s.modules,
+    s.enrolledModules,
+    s.registeredModules,
+    s.moduleIds,
+    s.subjects,
+    s.courses,
+    s.registeredSubjects,
+    s.mainSubjects && s.basketSubject
+      ? [
+          ...(Array.isArray(s.mainSubjects) ? s.mainSubjects : []),
+          s.basketSubject,
+        ]
+      : undefined,
+  ];
+  for (const c of candidates) {
+    if (Array.isArray(c) && c.length > 0) return c;
+  }
+  return [];
+}
+
 // ── Payment Modal (Add + Edit) ─────────────────────────────────────────────────
 function PaymentModal({
   onClose,
@@ -95,20 +177,44 @@ function PaymentModal({
   const [students,            setStudents]            = useState<StudentOption[]>([]);
   const [allModules,          setAllModules]          = useState<ModuleOption[]>([]);
   const [registeredModuleIds, setRegisteredModuleIds] = useState<string[]>([]);
+  const [unmatchedNames,      setUnmatchedNames]      = useState<string[]>([]);
   const [fetchingMods,        setFetchingMods]        = useState(false);
   const [saving,              setSaving]              = useState(false);
+  const [isFirstPayment,      setIsFirstPayment]      = useState(false);
   const enrollmentInitedRef = useRef(false);
 
   const [form, setForm] = useState({
     studentId: initialData?.studentId ?? '',
-    moduleId:  initialData?.moduleId  ?? '',
-    amount:    initialData?.amount != null ? String(initialData.amount) : '',
     paidDate:  initialData?.paidDate  ?? new Date().toISOString().split('T')[0],
     method:    (initialData?.method   ?? 'cash') as 'cash' | 'bank' | 'online',
     status:    (initialData?.status   ?? 'paid') as 'paid' | 'pending' | 'overdue',
     batch:     initialData?.batch     ?? '',
     notes:     initialData?.notes     ?? '',
   });
+
+  // ── Multi-subject selection state (used in BOTH Add and Edit mode). In Add
+  // mode this starts empty; in Edit mode it's seeded from every payment
+  // record that shares the same student + payment date as the record being
+  // edited, so the whole "batch" of subjects/fees recorded that day can be
+  // reviewed and adjusted together, not just the single record clicked. ──
+  const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>([]);
+  const [subjectFees,       setSubjectFees]       = useState<Record<string, string>>({});
+
+  // ── Additional one-time fees (Admission, ID Card, etc.) — used in BOTH modes. ──
+  // includedFeeIds holds the ids of ADDITIONAL_FEES currently checked;
+  // feeAmounts holds their (editable) amounts, keyed by the same id.
+  const [includedFeeIds, setIncludedFeeIds] = useState<string[]>([]);
+  const [feeAmounts,     setFeeAmounts]     = useState<Record<string, string>>(
+    Object.fromEntries(ADDITIONAL_FEES.map(f => [f.id, String(f.defaultAmount)]))
+  );
+
+  // ── Edit mode only: maps a selection key ("subject:<moduleId>" or
+  // "fee:<feeType>") to the ALREADY-SAVED PaymentRecord it corresponds to.
+  // On submit, keys present here are updated (paymentApi.update); keys with
+  // no entry here are brand new and get created (paymentApi.create). Items
+  // that existed here but get unchecked are simply left untouched on the
+  // server — this UI can add and edit records, not delete them. ──
+  const [existingRecordMap, setExistingRecordMap] = useState<Record<string, PaymentRecord>>({});
 
   useEffect(() => {
     (async () => {
@@ -121,13 +227,22 @@ function PaymentModal({
         const sArr = extractArrayResponse(sRaw);
         const mArr = extractArrayResponse(mRaw);
 
+        // Debug: uncomment temporarily if a student's modules still don't show up,
+        // then check the console to see the real field name used for their modules.
+        // console.log('sample student raw:', sArr[0]);
+        // console.log('all modules raw:', mArr);
+
+        const approvedStudents = sArr.filter((s) =>
+          isApprovedStudent(s as Record<string, unknown>)
+        );
+
         setStudents(
-          sArr.map(s => ({
+          approvedStudents.map(s => ({
             _id:        (s._id ?? s.id ?? s.studentId) as string,
             studentId:  s.studentId as string,
             name:       (s.fullNameEnglish ?? s.name ?? s.studentId) as string,
             batch:      (s.batch ?? '') as string,
-            moduleRefs: Array.isArray(s.modules) ? (s.modules as string[]) : [],
+            moduleRefs: extractStudentModules(s as Record<string, unknown>).map(extractModuleRef),
             status:     (s.status ?? 'pending') as string,
           }))
         );
@@ -146,12 +261,44 @@ function PaymentModal({
   }, []);
 
   const loadEnrollmentForStudent = useCallback(async (s: StudentOption) => {
+    // Track which of the student's raw subject/module refs actually found a
+    // matching record in the Modules list, so we can surface anything that
+    // didn't match (usually means that subject has no Module record yet).
+    const matchedRefLabels = new Set<string>();
+
     const nameBasedIds = s.moduleRefs.length > 0
       ? allModules
           .filter(m => s.moduleRefs.some(ref => {
-            const normM = normalizeModuleName(m.name);
-            const normR = normalizeModuleName(ref);
-            return normM === normR || normM.includes(normR) || normR.includes(normM);
+            const label = ref.name ?? ref.id ?? '';
+            // 1. Direct ID match (covers real ObjectId / moduleId refs — NOT
+            //    plain subject-name strings, which get id === name and will
+            //    simply never equal a real Mongo _id, so this is safe).
+            if (ref.id && ref.id === m.id) {
+              matchedRefLabels.add(label);
+              return true;
+            }
+            // 2. Name match: exact -> then loose substring -> then word-overlap,
+            //    so naming differences like "Science for Technology" vs
+            //    "Science For Technology" or extra words still match.
+            if (ref.name) {
+              const normM = normalizeModuleName(m.name);
+              const normR = normalizeModuleName(ref.name);
+              const isMatch =
+                normM === normR ||
+                normM.includes(normR) ||
+                normR.includes(normM) ||
+                (() => {
+                  const wordsM = new Set(normM.split(' ').filter(Boolean));
+                  const wordsR = normR.split(' ').filter(Boolean);
+                  const overlap = wordsR.filter(w => wordsM.has(w)).length;
+                  return wordsR.length > 0 && overlap / wordsR.length >= 0.6;
+                })();
+              if (isMatch) {
+                matchedRefLabels.add(label);
+                return true;
+              }
+            }
+            return false;
           }))
           .map(m => m.id)
       : [];
@@ -159,6 +306,14 @@ function PaymentModal({
     if (nameBasedIds.length > 0) {
       setRegisteredModuleIds(nameBasedIds);
     }
+
+    // Anything the student is registered for that never matched a real
+    // Module record — this is the actual list to show Sarmi so there's no
+    // need to dig through DevTools to find the mismatch.
+    const missing = s.moduleRefs
+      .map(ref => ref.name ?? ref.id ?? '')
+      .filter(label => label && !matchedRefLabels.has(label));
+    setUnmatchedNames([...new Set(missing)]);
 
     setFetchingMods(true);
     try {
@@ -172,18 +327,67 @@ function PaymentModal({
         r.status === 'fulfilled' ? r.value : []
       );
       const paymentIds = [...new Set(merged.map(p => p.moduleId).filter(Boolean))];
-      setRegisteredModuleIds(prev => [...new Set([...prev, ...paymentIds])]);
+      // Merge with (don't overwrite) the enrollment-based ids, so a student who
+      // has enrolled in 6 modules but only paid for 1 still sees all 6 as options.
+      setRegisteredModuleIds(prev => [...new Set([...prev, ...paymentIds])] as string[]);
+
+      if (isEdit && initialData) {
+        // ── Edit mode: seed the multi-subject / additional-fee selection from
+        // every payment record that shares the same student + payment date as
+        // the record being edited (i.e. the whole "batch" recorded that day),
+        // so the user can review, edit, and add to all of them at once. ──
+        const group = merged.filter(p => p.paidDate === initialData.paidDate);
+        if (!group.some(p => p.id === initialData.id)) group.push(initialData);
+
+        const map: Record<string, PaymentRecord> = {};
+        const subjIds: string[] = [];
+        const subjFeesInit: Record<string, string> = {};
+        const feeIdsInit: string[] = [];
+        const feeAmountsInit: Record<string, string> = Object.fromEntries(
+          ADDITIONAL_FEES.map(f => [f.id, String(f.defaultAmount)])
+        );
+
+        group.forEach(p => {
+          if (p.feeType && p.feeType !== 'subject') {
+            map[`fee:${p.feeType}`] = p;
+            feeIdsInit.push(p.feeType);
+            feeAmountsInit[p.feeType] = String(p.amount);
+          } else if (p.moduleId) {
+            map[`subject:${p.moduleId}`] = p;
+            subjIds.push(p.moduleId);
+            subjFeesInit[p.moduleId] = String(p.amount);
+          }
+        });
+
+        setExistingRecordMap(map);
+        setSelectedModuleIds(subjIds);
+        setSubjectFees(subjFeesInit);
+        setIncludedFeeIds(feeIdsInit);
+        setFeeAmounts(feeAmountsInit);
+        setRegisteredModuleIds(prev => [...new Set([...prev, ...subjIds])]);
+      } else {
+        // First-time payer detection: no prior payment records at all →
+        // pre-tick the Admission Fee checkbox for convenience (still editable).
+        setIsFirstPayment(merged.length === 0);
+        setIncludedFeeIds(merged.length === 0 ? ['admission'] : []);
+      }
     } catch {
       // retain nameBasedIds already applied
     } finally {
       setFetchingMods(false);
     }
-  }, [allModules]);
+  }, [allModules, isEdit, initialData]);
 
   const handleStudentChange = async (studentId: string) => {
     const s = students.find(x => x._id === studentId);
-    setForm(f => ({ ...f, studentId, moduleId: '', batch: s?.batch ?? f.batch }));
+    setForm(f => ({ ...f, studentId, batch: s?.batch ?? f.batch }));
     setRegisteredModuleIds([]);
+    setUnmatchedNames([]);
+    setSelectedModuleIds([]);
+    setSubjectFees({});
+    setIsFirstPayment(false);
+    setIncludedFeeIds([]);
+    setExistingRecordMap({});
     if (!studentId || !s) return;
     await loadEnrollmentForStudent(s);
   };
@@ -214,41 +418,138 @@ function PaymentModal({
     !fetchingMods &&
     registeredModuleIds.length === 0;
 
+  // ── Toggle a subject chip on/off, seeding its fee with the default subject fee ──
+  const toggleSubject = (moduleId: string) => {
+    setSelectedModuleIds(prev => {
+      if (prev.includes(moduleId)) {
+        return prev.filter(id => id !== moduleId);
+      }
+      setSubjectFees(f => (
+        f[moduleId] != null ? f : { ...f, [moduleId]: String(FEE_STRUCTURE.subjectFee) }
+      ));
+      return [...prev, moduleId];
+    });
+  };
+
+  // ── Toggle an additional fee (Admission Fee, ID Card Fee, ...) on/off ──
+  const toggleFee = (feeId: string) => {
+    setIncludedFeeIds(prev =>
+      prev.includes(feeId) ? prev.filter(id => id !== feeId) : [...prev, feeId]
+    );
+  };
+
+  const totalAmount = useMemo(() => {
+    const subjectsTotal = selectedModuleIds.reduce(
+      (sum, id) => sum + (Number(subjectFees[id]) || 0),
+      0,
+    );
+    const feesTotal = includedFeeIds.reduce(
+      (sum, id) => sum + (Number(feeAmounts[id]) || 0),
+      0,
+    );
+    return subjectsTotal + feesTotal;
+  }, [selectedModuleIds, subjectFees, includedFeeIds, feeAmounts]);
+
   const handleSubmit = async () => {
-    if (!form.studentId || !form.moduleId || !form.amount || !form.paidDate) {
-      toast.error('Please fill all required fields');
+    // ── Both Add and Edit mode now use the same multi-subject + additional-fees
+    // flow. Each selected chip/checkbox becomes one line item. In Edit mode,
+    // a line item that matches an ALREADY-SAVED record (via existingRecordMap)
+    // is updated in place; anything new gets created as a fresh record. Items
+    // that were checked originally but got unchecked are simply left alone on
+    // the server — this form can add and edit, but not delete, records. ──
+    if (!form.studentId || !form.paidDate) {
+      toast.error('Please select a student and payment date');
       return;
     }
-    const student   = students.find(s => s._id === form.studentId);
-    const moduleRec = allModules.find(m => m.id === form.moduleId);
-    const payload: CreatePaymentPayload = {
-      studentId:   form.studentId,
-      studentName: student?.name,
-      moduleId:    form.moduleId,
-      moduleName:  moduleRec?.name,
-      amount:      Number(form.amount),
-      paidDate:    form.paidDate,
-      method:      form.method,
-      status:      form.status,
-      batch:       form.batch || student?.batch || 'N/A',
-      notes:       form.notes || undefined,
-    };
+    if (selectedModuleIds.length === 0 && includedFeeIds.length === 0) {
+      toast.error('Select at least one subject or fee');
+      return;
+    }
+
+    const student = students.find(s => s._id === form.studentId);
+
+    // ── Plain subject line items — amounts are NEVER touched by extra fees ──
+    const subjectLineItems: { key: string; payload: CreatePaymentPayload }[] = selectedModuleIds.map((id) => {
+      const moduleRec = allModules.find(m => m.id === id);
+      return {
+        key: `subject:${id}`,
+        payload: {
+          studentId:   form.studentId,
+          studentName: student?.name,
+          moduleId:    id,
+          moduleName:  moduleRec?.name,
+          feeType:     'subject',
+          amount:      Number(subjectFees[id]) || 0,
+          paidDate:    form.paidDate,
+          method:      form.method,
+          status:      form.status,
+          batch:       form.batch || student?.batch || 'N/A',
+          notes:       form.notes || undefined,
+        },
+      };
+    });
+
+    // ── Extra fees — each its OWN separate payment record. These are sent
+    // with `feeType: 'admission' | 'idcard'` and NO moduleId — the backend
+    // treats them as one-time fees, skips the Module lookup entirely, and
+    // never checks them against the (student, module, month) uniqueness
+    // rule, so they never collide with a subject's payment slot and never
+    // require a matching Module/Subject record to exist. ──
+    const feeLineItems: { key: string; payload: CreatePaymentPayload }[] = includedFeeIds.map(id => {
+      const fee = ADDITIONAL_FEES.find(f => f.id === id)!;
+      return {
+        key: `fee:${id}`,
+        payload: {
+          studentId:   form.studentId,
+          studentName: student?.name,
+          feeType:     id as 'admission' | 'idcard',
+          moduleName:  fee.label,
+          amount:      Number(feeAmounts[id]) || 0,
+          paidDate:    form.paidDate,
+          method:      form.method,
+          status:      form.status,
+          batch:       form.batch || student?.batch || 'N/A',
+          notes:       form.notes || undefined,
+        },
+      };
+    });
+
+    const lineItems = [...subjectLineItems, ...feeLineItems];
+
     setSaving(true);
     try {
-      let result: PaymentRecord;
-      if (isEdit && initialData) {
-        result = await paymentApi.update(initialData.id, payload);
-        toast.success('Payment updated successfully!');
-      } else {
-        result = await paymentApi.create(payload);
-        toast.success('Payment recorded successfully!');
+      // Sequential so receipt numbering / any server-side ordering stays
+      // predictable, and a failure partway through is easy to spot instead
+      // of firing all requests at once and losing track of which failed.
+      let updatedCount = 0;
+      let createdCount = 0;
+      for (const item of lineItems) {
+        const existing = isEdit ? existingRecordMap[item.key] : undefined;
+        if (existing) {
+          const result = await paymentApi.update(existing.id, item.payload);
+          onSuccess(result);
+          updatedCount++;
+        } else {
+          const result = await paymentApi.create(item.payload);
+          onSuccess(result);
+          createdCount++;
+        }
       }
-      onSuccess(result);
+
+      const parts: string[] = [];
+      if (updatedCount) parts.push(`${updatedCount} updated`);
+      if (createdCount) parts.push(`${createdCount} added`);
+      toast.success(
+        parts.length > 0
+          ? `Payment ${parts.join(', ')} successfully!`
+          : lineItems.length > 1
+          ? `${lineItems.length} payments recorded successfully!`
+          : 'Payment recorded successfully!'
+      );
       onClose();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string | string[] } } };
-      const msg = axiosErr?.response?.data?.message
-        ?? (isEdit ? 'Failed to update payment' : 'Failed to save payment');
+      const msg = axiosErr?.response?.data?.message ?? 'Failed to save one or more payments';
       toast.error(Array.isArray(msg) ? msg.join(', ') : (msg as string));
     } finally {
       setSaving(false);
@@ -280,46 +581,159 @@ function PaymentModal({
               <option value="">Select student…</option>
               {students.map(s => (
                 <option key={s._id} value={s._id}>
-                  {s.name} ({s.studentId}) — {s.status}
+                  {s.name} ({s.studentId})
                 </option>
               ))}
             </select>
           </div>
-          <div className="col-span-2 flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <Label text="Module" required />
-              {fetchingMods && (
-                <span className="text-xs text-gray-400">Loading…</span>
-              )}
-              {isFiltered && (
-                <span className="text-xs text-indigo-500 font-medium">
-                  {filteredModules.length} enrolled module{filteredModules.length !== 1 ? 's' : ''}
-                </span>
-              )}
-              {showingAllModulesFallback && (
-                <span className="text-xs text-amber-500">No enrolment data — showing all</span>
-              )}
-            </div>
-            <select
-              value={form.moduleId}
-              onChange={e => setForm(f => ({ ...f, moduleId: e.target.value }))}
-              disabled={!form.studentId || fetchingMods}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed">
-              <option value="">
-                {fetchingMods ? 'Loading modules…' : form.studentId ? 'Select module…' : 'Select a student first'}
-              </option>
-              {filteredModules.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label text="Amount (LKR)" required />
-            <input type="number" min={0} value={form.amount}
-              onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-              placeholder="e.g. 10000"
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          </div>
+
+          <>
+              {/* ── Multi-subject checklist + additional fees — used in both
+                   Add mode (fresh selection) and Edit mode (pre-seeded from
+                   every record saved for this student on this payment date). ── */}
+              <div className="col-span-2 flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <Label text="Subjects / Modules" required />
+                  {fetchingMods && (
+                    <span className="text-xs text-gray-400">Loading…</span>
+                  )}
+                  {isFiltered && (
+                    <span className="text-xs text-indigo-500 font-medium">
+                      {filteredModules.length} enrolled module{filteredModules.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                  {showingAllModulesFallback && (
+                    <span className="text-xs text-amber-500">No enrolment data — showing all</span>
+                  )}
+                </div>
+
+                {!form.studentId ? (
+                  <p className="px-3 py-2.5 border border-dashed border-gray-200 rounded-xl text-sm text-gray-400">
+                    Select a student first
+                  </p>
+                ) : fetchingMods ? (
+                  <p className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-400 flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading subjects…
+                  </p>
+                ) : (
+                  <>
+                    {/* ── Chip toggles: click a subject to select/deselect it ── */}
+                    <div className="flex flex-wrap gap-2 p-3 border border-gray-200 rounded-xl bg-gray-50/50">
+                      {filteredModules.map(m => {
+                        const checked = selectedModuleIds.includes(m.id);
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => toggleSubject(m.id)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                              checked
+                                ? 'bg-indigo-600 border-indigo-600 text-white'
+                                : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-600'
+                            }`}
+                          >
+                            {checked && <CheckCircle className="w-3 h-3 inline-block mr-1 -mt-0.5" />}
+                            {m.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* ── Fee editing for whatever is currently selected ── */}
+                    {selectedModuleIds.length > 0 && (
+                      <div className="mt-2 border border-indigo-100 rounded-xl divide-y divide-indigo-50 overflow-hidden">
+                        {selectedModuleIds.map(id => {
+                          const mod = allModules.find(m => m.id === id);
+                          return (
+                            <div key={id} className="flex items-center justify-between gap-3 px-3 py-2 bg-indigo-50/40">
+                              <span className="text-sm text-gray-700 truncate">{mod?.name ?? id}</span>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <span className="text-xs text-gray-400">LKR</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={subjectFees[id] ?? ''}
+                                  onChange={e => setSubjectFees(f => ({ ...f, [id]: e.target.value }))}
+                                  className="w-20 px-2 py-1 border border-gray-200 rounded-lg text-xs text-right focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSubject(id)}
+                                  className="text-gray-400 hover:text-red-500"
+                                  aria-label={`Remove ${mod?.name ?? 'subject'}`}
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                )}
+                {unmatchedNames.length > 0 && (
+                  <p className="mt-1 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5 leading-snug">
+                    Registered but no matching Module record found for:{' '}
+                    <span className="font-medium">{unmatchedNames.join(', ')}</span>.
+                    Add these in Module management, or check the spelling matches
+                    exactly what's in the student's subject list.
+                  </p>
+                )}
+              </div>
+
+              {/* ── Additional one-time fees (Admission Fee, ID Card Fee, ...) —
+                   each one becomes its own separate payment record with its
+                   own feeType, never merged into a subject's amount and never
+                   requiring a matching Module/Subject record. ── */}
+              <div className="col-span-2 flex flex-col gap-1">
+                <Label text="Additional Fees" />
+                <div className="border border-gray-200 rounded-xl divide-y divide-gray-100">
+                  {ADDITIONAL_FEES.map(fee => {
+                    const checked = includedFeeIds.includes(fee.id);
+                    return (
+                      <div key={fee.id} className="px-3 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <label className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleFee(fee.id)}
+                              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 flex-shrink-0"
+                            />
+                            <span className="text-sm text-gray-700 truncate">
+                              {fee.label}
+                              {fee.id === 'admission' && isFirstPayment && (
+                                <span className="ml-1.5 text-xs text-indigo-500 font-medium">(first payment)</span>
+                              )}
+                            </span>
+                          </label>
+                          {checked && (
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <span className="text-xs text-gray-400">LKR</span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={feeAmounts[fee.id] ?? ''}
+                                onChange={e => setFeeAmounts(f => ({ ...f, [fee.id]: e.target.value }))}
+                                className="w-20 px-2 py-1 border border-gray-200 rounded-lg text-xs text-right focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ── Computed total ── */}
+              <div className="col-span-2 flex items-center justify-between px-4 py-3 rounded-xl bg-indigo-50 border border-indigo-100">
+                <span className="text-sm font-medium text-indigo-600">Total Amount</span>
+                <span className="text-lg font-bold text-indigo-700">LKR {totalAmount.toLocaleString()}</span>
+              </div>
+          </>
+
           <div className="flex flex-col gap-1">
             <Label text="Payment Date" required />
             <input type="date" value={form.paidDate}
@@ -402,6 +816,7 @@ function StudentTableRow({
   year,
   token,
   onDownloadSlip,
+  onDownloadAllSlips,
   onEditPayment,
 }: {
   studentId: string;
@@ -411,6 +826,7 @@ function StudentTableRow({
   year: number;
   token: string | null;
   onDownloadSlip: (p: PaymentRecord) => void;
+  onDownloadAllSlips: (payments: PaymentRecord[], studentName: string, studentCode: string) => void;
   onEditPayment:  (p: PaymentRecord) => void;
 }) {
   const [expanded,     setExpanded]     = useState(false);
@@ -428,8 +844,11 @@ function StudentTableRow({
     return earliest;
   }, [payments, year]);
 
-  const toggleTracking = useCallback(async () => {
-    if (tracking) { setExpanded(e => !e); return; }
+  // ── Fetch logic extracted so it can be called both on user click AND
+  // automatically whenever this student's payment records change (e.g. a
+  // new payment was just added / edited), without needing a full page
+  // refresh to see the updated 12-month calendar. ──
+  const fetchTracking = useCallback(async () => {
     setLoadingTrack(true);
     try {
       const res  = await fetch(
@@ -438,13 +857,34 @@ function StudentTableRow({
       );
       const json = await res.json();
       setTracking(json.data ?? json);
-      setExpanded(true);
     } catch {
       toast.error('Failed to load tracking for ' + studentId);
     } finally {
       setLoadingTrack(false);
     }
-  }, [studentId, year, token, tracking, fromMonth]);
+  }, [studentId, year, token, fromMonth]);
+
+  const toggleTracking = useCallback(async () => {
+    if (tracking) { setExpanded(e => !e); return; }
+    setExpanded(true);
+    await fetchTracking();
+  }, [tracking, fetchTracking]);
+
+  // ── Auto-refresh: whenever this student's `payments` prop changes (a
+  // payment was just added/edited for them), drop the cached tracking data
+  // and, if the calendar is currently open, refetch immediately — so the
+  // update shows up right away instead of only after a full page refresh. ──
+  const paymentsKey = useMemo(
+    () => payments.map(p => `${p.id}:${p.amount}:${p.status}:${p.paidDate}`).join('|'),
+    [payments]
+  );
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    setTracking(null);
+    if (expanded) fetchTracking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentsKey]);
 
   const paidSet    = useMemo(() => new Set(tracking?.paidMonths    ?? []), [tracking]);
   const pendingSet = useMemo(() => new Set(tracking?.pendingMonths ?? []), [tracking]);
@@ -565,9 +1005,19 @@ function StudentTableRow({
                 )}
               </div>
 
-              <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-2">
-                All Payment Records
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">
+                  All Payment Records
+                </p>
+                {payments.length > 0 && (
+                  <button
+                    onClick={e => { e.stopPropagation(); onDownloadAllSlips(payments, studentName, studentIdCode); }}
+                    className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700 bg-white border border-indigo-200 rounded-lg px-2.5 py-1"
+                  >
+                    <Download className="w-3 h-3" /> Download All
+                  </button>
+                )}
+              </div>
               {payments.length > 0 ? (
                 <div className="rounded-xl overflow-hidden border border-indigo-100">
                   <table className="w-full text-sm bg-white">
@@ -634,6 +1084,7 @@ function PaymentMobileCard({
   year,
   token,
   onDownloadSlip,
+  onDownloadAllSlips,
   onEditPayment,
 }: {
   studentId: string;
@@ -642,6 +1093,7 @@ function PaymentMobileCard({
   year: number;
   token: string | null;
   onDownloadSlip: (p: PaymentRecord) => void;
+  onDownloadAllSlips: (payments: PaymentRecord[], studentName: string, studentCode: string) => void;
   onEditPayment: (p: PaymentRecord) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -659,12 +1111,9 @@ function PaymentMobileCard({
     return earliest;
   }, [payments, year]);
 
-  const toggleTracking = useCallback(async () => {
-    if (tracking) {
-      setExpanded(e => !e);
-      return;
-    }
-
+  // ── Fetch logic extracted so it can be triggered both on click AND
+  // automatically when this student's payments change (see effect below). ──
+  const fetchTracking = useCallback(async () => {
     setLoadingTrack(true);
     try {
       const res = await fetch(
@@ -673,13 +1122,37 @@ function PaymentMobileCard({
       );
       const json = await res.json();
       setTracking(json.data ?? json);
-      setExpanded(true);
     } catch {
       toast.error('Failed to load tracking for ' + studentId);
     } finally {
       setLoadingTrack(false);
     }
-  }, [fromMonth, studentId, token, tracking, year]);
+  }, [fromMonth, studentId, token, year]);
+
+  const toggleTracking = useCallback(async () => {
+    if (tracking) {
+      setExpanded(e => !e);
+      return;
+    }
+    setExpanded(true);
+    await fetchTracking();
+  }, [tracking, fetchTracking]);
+
+  // ── Auto-refresh: same fix as StudentTableRow — invalidate + refetch the
+  // cached tracking data whenever this student's payment records change, so
+  // a freshly added/edited payment shows up in the calendar immediately
+  // instead of needing a full page refresh. ──
+  const paymentsKey = useMemo(
+    () => payments.map(p => `${p.id}:${p.amount}:${p.status}:${p.paidDate}`).join('|'),
+    [payments]
+  );
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    setTracking(null);
+    if (expanded) fetchTracking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentsKey]);
 
   const paidSet = useMemo(() => new Set(tracking?.paidMonths ?? []), [tracking]);
   const pendingSet = useMemo(() => new Set(tracking?.pendingMonths ?? []), [tracking]);
@@ -787,9 +1260,18 @@ function PaymentMobileCard({
             })}
           </div>
 
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-indigo-600">
-            History
-          </p>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-600">
+              History
+            </p>
+            <button
+              type="button"
+              onClick={() => onDownloadAllSlips(payments, studentName, studentId)}
+              className="flex items-center gap-1 text-[10px] font-semibold text-indigo-600 bg-white border border-indigo-200 rounded-lg px-2 py-1"
+            >
+              <Download className="h-3 w-3" /> Download All
+            </button>
+          </div>
           <div className="space-y-2">
             {payments.map(p => (
               <div key={p.id} className="rounded-md border border-indigo-50 bg-white px-3 py-2">
@@ -862,7 +1344,11 @@ export default function PaymentsPage() {
   }, [fetchPayments]);
 
   const allModules = Array.from(
-    new Map(payments.map(p => [p.moduleId, { id: p.moduleId, name: p.moduleName }])).values()
+    new Map(
+      payments
+        .filter(p => !!p.moduleId)
+        .map(p => [p.moduleId as string, { id: p.moduleId as string, name: p.moduleName }])
+    ).values()
   );
 
   const filtered = payments.filter(p => {
@@ -1054,6 +1540,193 @@ export default function PaymentsPage() {
       .then(dataUrl => drawPDF(dataUrl))
       .catch(() => {
         console.warn('Logo not found or failed to load — generating receipt without logo.');
+        drawPDF();
+      });
+  };
+
+  // ── Combined slip for one student — all their payment records in ONE PDF ──
+  const generateStudentAllSlip = (
+    studentPayments: PaymentRecord[],
+    studentName: string,
+    studentCode: string,
+  ) => {
+    if (studentPayments.length === 0) { toast.error('No records to export'); return; }
+
+    const drawPDF = (logoDataUrl?: string) => {
+      const pdf     = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const W       = pdf.internal.pageSize.getWidth();
+      const H       = pdf.internal.pageSize.getHeight();
+      const margin  = 12;
+      const usableW = W - margin * 2;
+      const dateStr = new Date().toISOString().split('T')[0];
+      const total   = studentPayments.reduce((s, p) => s + p.amount, 0);
+
+      pdf.setFillColor(0, 174, 219);
+      pdf.rect(0, 0, W, 8, 'F');
+      pdf.setFillColor(255, 255, 255);
+      pdf.rect(0, 8, W, 52, 'F');
+
+      if (logoDataUrl) {
+        try {
+          const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
+          const imgType   = mimeMatch ? mimeMatch[1].toUpperCase() : 'PNG';
+          const imgProps  = pdf.getImageProperties(logoDataUrl);
+          const boxH      = 36;
+          const ratio     = imgProps.width / imgProps.height;
+          const logoW     = boxH * ratio;
+          const logoY     = 8 + (52 - boxH) / 2;
+          pdf.addImage(logoDataUrl, imgType, margin, logoY, logoW, boxH);
+        } catch (err) {
+          console.warn('Logo could not be added to PDF:', err);
+        }
+      }
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(26);
+      pdf.setTextColor(0, 174, 219);
+      pdf.text('TECHNA', W / 2, 28, { align: 'center' });
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(80, 80, 80);
+      pdf.text('Email: sivasakthy22@gmail.com  |  Contact: +94 77 170 3549', W / 2, 38, { align: 'center' });
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(13);
+      pdf.setTextColor(0, 174, 219);
+      pdf.text('COMBINED PAYMENT RECEIPT', W / 2, 49, { align: 'center' });
+
+      pdf.setDrawColor(0, 174, 219);
+      pdf.setLineWidth(0.6);
+      pdf.line(margin, 58, W - margin, 58);
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.setTextColor(50, 50, 50);
+      pdf.text(`Student: ${studentName}  (${studentCode})`, margin, 66);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(120, 120, 120);
+      pdf.text(`Generated: ${dateStr}  |  Total Records: ${studentPayments.length}`, W - margin, 66, { align: 'right' });
+
+      const tableY  = 72;
+      const rowH    = 8;
+      const headerH = 10;
+
+      const cols: { header: string; w: number }[] = [
+        { header: 'Receipt No',   w: 55 },
+        { header: 'Module / Fee', w: 70 },
+        { header: 'Amount',       w: 32 },
+        { header: 'Method',       w: 25 },
+        { header: 'Date',         w: 30 },
+        { header: 'Status',       w: 26 },
+      ];
+
+      const fitText = (text: string, maxMm: number): string => {
+        if (!text) return '';
+        const maxChars = Math.floor(maxMm / 1.45);
+        return text.length <= maxChars ? text : text.slice(0, maxChars - 1) + '…';
+      };
+
+      const drawTableHeader = (startY: number) => {
+        pdf.setFillColor(0, 174, 219);
+        pdf.rect(margin, startY, usableW, headerH, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setTextColor(255, 255, 255);
+        let hx = margin;
+        cols.forEach(col => { pdf.text(col.header, hx + 2, startY + 7); hx += col.w; });
+      };
+
+      drawTableHeader(tableY);
+
+      const rows = studentPayments.map(p => [
+        p.receiptNo  ?? '',
+        p.moduleName ?? '',
+        `LKR ${p.amount.toLocaleString()}`,
+        p.method ? p.method.charAt(0).toUpperCase() + p.method.slice(1) : '',
+        p.paidDate ?? '',
+        p.status ? p.status.charAt(0).toUpperCase() + p.status.slice(1) : '',
+      ]);
+
+      let y = tableY + headerH;
+
+      rows.forEach((row, rowIdx) => {
+        if (y + rowH > H - 30) {
+          pdf.addPage();
+          y = 16;
+          drawTableHeader(y);
+          y += headerH;
+        }
+
+        pdf.setFillColor(rowIdx % 2 === 0 ? 255 : 240, rowIdx % 2 === 0 ? 255 : 250, rowIdx % 2 === 0 ? 255 : 254);
+        pdf.rect(margin, y, usableW, rowH, 'F');
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+
+        const rawStatus = studentPayments[rowIdx]?.status ?? '';
+        let cx = margin;
+        row.forEach((cell, colIdx) => {
+          const colW = cols[colIdx].w;
+          if (colIdx === 5) {
+            if      (rawStatus === 'paid')    pdf.setTextColor(22, 163, 74);
+            else if (rawStatus === 'pending') pdf.setTextColor(217, 119, 6);
+            else if (rawStatus === 'overdue') pdf.setTextColor(220, 38, 38);
+            else                              pdf.setTextColor(50, 50, 50);
+          } else {
+            pdf.setTextColor(50, 50, 50);
+          }
+          pdf.text(fitText(cell, colW), cx + 2, y + 5.5);
+          cx += colW;
+        });
+
+        pdf.setDrawColor(224, 224, 224);
+        pdf.setLineWidth(0.2);
+        pdf.line(margin, y + rowH, margin + usableW, y + rowH);
+        y += rowH;
+      });
+
+      const totalBoxY = y + 6;
+      pdf.setFillColor(0, 174, 219);
+      pdf.roundedRect(margin, totalBoxY, usableW, 18, 4, 4, 'F');
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.setTextColor(210, 240, 255);
+      pdf.text('GRAND TOTAL', margin + 8, totalBoxY + 7);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(14);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text(`LKR ${total.toLocaleString()}`, W - margin - 8, totalBoxY + 12, { align: 'right' });
+
+      pdf.setFillColor(0, 174, 219);
+      pdf.rect(0, H - 12, W, 12, 'F');
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text('Techna', W / 2, H - 6, { align: 'center' });
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(6.5);
+      pdf.setTextColor(210, 240, 255);
+      pdf.text('Generated by Techna · Thank you for your payment!', W / 2, H - 1.5, { align: 'center' });
+
+      pdf.save(`receipts-${studentCode}-${dateStr}.pdf`);
+      toast.success('Combined receipt downloaded!');
+    };
+
+    fetch('/logo.png')
+      .then(res => {
+        if (!res.ok) throw new Error(`Logo fetch failed: ${res.status}`);
+        return res.blob();
+      })
+      .then(blob => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror  = reject;
+        reader.readAsDataURL(blob);
+      }))
+      .then(dataUrl => drawPDF(dataUrl))
+      .catch(() => {
+        console.warn('Logo not found — generating combined receipt without logo.');
         drawPDF();
       });
   };
@@ -1419,6 +2092,7 @@ export default function PaymentsPage() {
             year={trackingYear}
             token={token}
             onDownloadSlip={generatePaymentSlip}
+            onDownloadAllSlips={generateStudentAllSlip}
             onEditPayment={setEditPayment}
           />
         ))}
@@ -1462,6 +2136,7 @@ export default function PaymentsPage() {
                   year={trackingYear}
                   token={token}
                   onDownloadSlip={generatePaymentSlip}
+                  onDownloadAllSlips={generateStudentAllSlip}
                   onEditPayment={setEditPayment}
                 />
               ))}
