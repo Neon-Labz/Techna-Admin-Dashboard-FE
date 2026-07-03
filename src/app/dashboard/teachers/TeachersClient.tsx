@@ -472,7 +472,7 @@ export default function TeachersPage() {
       {!loading && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {filtered.map(t => (
-            <div key={t.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
+            <div key={t.id} className="flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
                   {t.photoUrl ? (
@@ -525,7 +525,7 @@ export default function TeachersPage() {
                   </span>
                 </div>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:flex">
+              <div className="mt-auto grid grid-cols-2 gap-2 pt-4 sm:flex">
                 <button
                   onClick={() => openEdit(t)}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg text-sm font-medium transition-colors"
@@ -557,7 +557,7 @@ export default function TeachersPage() {
         onClose={() => setModalOpen(false)}
         title={editTeacher ? 'Edit Teacher' : 'Add New Teacher'}
         size="2xl"
-        height="content"
+        height="screen"
         closeOnBackdrop={false}
         titleClassName="text-2xl text-[#1E1B4B]"
       >
@@ -763,15 +763,19 @@ export default function TeachersPage() {
                 value={form.status}
                 onChange={e => setForm(f => ({ ...f, status: e.target.value as 'active' | 'inactive' }))}
                 className="w-full appearance-none border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base bg-white"
-                style={{ height: '46px', paddingLeft: '13px', paddingRight: '40px', color: '#4B5563' }}
+                style={{
+                  height: '46px',
+                  paddingLeft: '13px',
+                  paddingRight: '13px',
+                  color: '#4B5563',
+                  appearance: 'none',
+                  WebkitAppearance: 'none',
+                  MozAppearance: 'none',
+                }}
               >
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
-              <ChevronDown
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none"
-                style={{ color: '#6B7280' }}
-              />
             </div>
           </div>
 

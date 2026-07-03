@@ -17,6 +17,8 @@ import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 import { examApi } from '@/api/exam.api';
 import api from '@/lib/axios';
+import CompactSelect from '@/components/ui/CompactSelect';
+import CompactDatePicker from '@/components/ui/CompactDatePicker';
 const BATCHES = [
   'May 2024 Batch',
   'September 2024 Batch',
@@ -357,16 +359,15 @@ const list = Array.isArray(data) ? data : [];
           />
         </div>
 
-        <select
+        <CompactSelect
           value={filterBatch}
-          onChange={(e) => setFilterBatch(e.target.value)}
-          className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          <option value="">All Batches</option>
-          {BATCHES.map((b) => (
-            <option key={b}>{b}</option>
-          ))}
-        </select>
+          onChange={setFilterBatch}
+          className="w-full sm:w-44"
+          options={[
+            { value: '', label: 'All Batches' },
+            ...BATCHES.map((batch) => ({ value: batch, label: batch })),
+          ]}
+        />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -436,6 +437,7 @@ const list = Array.isArray(data) ? data : [];
         onClose={() => setModalOpen(false)}
         title={editExam ? 'Edit Exam' : 'Publish New Exam'}
         size="xl"
+        height="content"
       >
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
@@ -455,6 +457,28 @@ const list = Array.isArray(data) ? data : [];
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Module
             </label>
+            <CompactSelect
+              value={form.moduleId}
+              onChange={(value) => {
+                const selectedModule = modules.find(
+                  (m: any) => (m.id || m._id) === value,
+                );
+
+                setForm((f) => ({
+                  ...f,
+                  moduleId: value,
+                  moduleName:
+                    selectedModule?.name || selectedModule?.moduleName || '',
+                }));
+              }}
+              options={[
+                { value: '', label: 'Select module...' },
+                ...modules.map((m: any) => ({
+                  value: m.id || m._id,
+                  label: m.name || m.moduleName,
+                })),
+              ]}
+            />
             <select
               required
               value={form.moduleId}
@@ -470,7 +494,7 @@ const list = Array.isArray(data) ? data : [];
                     selectedModule?.name || selectedModule?.moduleName || '',
                 }));
               }}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              className="hidden"
             >
               <option value="">Select module...</option>
 
@@ -486,10 +510,15 @@ const list = Array.isArray(data) ? data : [];
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Batch
             </label>
+            <CompactSelect
+              value={form.batch}
+              onChange={(value) => setForm((f) => ({ ...f, batch: value }))}
+              options={BATCHES.map((batch) => ({ value: batch, label: batch }))}
+            />
             <select
               value={form.batch}
               onChange={(e) => setForm((f) => ({ ...f, batch: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              className="hidden"
             >
               {BATCHES.map((b) => (
                 <option key={b}>{b}</option>
@@ -501,12 +530,16 @@ const list = Array.isArray(data) ? data : [];
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Date
             </label>
+            <CompactDatePicker
+              value={form.date}
+              onChange={(value) => setForm((f) => ({ ...f, date: value }))}
+            />
             <input
               type="date"
               required
               value={form.date}
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              className="hidden"
             />
           </div>
 

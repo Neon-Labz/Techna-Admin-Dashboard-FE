@@ -375,6 +375,7 @@ export default function ModulesPage() {
         onClose={closeModal}
         title={editId ? 'Edit Module' : 'Create New Module'}
         size="xl"
+        height="content"
       >
         {formLoading ? (
           <div className="flex items-center justify-center py-10">

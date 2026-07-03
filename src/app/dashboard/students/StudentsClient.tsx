@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useDataStore } from '@/store/dataStore';
 import type { Student, PaymentRecord } from '@/types';
 import Modal from '@/components/ui/Modal';
+import CompactSelect from '@/components/ui/CompactSelect';
 import DeleteModal from '@/components/common/DeleteModal';
 import StudentCard from '@/components/students/StudentCard';
 import StudentProfile from '@/components/students/StudentProfile';
@@ -449,28 +450,27 @@ export default function StudentsPage() {
 
         <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 sm:flex">
           <Filter className="h-4 w-4 shrink-0 text-gray-400" />
-          <select
+          <CompactSelect
             value={filterBatch}
-            onChange={(e) => setFilterBatch(e.target.value)}
-            className="min-w-0 px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
-          >
-            {batchOptions.map((b) => (
-              <option key={b} value={b === 'All Batches' ? '' : b}>
-                {b}
-              </option>
-            ))}
-          </select>
+            onChange={setFilterBatch}
+            className="w-full"
+            options={batchOptions.map((batch) => ({
+              value: batch === 'All Batches' ? '' : batch,
+              label: batch,
+            }))}
+          />
 
-          <select
+          <CompactSelect
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="min-w-0 px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
-          >
-            <option value="">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-          </select>
+            onChange={setFilterStatus}
+            className="w-full"
+            options={[
+              { value: '', label: 'All Status' },
+              { value: 'pending', label: 'Pending' },
+              { value: 'approved', label: 'Approved' },
+              { value: 'rejected', label: 'Rejected' },
+            ]}
+          />
         </div>
       </div>
 
