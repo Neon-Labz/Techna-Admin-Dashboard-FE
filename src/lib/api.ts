@@ -161,8 +161,13 @@ export interface AttendanceFilters {
 
 // ─── Axios instance ────────────────────────────────────────────────────────────
 
+// Every call site in this file already prefixes its path with '/api/'
+// (e.g. api.get('/api/modules')), so the baseURL must be the bare host —
+// strip a trailing '/api' from the shared env var to avoid '/api/api/...'.
+const API_HOST = (process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:4000/api').replace(/\/api\/?$/, '');
+
 const api: AxiosInstance = axios.create({
-  baseURL: 'http://localhost:4000',
+  baseURL: API_HOST,
   headers: { 'Content-Type': 'application/json' },
 });
 

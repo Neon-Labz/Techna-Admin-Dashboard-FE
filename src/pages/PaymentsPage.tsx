@@ -433,7 +433,7 @@ function StudentTableRow({
     setLoadingTrack(true);
     try {
       const res  = await fetch(
-        `http://localhost:4000/api/payments/student/${studentId}/tracking?year=${year}&from=${fromMonth}&to=${year}-12`,
+        `${process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:4000/api'}/payments/student/${studentId}/tracking?year=${year}&from=${fromMonth}&to=${year}-12`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const json = await res.json();
@@ -668,7 +668,7 @@ function PaymentMobileCard({
     setLoadingTrack(true);
     try {
       const res = await fetch(
-        `http://localhost:4000/api/payments/student/${studentId}/tracking?year=${year}&from=${fromMonth}&to=${year}-12`,
+        `${process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:4000/api'}/payments/student/${studentId}/tracking?year=${year}&from=${fromMonth}&to=${year}-12`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       const json = await res.json();

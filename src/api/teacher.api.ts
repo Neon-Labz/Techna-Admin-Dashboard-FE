@@ -48,7 +48,7 @@ export interface CreateTeacherPayload {
 export type UpdateTeacherPayload = Partial<CreateTeacherPayload>;
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+  process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:4000/api';
 
 async function uploadTeacherPhoto(
   id: string,
