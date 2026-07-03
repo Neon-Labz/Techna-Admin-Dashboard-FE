@@ -1,2 +1,5 @@
-import TeachersPage from '@/pages/TeachersPage';
-export default function Page() { return <TeachersPage />; }
+import TeachersClient from '@/components/teachers/TeachersClient';
+
+export default function Page() {
+  return <TeachersClient />;
+}

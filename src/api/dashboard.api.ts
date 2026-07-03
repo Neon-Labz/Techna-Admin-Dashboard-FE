@@ -1,32 +1,47 @@
 import api from '@/lib/axios';
 
+const getData = async (url: string, fallback: any) => {
+  try {
+    const res: any = await api.get(url);
+    const payload = res?.data !== undefined ? res.data : res;
+    return payload?.data || payload || fallback;
+  } catch (err: any) {
+    if (err?.response?.status === 401) {
+console.warn(`Unauthorized: ${url}`);
+      return fallback;
+    }
+
+    console.error(`${url} failed:`, err);
+    return fallback;
+  }
+};
+
 export const dashboardApi = {
-  async getSummary() {
-    const { data } = await api.get('/dashboard/summary');
-    return data.data || data;
+  getSummary() {
+    return getData('/dashboard/summary', {});
   },
 
-  async getTeachers() {
-    const { data } = await api.get('/teachers');
-    return data.data || data;
+  getTeachers() {
+    return getData('/teachers', []);
   },
 
-  async getModules() {
-    const { data } = await api.get('/modules');
-    return data.data || data;
+  getModules() {
+    return getData('/modules', []);
   },
 
-  async getExams() {
-    const { data } = await api.get('/exam-notices');
-    return data.data || data;
+  getExams() {
+    return getData('/exam-notices', []);
   },
-  async getStudents() {
-  const { data } = await api.get('/students');
-  return data.data || data;
-},
-async getPayments() {
-  const { data } = await api.get('/payments');
-  return data.data || data.payments || data;
-},
 
+  getStudents() {
+    return getData('/students', []);
+  },
+
+  getRevenue() {
+    return getData('/dashboard/revenue', []);
+  },
+
+  getPayments() {
+    return getData('/payments', []);
+  },
 };

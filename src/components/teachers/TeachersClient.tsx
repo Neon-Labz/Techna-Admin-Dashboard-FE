@@ -1,0 +1,769 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import type { Teacher } from '@/types';
+import { teacherApi } from '@/api/teacher.api';
+import { apiClient } from '@/api/axiosClient';
+import Modal from '@/components/ui/Modal';
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  GraduationCap,
+  Phone,
+  Mail,
+  Search,
+  Loader2,
+  ChevronDown,
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+import {
+  type TeacherForm,
+  emptyTeacher,
+  MAX_SUBJECTS,
+  countWords,
+  isValidEmail,
+  isValidSriLankanPhone,
+  isValidJoinDate,
+  isValidSubject,
+  formatSubjects,
+  dedupeCaseInsensitive,
+  displayName,
+  mapApiTeacher,
+  LABEL,
+  INPUT_BASE,
+  INPUT_STYLE,
+} from '@/lib/teachers';
+import { TagInput } from '@/components/teachers/TagInput';
+import { SubjectMultiSelect } from '@/components/teachers/SubjectMultiSelect';
+import { TeacherAvatar } from '@/components/teachers/TeacherAvatar';
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+export default function TeachersPage() {
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editTeacher, setEditTeacher] = useState<Teacher | null>(null);
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // formRef stays in sync with form state but updated SYNCHRONOUSLY so that
+  // handleSubmit always reads the latest tag arrays even when onBlur fires
+  // just before the submit event (React re-renders are async, refs are not).
+  const formRef = useRef<TeacherForm>(emptyTeacher);
+  const [form, _setForm] = useState<TeacherForm>(emptyTeacher);
+  const setForm = ((updater: TeacherForm | ((prev: TeacherForm) => TeacherForm)) => {
+    const next = typeof updater === 'function' ? updater(formRef.current) : updater;
+    formRef.current = next;
+    _setForm(next);
+  }) as React.Dispatch<React.SetStateAction<TeacherForm>>;
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoRemoved, setPhotoRemoved] = useState(false);
+  const [previewBroken, setPreviewBroken] = useState(false);
+
+  useEffect(() => {
+    fetchTeachers();
+    fetchAvailableSubjects();
+  }, []);
+
+  const fetchAvailableSubjects = async () => {
+    try {
+      // Use the same apiClient as the teacher list so the auth token matches
+      // (dashboardApi/lib-axios reads a different token key and can 401 → []).
+      const modules = await apiClient<any[]>('/modules');
+      // Load every module from the Modules page as a selectable subject.
+      const collected: string[] = [];
+      if (Array.isArray(modules)) {
+        modules.forEach((m: any) => {
+          if (m?.name && String(m.name).trim()) collected.push(String(m.name).trim());
+          if (m?.subject) {
+            const s = Array.isArray(m.subject) ? m.subject : [m.subject];
+            s.forEach((sub: string) => { if (sub && sub.trim()) collected.push(sub.trim()); });
+          }
+        });
+      }
+      // Distinct (case-insensitive), alphabetically sorted
+      setAvailableSubjects(dedupeCaseInsensitive(collected).sort((a, b) => a.localeCompare(b)));
+    } catch {
+      // Silently fail - subject options are a nice-to-have
+    }
+  };
+
+  // Re-collect teacher subjects when teachers change
+  useEffect(() => {
+    if (teachers.length > 0) {
+      setAvailableSubjects(prev => {
+        const merged = [...prev];
+        teachers.forEach(t => {
+          t.subject.forEach(s => { if (s.trim()) merged.push(s.trim()); });
+        });
+        return dedupeCaseInsensitive(merged).sort((a, b) => a.localeCompare(b));
+      });
+    }
+  }, [teachers]);
+
+
+  const fetchTeachers = async () => {
+    try {
+      setLoading(true);
+      const data = await teacherApi.getAll();
+      setTeachers(data.map(mapApiTeacher));
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load teachers');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filtered = teachers.filter(t => {
+    const term = search.trim().toLowerCase();
+    if (!term) return true;
+    return (
+      (t.name || '').toLowerCase().includes(term) ||
+      displayName(t).toLowerCase().includes(term) ||
+      (t.email || '').toLowerCase().includes(term) ||
+      (t.phone || '').toLowerCase().includes(term) ||
+      (t.qualification || '').toLowerCase().includes(term) ||
+      formatSubjects(t.subject).toLowerCase().includes(term)
+    );
+  });
+
+  const teacherToDelete = teachers.find(t => t.id === deleteConfirm);
+
+  const openAdd = () => {
+    setForm(emptyTeacher);
+    setEditTeacher(null);
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setPhotoRemoved(false);
+    setPreviewBroken(false);
+    setFormErrors({});
+    setModalOpen(true);
+  };
+
+  const openEdit = (t: Teacher) => {
+    const firstName = t.firstName || t.name.split(' ')[0] || '';
+    const lastName = t.lastName || t.name.split(' ').slice(1).join(' ') || '';
+    setForm({
+      firstName,
+      lastName,
+      email: t.email,
+      phone: t.phone,
+      subjects: dedupeCaseInsensitive(t.subject.map(s => s.trim()).filter(Boolean)),
+      qualification: (t.qualification ?? '').split(',').map(s => s.trim()).filter(Boolean),
+      address: t.address,
+      experience: t.experience,
+      joinDate: t.joinDate ?? new Date().toISOString().split('T')[0],
+      specializations: t.specializations ?? [],
+      biography: t.biography ?? '',
+      status: t.status,
+      awards: t.awards ?? [],
+      achievements: t.achievements ?? [],
+    });
+    setEditTeacher(t);
+    setPhotoFile(null);
+    // Fix BUG-008: Ensure photoPreview is set properly from the teacher's photoUrl
+    setPhotoPreview(t.photoUrl && t.photoUrl.trim() ? t.photoUrl : null);
+    setPhotoRemoved(false);
+    setPreviewBroken(false);
+    setFormErrors({});
+    setModalOpen(true);
+  };
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPreviewBroken(false);
+    const reader = new FileReader();
+    reader.onload = () => setPhotoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    // ─── Validate all fields (BUG-007) ───
+    const errors: Record<string, string> = {};
+
+    const fullName = [form.firstName.trim(), form.lastName.trim()].filter(Boolean).join(' ');
+    if (!fullName) {
+      errors.firstName = 'Please enter a first name';
+    }
+
+    // Email validation
+    if (!form.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!isValidEmail(form.email)) {
+      errors.email = 'Please enter a valid email address (e.g. name@domain.com)';
+    }
+
+    // Phone validation (Sri Lankan format)
+    if (!form.phone.trim()) {
+      errors.phone = 'Phone number is required';
+    } else if (!isValidSriLankanPhone(form.phone)) {
+      errors.phone = 'Enter a valid Sri Lankan phone number (e.g. 077 123 4567 or +94 77 123 4567)';
+    }
+
+    // Subject validation
+    const subjects = dedupeCaseInsensitive(form.subjects.map(s => s.trim()).filter(Boolean));
+    if (subjects.length === 0) {
+      errors.subject = 'Please select at least one subject';
+    } else if (subjects.length > MAX_SUBJECTS) {
+      errors.subject = `You can select a maximum of ${MAX_SUBJECTS} subjects`;
+    } else {
+      const invalidSubjects = subjects.filter(s => !isValidSubject(s));
+      if (invalidSubjects.length > 0) {
+        errors.subject = `Invalid subject(s): "${invalidSubjects.join('", "')}". Subjects must start with a letter and contain only letters, numbers, spaces, and common punctuation.`;
+      }
+    }
+
+    // Join date validation
+    if (!form.joinDate) {
+      errors.joinDate = 'Join date is required';
+    } else if (!isValidJoinDate(form.joinDate)) {
+      errors.joinDate = 'Please enter a valid date (between 1990 and next year)';
+    }
+
+    // Bio validation
+    if (form.biography && countWords(form.biography) > 100) {
+      errors.biography = 'Bio must not exceed 100 words';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      const firstError = Object.values(errors)[0];
+      toast.error(firstError);
+      return;
+    }
+
+    setFormErrors({});
+
+    try {
+      setSaving(true);
+      const latest = formRef.current;
+      const payload = {
+        fullName,
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        subject: subjects,
+        qualification: latest.qualification.join(', '),
+        experience: form.experience.trim(),
+        address: form.address.trim(),
+        joinDate: form.joinDate,
+        status: form.status,
+        specializations: latest.specializations,
+        awards: latest.awards,
+        achievements: latest.achievements,
+        biography: form.biography.trim(),
+      };
+
+      let savedId: string;
+      if (editTeacher) {
+        await teacherApi.update(editTeacher.id, payload);
+        savedId = editTeacher.id;
+      } else {
+        const created = await teacherApi.create(payload);
+        savedId = created._id;
+      }
+
+      if (photoFile && savedId) {
+        try {
+          await teacherApi.uploadPhoto(savedId, photoFile);
+          toast.success(editTeacher ? 'Teacher updated with photo!' : 'Teacher added with photo!');
+        } catch {
+          toast.success(editTeacher ? 'Teacher updated!' : 'Teacher added!');
+          toast.error('Photo upload failed — teacher saved without photo');
+        }
+      } else if (photoRemoved && editTeacher && savedId) {
+        try {
+          await teacherApi.removePhoto(savedId);
+        } catch {
+          toast.error('Failed to remove photo from storage');
+        }
+        toast.success('Teacher updated!');
+      } else {
+        toast.success(editTeacher ? 'Teacher updated!' : 'Teacher added!');
+      }
+
+      setModalOpen(false);
+      await fetchTeachers();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save teacher');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      setDeleting(true);
+      await teacherApi.delete(id);
+      setDeleteConfirm(null);
+      toast.success('Teacher deleted');
+      await fetchTeachers();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete teacher');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const bioWordCount = countWords(form.biography);
+
+  return (
+    <div className="p-3 pb-20 sm:p-6 sm:pb-6">
+
+      {/* ── Header ── */}
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Teachers</h1>
+          <p className="text-gray-500 text-sm">{teachers.length} total teachers</p>
+        </div>
+        <button
+          onClick={openAdd}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 sm:w-auto"
+        >
+          <Plus className="w-4 h-4" /> Add Teacher
+        </button>
+      </div>
+
+      {/* ── Search ── */}
+      <div className="relative mb-5">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search teachers..."
+          className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+        />
+      </div>
+
+      {/* ── Loading ── */}
+      {loading && (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        </div>
+      )}
+
+      {/* ── Teacher cards ── */}
+      {!loading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          {filtered.map(t => (
+            <div key={t.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
+                  <TeacherAvatar
+                    src={t.photoUrl}
+                    name={t.name}
+                    className="h-12 w-12 shrink-0 rounded-xl"
+                  />
+                  <div className="min-w-0">
+                    <h3 className="break-words font-semibold text-gray-800">{displayName(t)}</h3>
+                    <p className="break-words text-sm font-medium text-indigo-600">
+                      {formatSubjects(t.subject)}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={`self-start rounded-full px-2 py-0.5 text-xs font-medium ${
+                    t.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
+                  {t.status}
+                </span>
+              </div>
+              <div className="space-y-2 text-sm text-gray-600">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Mail className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  <span className="min-w-0 break-words">{t.email}</span>
+                </div>
+                <div className="flex min-w-0 items-center gap-2">
+                  <Phone className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  <span className="min-w-0 break-words">{t.phone}</span>
+                </div>
+                <div className="flex min-w-0 items-center gap-2">
+                  <GraduationCap className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  <span className="min-w-0 break-words">
+                    {[t.qualification, t.experience].filter(Boolean).join(' · ')}
+                  </span>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:flex">
+                <button
+                  onClick={() => openEdit(t)}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Edit2 className="w-3.5 h-3.5" /> Edit
+                </button>
+                <button
+                  onClick={() => setDeleteConfirm(t.id)}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && filtered.length === 0 && (
+        <div className="text-center py-16 text-gray-400">
+          <GraduationCap className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p>No teachers found</p>
+        </div>
+      )}
+
+      {/* ── Add / Edit Modal ── */}
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editTeacher ? 'Edit Teacher' : 'Add New Teacher'}
+        size="2xl"
+        height="content"
+        closeOnBackdrop={false}
+        titleClassName="text-2xl text-[#1E1B4B]"
+      >
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+          {/* 1 ── Profile Picture ── */}
+          <div className="md:col-span-2 flex items-start gap-6 pb-5 border-b border-gray-100">
+            <label htmlFor="teacher-photo-upload" className="cursor-pointer shrink-0">
+              {photoPreview && !previewBroken ? (
+                <img
+                  src={photoPreview}
+                  alt="Preview"
+                  className="w-32 h-32 rounded-full object-cover"
+                  onError={() => setPreviewBroken(true)}
+                />
+              ) : (
+                <div
+                  className="w-32 h-32 rounded-full flex items-center justify-center"
+                  style={{ background: '#F1F5F9', border: '2px dashed #E2E8F0', borderRadius: '9999px' }}
+                >
+                  <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                    <line x1="6.67" y1="20" x2="33.33" y2="20" stroke="#9CA3AF" strokeWidth="2.5" strokeLinecap="round" />
+                    <line x1="20" y1="6.67" x2="20" y2="33.33" stroke="#9CA3AF" strokeWidth="2.5" strokeLinecap="round" />
+                  </svg>
+                </div>
+              )}
+            </label>
+            <div>
+              <p style={{ fontWeight: 600, fontSize: '18px', lineHeight: '28px', color: '#1F2937' }}>
+                Profile Picture
+              </p>
+              <p style={{ fontSize: '12px', lineHeight: '16px', color: '#6B7280', marginTop: '0px', marginBottom: '16px' }}>
+                Optional. Recommended 200×200px. JPG, PNG
+              </p>
+              <div className="flex gap-3 flex-wrap">
+                <label
+                  htmlFor="teacher-photo-upload"
+                  className="cursor-pointer flex items-center justify-center font-semibold text-white"
+                  style={{
+                    background: '#2563EB',
+                    borderRadius: '6px',
+                    height: '36px',
+                    fontSize: '14px',
+                    lineHeight: '20px',
+                    padding: '0 16px',
+                    boxShadow: '0px 1px 2px rgba(0,0,0,0.05)',
+                  }}
+                >
+                  Upload Photo
+                </label>
+                <input
+                  id="teacher-photo-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoChange}
+                  className="hidden"
+                />
+                {photoPreview && (
+                  <button
+                    type="button"
+                    onClick={() => { setPhotoFile(null); setPhotoPreview(null); setPhotoRemoved(true); }}
+                    className="flex items-center justify-center font-semibold"
+                    style={{
+                      background: '#F1F5F9',
+                      borderRadius: '6px',
+                      height: '36px',
+                      fontSize: '14px',
+                      lineHeight: '20px',
+                      color: '#4B5563',
+                      padding: '0 16px',
+                    }}
+                  >
+                    Remove Photo
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 2 ── First Name | Last Name ── */}
+          <div>
+            <label style={LABEL}>First Name</label>
+            <input
+              type="text"
+              value={form.firstName}
+              onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))}
+              placeholder="John"
+              required
+              className={INPUT_BASE}
+              style={INPUT_STYLE}
+            />
+          </div>
+          <div>
+            <label style={LABEL}>Last Name</label>
+            <input
+              type="text"
+              value={form.lastName}
+              onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))}
+              placeholder="Doe"
+              className={INPUT_BASE}
+              style={INPUT_STYLE}
+            />
+          </div>
+
+          {/* 3 ── Email | Contact Number ── */}
+          <div>
+            <label style={LABEL}>Email</label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={e => { setForm(f => ({ ...f, email: e.target.value })); setFormErrors(err => ({ ...err, email: '' })); }}
+              placeholder="john.doe@school.edu"
+              required
+              className={`${INPUT_BASE} ${formErrors.email ? '!border-red-400' : ''}`}
+              style={INPUT_STYLE}
+            />
+            {formErrors.email && <p className="mt-1 text-xs text-red-500">{formErrors.email}</p>}
+          </div>
+          <div>
+            <label style={LABEL}>Contact Number</label>
+            <input
+              type="tel"
+              value={form.phone}
+              onChange={e => { setForm(f => ({ ...f, phone: e.target.value })); setFormErrors(err => ({ ...err, phone: '' })); }}
+              placeholder="+94 77 123 4567"
+              required
+              className={`${INPUT_BASE} ${formErrors.phone ? '!border-red-400' : ''}`}
+              style={INPUT_STYLE}
+            />
+            {formErrors.phone && <p className="mt-1 text-xs text-red-500">{formErrors.phone}</p>}
+          </div>
+
+          {/* 4 ── Subject | Qualifications ── */}
+          <div>
+            <label style={LABEL}>Subject</label>
+            <SubjectMultiSelect
+              selected={form.subjects}
+              onChange={subjects => { setForm(f => ({ ...f, subjects })); setFormErrors(err => ({ ...err, subject: '' })); }}
+              options={availableSubjects}
+              error={formErrors.subject}
+            />
+          </div>
+          <div>
+            <label style={LABEL}>Qualifications</label>
+            <TagInput
+              tags={form.qualification}
+              onChange={tags => setForm(f => ({ ...f, qualification: tags }))}
+              placeholder="M.Sc. in Mathematics"
+            />
+          </div>
+
+          {/* 5 ── Address (full width) ── */}
+          <div className="md:col-span-2">
+            <label style={LABEL}>Address</label>
+            <input
+              type="text"
+              value={form.address}
+              onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+              placeholder="123 Academic Way, Education City"
+              required
+              className={INPUT_BASE}
+              style={INPUT_STYLE}
+            />
+          </div>
+
+          {/* 6 ── Experience | Join Date ── */}
+          <div>
+            <label style={LABEL}>Experience (e.g. 5 years)</label>
+            <input
+              type="text"
+              value={form.experience}
+              onChange={e => setForm(f => ({ ...f, experience: e.target.value }))}
+              placeholder="5 years"
+              required
+              className={INPUT_BASE}
+              style={INPUT_STYLE}
+            />
+          </div>
+          <div>
+            <label style={LABEL}>Join Date</label>
+            <input
+              type="date"
+              value={form.joinDate}
+              onChange={e => { setForm(f => ({ ...f, joinDate: e.target.value })); setFormErrors(err => ({ ...err, joinDate: '' })); }}
+              min="1990-01-01"
+              max={new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0]}
+              required
+              className={`${INPUT_BASE} ${formErrors.joinDate ? '!border-red-400' : ''}`}
+              style={INPUT_STYLE}
+            />
+            {formErrors.joinDate && <p className="mt-1 text-xs text-red-500">{formErrors.joinDate}</p>}
+          </div>
+
+          {/* 7 ── Area of Specialization | Status ── */}
+          <div>
+            <label style={LABEL}>Area of Specialization</label>
+            <TagInput
+              tags={form.specializations}
+              onChange={tags => setForm(f => ({ ...f, specializations: tags }))}
+              placeholder="Quantum Mechanics"
+            />
+          </div>
+          <div>
+            <label style={LABEL}>Status</label>
+            <div className="relative">
+              <select
+                value={form.status}
+                onChange={e => setForm(f => ({ ...f, status: e.target.value as 'active' | 'inactive' }))}
+                className="w-full appearance-none border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base bg-white"
+                style={{ height: '46px', paddingLeft: '13px', paddingRight: '40px', color: '#4B5563' }}
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <ChevronDown
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none"
+                style={{ color: '#6B7280' }}
+              />
+            </div>
+          </div>
+
+          {/* 8 ── Bio (full width) ── */}
+          <div className="md:col-span-2">
+            <label style={LABEL}>Bio</label>
+            <textarea
+              value={form.biography}
+              onChange={e => setForm(f => ({ ...f, biography: e.target.value }))}
+              placeholder="Tell us about your teaching philosophy..."
+              rows={4}
+              className="w-full border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base placeholder:text-[#6B7280] text-[#374151] resize-none bg-white"
+              style={{ padding: '11px 13px' }}
+            />
+            <div className="flex items-center justify-between mt-1">
+              <p style={{ fontSize: '12px', lineHeight: '16px', color: '#9CA3AF' }}>Maximum 100 words</p>
+              <p style={{ fontSize: '12px', color: bioWordCount > 100 ? '#EF4444' : '#9CA3AF' }}>
+                {bioWordCount} / 100 words
+              </p>
+            </div>
+          </div>
+
+          {/* 9 ── Awards | Achievements ── */}
+          <div>
+            <label style={LABEL}>Awards</label>
+            <TagInput
+              tags={form.awards}
+              onChange={tags => setForm(f => ({ ...f, awards: tags }))}
+              placeholder="Teacher of the Year 2023"
+            />
+          </div>
+          <div>
+            <label style={LABEL}>Achievements</label>
+            <TagInput
+              tags={form.achievements}
+              onChange={tags => setForm(f => ({ ...f, achievements: tags }))}
+              placeholder="Published Research Paper"
+            />
+          </div>
+
+          {/* 10 ── Footer ── */}
+          <div className="md:col-span-2 flex gap-4 pt-2 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={() => setModalOpen(false)}
+              className="flex-1 flex items-center justify-center hover:bg-gray-50 transition-colors"
+              style={{
+                border: '1px solid #E5E7EB',
+                borderRadius: '12px',
+                height: '50px',
+                fontWeight: 700,
+                fontSize: '16px',
+                lineHeight: '24px',
+                color: '#6B7280',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 flex items-center justify-center gap-2 disabled:opacity-60 hover:opacity-90 transition-opacity"
+              style={{
+                background: '#5046E5',
+                borderRadius: '12px',
+                height: '48px',
+                fontWeight: 700,
+                fontSize: '16px',
+                lineHeight: '24px',
+                color: '#FFFFFF',
+                boxShadow: '0px 10px 15px -3px rgba(0,0,0,0.1), 0px 4px 6px -4px rgba(0,0,0,0.1)',
+              }}
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {editTeacher ? 'Update Teacher' : 'Add Teacher'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ── Delete Modal ── */}
+      <Modal
+        isOpen={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        title="Delete Teacher"
+        size="sm"
+        height="content"
+      >
+        <div className="flex flex-col items-center px-1 pb-1 text-center">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-50">
+            <Trash2 className="h-6 w-6 text-red-600" />
+          </div>
+          <h4 className="text-base font-semibold text-gray-900">
+            Remove {teacherToDelete ? displayName(teacherToDelete) : 'this teacher'}?
+          </h4>
+          <p className="mt-2 text-sm leading-6 text-gray-500">
+            This will permanently delete the teacher profile and cannot be undone.
+          </p>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setDeleteConfirm(null)}
+            disabled={deleting}
+            className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => deleteConfirm && handleDelete(deleteConfirm)}
+            disabled={deleting}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium transition-colors hover:bg-red-700 disabled:opacity-60"
+          >
+            {deleting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Delete
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+}

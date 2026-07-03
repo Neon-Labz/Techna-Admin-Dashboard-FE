@@ -11,15 +11,24 @@ export interface User {
 export interface Teacher {
   id: string;
   name: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   phone: string;
-  subject: string;
-  qualification: string;
+  gender?: 'male' | 'female' | '';
+  subject: string[];
+  qualification?: string;
   experience: string;
   address: string;
   joinDate: string;
   status: 'active' | 'inactive';
   avatar?: string;
+  photoUrl?: string;
+  degree?: string[];
+  specializations?: string[];
+  awards?: string[];
+  achievements?: string[];
+  biography?: string;
 }
 
 export interface Module {
@@ -53,11 +62,14 @@ export interface Student {
   id: string;
   studentId: string;
   qrToken: string;
+  qrCodeUrl?: string;
+  qrImageKey?: string;
   name: string;
   email: string;
   phone: string;
   address: string;
   dob: string;
+  dateOfBirth?: string;
   batch: string;
   modules: string[];
   status: 'pending' | 'approved' | 'rejected';
@@ -68,6 +80,52 @@ export interface Student {
   approvedAt?: string;
   attendance: AttendanceRecord[];
   payments: PaymentRecord[];
+  password?: string;
+  fullNameTamil?: string;
+  fullNameEnglish?: string;
+  nicNo?: string;
+  school?: string;
+  whatsappNo?: string;
+  parentsNo?: string;
+  permanentAddress?: string;
+  administrativeDistrict?: string;
+  fixedTelephone?: string;
+  residingSince?: string;
+  race?: string;
+  religion?: string;
+  citizenByDescent?: string;
+  contactAddress?: string;
+  postalCode?: string;
+  fatherName?: string;
+  motherName?: string;
+  guardianName?: string;
+  contactPerson?: string;
+  guardianAddress?: string;
+  guardianFixedTel?: string;
+  guardianMobile?: string;
+  olCategory?: string;
+  olYear?: string;
+  olIndexNumber?: string;
+  olNameUsed?: string;
+  olAccept?: string;
+  olResults?: OLResult[];
+  subjects?: string[];
+  subjectSelection?: {
+    subjects?: string[];
+    enrolledModules?: string[];
+  };
+  enrolledModules?: string[];
+  declarationAccepted?: boolean;
+}
+
+export interface OLResult {
+  year: string;
+  indexNumber: string;
+  english: string;
+  mathematics: string;
+  science: string;
+  sinhala: string;
+  tamil: string;
 }
 
 export interface AttendanceRecord {

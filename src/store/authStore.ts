@@ -1,6 +1,7 @@
 import { jwtDecode } from 'jwt-decode';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { setAuthToken } from '../api/axiosClient';
 import { authApi } from '../api';
 import type { User } from '../types';
 
@@ -16,8 +17,15 @@ interface AuthStore {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  rememberSession: boolean;
+  _hasHydrated: boolean;
+  setHasHydrated: (state: boolean) => void;
+  login: (
+    email: string,
+    password: string,
+    remember?: boolean
+  ) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
   updateProfile: (data: Partial<User>) => void;
   loadSession: () => Promise<void>;
   isTokenExpired: () => boolean;
@@ -29,13 +37,16 @@ export const useAuthStore = create<AuthStore>()(
       user: null,
       token: null,
       isAuthenticated: false,
+      rememberSession: false,
+      _hasHydrated: false,
 
-      login: async (email: string, password: string) => {
+      setHasHydrated: (state: boolean) => set({ _hasHydrated: state }),
+
+      login: async (email: string, password: string, remember = false) => {
         try {
           const response = await authApi.login(email, password);
           const { access_token, role } = response;
 
-          // ADMIN ONLY: Reject non-admin logins
           if (role !== 'admin') {
             return {
               success: false,
@@ -43,12 +54,13 @@ export const useAuthStore = create<AuthStore>()(
             };
           }
 
-          // Decode the JWT to get user info
           const decoded = jwtDecode<JwtPayload>(access_token);
 
-          // Check if token is already expired
           if (decoded.exp && decoded.exp * 1000 < Date.now()) {
-            return { success: false, error: 'Token expired. Please try again.' };
+            return {
+              success: false,
+              error: 'Token expired. Please try again.',
+            };
           }
 
           const user: User = {
@@ -59,18 +71,30 @@ export const useAuthStore = create<AuthStore>()(
             createdAt: new Date().toISOString(),
           };
 
-          // Save to state (zustand persist will save to localStorage automatically)
-          set({ user, token: access_token, isAuthenticated: true });
+          setAuthToken(access_token);
+
+          set({
+            user,
+            token: access_token,
+            isAuthenticated: true,
+            rememberSession: remember,
+          });
 
           return { success: true };
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Login failed';
-          return { success: false, error: message };
+          const message =
+            error instanceof Error ? error.message : 'Login failed';
+
+          return {
+            success: false,
+            error: message,
+          };
         }
       },
 
       logout: async () => {
         const token = get().token;
+
         if (token) {
           try {
             await authApi.logout();
@@ -78,34 +102,56 @@ export const useAuthStore = create<AuthStore>()(
             // Proceed with local logout even if API call fails
           }
         }
-        // Clear state and localStorage
-        set({ user: null, token: null, isAuthenticated: false });
+
+        set({
+          user: null,
+          token: null,
+          isAuthenticated: false,
+          rememberSession: false,
+        });
+        setAuthToken(null);
       },
 
       updateProfile: (data: Partial<User>) => {
         set((state) => {
           if (!state.user) return state;
-          const updatedUser = { ...state.user, ...data };
-          return { user: updatedUser };
+
+          return {
+            user: {
+              ...state.user,
+              ...data,
+            },
+          };
         });
       },
 
       loadSession: async () => {
         const { token, isTokenExpired } = get();
+
         if (!token) return;
 
-        // Check if token is expired before making API call
         if (isTokenExpired()) {
-          set({ user: null, token: null, isAuthenticated: false });
+          set({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            rememberSession: false,
+          });
+          setAuthToken(null);
           return;
         }
 
         try {
           const session = await authApi.getSession();
 
-          // Verify this is an admin session
           if (session.role && session.role !== 'admin') {
-            set({ user: null, token: null, isAuthenticated: false });
+            set({
+              user: null,
+              token: null,
+              isAuthenticated: false,
+              rememberSession: false,
+            });
+            setAuthToken(null);
             return;
           }
 
@@ -117,20 +163,33 @@ export const useAuthStore = create<AuthStore>()(
             phone: session.phone || undefined,
             createdAt: session.createdAt || new Date().toISOString(),
           };
-          set({ user, isAuthenticated: true });
+
+          set({
+            user,
+            isAuthenticated: true,
+          });
+          setAuthToken(token);
         } catch {
-          // Token expired or invalid — log out
-          set({ user: null, token: null, isAuthenticated: false });
+          set({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            rememberSession: false,
+          });
+          setAuthToken(null);
         }
       },
 
       isTokenExpired: () => {
         const token = get().token;
+
         if (!token) return true;
+
         try {
           const decoded = jwtDecode<JwtPayload>(token);
+
           if (!decoded.exp) return false;
-          // Add 30 second buffer
+
           return decoded.exp * 1000 < Date.now() + 30000;
         } catch {
           return true;
@@ -138,12 +197,40 @@ export const useAuthStore = create<AuthStore>()(
       },
     }),
     {
-      name: 'edu-auth', // localStorage key
+      name: 'edu-auth',
       partialize: (state) => ({
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
+        rememberSession: state.rememberSession,
       }),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<AuthStore> | undefined;
+
+        if (persisted && !persisted.rememberSession) {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('techna-auth');
+            localStorage.removeItem('edu-auth');
+          }
+
+          return {
+            ...currentState,
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            rememberSession: false,
+          };
+        }
+
+        return {
+          ...currentState,
+          ...persisted,
+        };
+      },
+      onRehydrateStorage: () => (state) => {
+        setAuthToken(state?.token || null);
+        state?.setHasHydrated(true);
+      },
     }
   )
 );

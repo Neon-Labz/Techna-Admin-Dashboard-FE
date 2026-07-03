@@ -10,6 +10,11 @@ export interface ApiResource {
   fileType: 'video' | 'image' | 'pdf' | 'file';
   fileUrl: string;
   fileKey: string;
+  url?: string;
+  thumbnailUrl?: string;
+  description?: string;
+  uploadedAt?: string;
+  isPublished?: boolean;
 }
 
 export interface ApiModule {
@@ -22,6 +27,9 @@ export interface ApiModule {
   fee: number;
   batch: string;
   status: 'active' | 'inactive';
+  term?: string;
+  unit?: number;
+  subjectCategory?: 'main' | 'basket' | 'none';
   resources: ApiResource[];
   createdAt: string;
   updatedAt: string;
@@ -32,7 +40,7 @@ export interface ApiTeacher {
   fullName: string;
   email: string;
   phone: string;
-  subject: string;
+  subject: string | string[];
   qualification: string;
   experience: string;
   address: string;
@@ -104,6 +112,9 @@ export interface CreateModuleDto {
   fee: number;
   batch: string;
   status?: 'active' | 'inactive';
+  term?: string;
+  unit?: number;
+  subjectCategory?: 'main' | 'basket' | 'none';
 }
 
 export interface UpdateModuleDto {
@@ -115,6 +126,9 @@ export interface UpdateModuleDto {
   fee?: number;
   batch?: string;
   status?: 'active' | 'inactive';
+  term?: string;
+  unit?: number;
+  subjectCategory?: 'main' | 'basket' | 'none';
 }
 
 export interface CreateVideoDto {
@@ -147,16 +161,30 @@ export interface AttendanceFilters {
 
 // ─── Axios instance ────────────────────────────────────────────────────────────
 
+// Every call site in this file already prefixes its path with '/api/'
+// (e.g. api.get('/api/modules')), so the baseURL must be the bare host —
+// strip a trailing '/api' from the shared env var to avoid '/api/api/...'.
+const API_HOST = (process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:4000/api').replace(/\/api\/?$/, '');
+
 const api: AxiosInstance = axios.create({
-  baseURL: 'http://localhost:4000',
+  baseURL: API_HOST,
   headers: { 'Content-Type': 'application/json' },
 });
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('techna_admin_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Read token from the Zustand persisted auth store ('edu-auth' key)
+    try {
+      const stored = localStorage.getItem('edu-auth');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const token = parsed?.state?.token;
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+    } catch {
+      // Ignore parse errors
     }
   }
   return config;
@@ -182,6 +210,7 @@ api.interceptors.response.use(
       error.response?.status === 401 &&
       typeof window !== 'undefined'
     ) {
+      localStorage.removeItem('edu-auth');
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -190,10 +219,32 @@ api.interceptors.response.use(
 
 export default api;
 
+// ─── Payments ─────────────────────────────────────────────────────────────────
+
+export interface ApiPayment {
+  _id: string;
+  studentId: string;
+  studentName?: string;
+  moduleId?: string;
+  moduleName?: string;
+  amount: number;
+  paymentDate: string;
+  paymentMethod: string;
+  status: 'paid' | 'pending' | 'partial';
+  notes?: string;
+  createdAt: string;
+}
+
+export const createPayment = (data: Partial<ApiPayment>): Promise<ApiPayment> =>
+  api.post<ApiPayment>('/api/payments', data).then((r) => r.data);
+
+export const updatePayment = (id: string, data: Partial<ApiPayment>): Promise<ApiPayment> =>
+  api.patch<ApiPayment>(`/api/payments/${id}`, data).then((r) => r.data);
+
 // ─── Modules ───────────────────────────────────────────────────────────────────
 
-export const getModules = (): Promise<ApiModule[]> =>
-  api.get<ApiModule[]>('/api/modules').then((r) => r.data);
+export const getModules = (status?: string): Promise<ApiModule[]> =>
+  api.get<ApiModule[]>('/api/modules', { params: status ? { status } : undefined }).then((r) => r.data);
 
 export const getModuleById = (id: string): Promise<ApiModule> =>
   api.get<ApiModule>(`/api/modules/${id}`).then((r) => r.data);
@@ -209,8 +260,8 @@ export const deleteModule = (id: string): Promise<{ message: string }> =>
 
 // ─── Teachers ──────────────────────────────────────────────────────────────────
 
-export const getTeachers = (): Promise<ApiTeacher[]> =>
-  api.get<ApiTeacher[]>('/api/teachers').then((r) => r.data);
+export const getTeachers = (status?: string): Promise<ApiTeacher[]> =>
+  api.get<ApiTeacher[]>('/api/teachers', { params: status ? { status } : undefined }).then((r) => r.data);
 
 // ─── Students ──────────────────────────────────────────────────────────────────
 
@@ -235,6 +286,65 @@ export const updateAttendance = (id: string, data: UpdateAttendanceDto): Promise
 
 export const deleteAttendance = (id: string): Promise<{ message: string }> =>
   api.delete<{ message: string }>(`/api/attendance/${id}`).then((r) => r.data);
+
+// ─── Module Resources ──────────────────────────────────────────────────────────
+
+export const uploadModuleResource = (
+  moduleId: string,
+  formData: FormData
+): Promise<ApiResource> =>
+  api.post<ApiResource>(`/api/modules/${moduleId}/upload-resource`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data);
+
+export const addResourceUrl = (
+  moduleId: string,
+  data: {
+    title: string;
+    url: string;
+    thumbnailUrl?: string;
+    fileType: string;
+    description?: string;
+  }
+): Promise<ApiResource> =>
+  api.post(`/api/modules/${moduleId}/add-resource-url`, data)
+    .then(r => r.data);
+
+export const toggleResourcePublish = (
+  moduleId: string,
+  resourceId: string
+): Promise<{ resourceId: string; isPublished: boolean; message: string }> =>
+  api.patch(`/api/modules/${moduleId}/resources/${resourceId}/toggle-publish`)
+    .then(r => r.data);
+
+// ─── Attendance (create) ───────────────────────────────────────────────────────
+
+export interface CreateAttendanceDto {
+  studentId: string;
+  moduleId: string;
+  moduleName: string;
+  date: string;
+  status: 'present' | 'absent';
+  markedAt: string;
+}
+
+export const createAttendance = (data: CreateAttendanceDto): Promise<ApiAttendance> =>
+  api.post<ApiAttendance>('/api/attendance', data).then(r => r.data);
+
+export const getStudentAttendance = (
+  studentId: string
+): Promise<ApiAttendance[]> =>
+  api.get(`/api/attendance/student/${studentId}`).then(r => r.data);
+
+export function extractErrorMessage(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const msg = err.response?.data?.message;
+    if (typeof msg === 'string') return msg;
+    if (Array.isArray(msg) && msg.length > 0) return String(msg[0]);
+  }
+  if (err instanceof Error) return err.message;
+  return 'Something went wrong';
+}
 
 // Re-export for use in components without importing axios directly
 export { isAxiosError } from 'axios';
