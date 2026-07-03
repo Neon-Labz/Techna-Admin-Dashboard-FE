@@ -602,57 +602,6 @@ function PaymentModal({
               ))}
             </select>
           </div>
-          <div className="col-span-2 flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <Label text="Module" required />
-              {fetchingMods && (
-                <span className="text-xs text-gray-400">Loading…</span>
-              )}
-              {isFiltered && (
-                <span className="text-xs text-indigo-500 font-medium">
-                  {filteredModules.length} enrolled module{filteredModules.length !== 1 ? 's' : ''}
-                </span>
-              )}
-              {showingAllModulesFallback && (
-                <span className="text-xs text-amber-500">No enrolment data — showing all</span>
-              )}
-            </div>
-            <CompactSelect
-              value={form.moduleId}
-              onChange={value => setForm(f => ({ ...f, moduleId: value }))}
-              disabled={!form.studentId || fetchingMods}
-              options={[
-                {
-                  value: '',
-                  label: fetchingMods
-                    ? 'Loading modules...'
-                    : form.studentId
-                      ? 'Select module...'
-                      : 'Select a student first',
-                },
-                ...filteredModules.map(m => ({ value: m.id, label: m.name })),
-              ]}
-            />
-            <select
-              value={form.moduleId}
-              onChange={e => setForm(f => ({ ...f, moduleId: e.target.value }))}
-              disabled={!form.studentId || fetchingMods}
-              className="hidden">
-              <option value="">
-                {fetchingMods ? 'Loading modules…' : form.studentId ? 'Select module…' : 'Select a student first'}
-              </option>
-              {filteredModules.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label text="Amount (LKR)" required />
-            <input type="number" min={0} value={form.amount}
-              onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-              placeholder="e.g. 10000"
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          </div>
 
           <>
               {/* ── Multi-subject checklist + additional fees — used in both
