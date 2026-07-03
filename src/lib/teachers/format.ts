@@ -19,7 +19,7 @@ export function normalizePhotoUrl(url?: string): string {
   normalized = normalized.replace(/\.r2\.dev[a-z]+/gi, '.r2.dev');
   // Ensure the URL is absolute
   if (normalized && !normalized.startsWith('http') && !normalized.startsWith('data:')) {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+    const baseUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:4000';
     return `${baseUrl}${normalized.startsWith('/') ? '' : '/'}${normalized}`;
   }
   return normalized;
