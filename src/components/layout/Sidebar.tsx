@@ -11,7 +11,6 @@ import {
   ClipboardList,
   Calendar,
   LogOut,
-  GraduationCap as Logo,
   UserCircle,
   X,
   Menu,
@@ -37,6 +36,7 @@ const navItems = [
   { path: '/dashboard/qr-scan', icon: QrCode, label: 'QR Scanner' },
   { path: '/dashboard/profile', icon: UserCircle, label: 'Profile' },
 ];
+
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (v: boolean) => void;
@@ -69,8 +69,12 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       >
         <div className="flex items-center justify-between p-5 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center">
-              <Logo className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center overflow-hidden">
+              <img
+                src="/logo.png"
+                alt="Techna Logo"
+                className="w-full h-full object-contain p-1"
+              />
             </div>
             <div>
               <p className="text-white font-bold text-sm">Techna</p>
