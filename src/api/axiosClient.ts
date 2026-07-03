@@ -1,5 +1,5 @@
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+  process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:4000/api';
 
 interface ApiWrappedResponse<T = unknown> {
   success: boolean;
@@ -15,7 +15,15 @@ interface RequestOptions {
   headers?: Record<string, string>;
 }
 
+let authToken: string | null = null;
+
+export function setAuthToken(token: string | null): void {
+  authToken = token;
+}
+
 export function getStoredToken(): string | null {
+  if (authToken) return authToken;
+
   if (typeof window === 'undefined') return null;
 
   try {
@@ -63,6 +71,7 @@ export async function apiClient<T = unknown>(
       endpoint.includes('/auth/student/login');
 
     if (!isLoginRequest && typeof window !== 'undefined') {
+      setAuthToken(null);
       localStorage.removeItem('techna-auth');
       localStorage.removeItem('edu-auth');
       window.location.href = '/login';

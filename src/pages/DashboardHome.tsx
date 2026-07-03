@@ -32,6 +32,24 @@ const formatModuleAxisLabel = (name: unknown, maxLength = 18) => {
   if (label.length <= maxLength) return label;
   return `${label.slice(0, maxLength).trimEnd()}...`;
 };
+const splitModuleName = (name: unknown, maxLength = 11) => {
+  const words = String(name || 'Module').trim().split(/\s+/);
+  const lines: string[] = [];
+  let current = '';
+
+  words.forEach((word) => {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxLength && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  });
+
+  if (current) lines.push(current);
+  return lines.length ? lines : ['Module'];
+};
 
 const ModuleAxisTick = ({
   x = 0,
@@ -68,6 +86,91 @@ const toArray = (data: any) => {
   if (Array.isArray(data?.payments)) return data.payments;
   if (Array.isArray(data?.data?.payments)) return data.data.payments;
   return [];
+};
+
+const toDate = (value: unknown) => {
+  if (!value) return null;
+
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const startOfMonth = (date: Date) =>
+  new Date(date.getFullYear(), date.getMonth(), 1);
+
+const endOfMonth = (date: Date) =>
+  new Date(date.getFullYear(), date.getMonth() + 1, 1);
+
+const isWithinRange = (date: Date | null, start: Date, end: Date) =>
+  Boolean(date && date >= start && date < end);
+
+const pickDate = (item: any, keys: string[]) => {
+  for (const key of keys) {
+    const date = toDate(item?.[key]);
+    if (date) return date;
+  }
+
+  return null;
+};
+
+const formatMonthlyChange = (current: number, previous: number) => {
+  if (previous === 0) {
+    if (current === 0) return '0%';
+    return '+100%';
+  }
+
+  const change = ((current - previous) / previous) * 100;
+  const rounded = Math.round(change);
+
+  if (rounded > 0) return `+${rounded}%`;
+  return `${rounded}%`;
+};
+
+const isPaidPayment = (payment: any) => payment.status === 'paid';
+
+const getMonthlyCountChange = (
+  items: any[],
+  dateKeys: string[],
+  filter?: (item: any) => boolean,
+) => {
+  const now = new Date();
+  const currentStart = startOfMonth(now);
+  const nextStart = endOfMonth(now);
+  const previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  const filteredItems = filter ? items.filter(filter) : items;
+
+  const current = filteredItems.filter((item) =>
+    isWithinRange(pickDate(item, dateKeys), currentStart, nextStart),
+  ).length;
+  const previous = filteredItems.filter((item) =>
+    isWithinRange(pickDate(item, dateKeys), previousStart, currentStart),
+  ).length;
+
+  return formatMonthlyChange(current, previous);
+};
+
+const getMonthlyAmountChange = (
+  items: any[],
+  dateKeys: string[],
+  filter?: (item: any) => boolean,
+) => {
+  const now = new Date();
+  const currentStart = startOfMonth(now);
+  const nextStart = endOfMonth(now);
+  const previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  const filteredItems = filter ? items.filter(filter) : items;
+
+  const totalForRange = (start: Date, end: Date) =>
+    filteredItems
+      .filter((item) => isWithinRange(pickDate(item, dateKeys), start, end))
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+  return formatMonthlyChange(
+    totalForRange(currentStart, nextStart),
+    totalForRange(previousStart, currentStart),
+  );
 };
 
 export default function DashboardHome() {
@@ -108,7 +211,7 @@ export default function DashboardHome() {
       const safeExams = toArray(examsData);
 
       const revenue = safePayments
-        .filter((p: any) => p.status === 'paid')
+        .filter(isPaidPayment)
         .reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
 
       setSummary(summaryData || {});
@@ -152,8 +255,10 @@ export default function DashboardHome() {
     };
   });
 
+  const paidPayments = payments.filter(isPaidPayment);
+
   const paymentByModule = Object.values(
-    payments.reduce((acc: any, payment: any) => {
+    paidPayments.reduce((acc: any, payment: any) => {
       const name = payment.moduleName || 'Unknown Module';
       const amount = Number(payment.amount || 0);
 
@@ -174,51 +279,81 @@ export default function DashboardHome() {
       ? Array.from({ length: maxModuleStudents + 1 }, (_, index) => index)
       : [0, Math.ceil(maxModuleStudents / 2), maxModuleStudents];
 
-  const upcomingExams = exams.slice(0, 5);
-  const recentStudents = [...students].slice(-4).reverse();
+   const moduleChartHeight = 320;
+const mobileModuleChartHeight = Math.max(220, moduleChartData.length * 42);
 
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+
+const upcomingExams = exams
+  .filter((exam) => {
+    const examDate = toDate(exam.date);
+    return Boolean(examDate && examDate >= today);
+  })
+  .sort((a, b) => {
+    const firstDate = toDate(a.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    const secondDate = toDate(b.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    return firstDate - secondDate;
+  })
+  .slice(0, 5);
+
+const recentStudents = [...students].slice(-4).reverse();
+
+  
   const stats = [
     {
       label: 'Total Students',
       value: summary?.totalStudents ?? students.length,
       icon: Users,
       color: 'bg-indigo-500',
-      change: '+12%',
+      change: getMonthlyCountChange(students, ['enrolledAt', 'createdAt']),
     },
     {
       label: 'Approved',
       value: summary?.approvedStudents ?? approved,
       icon: UserCheck,
       color: 'bg-emerald-500',
-      change: '+5%',
+      change: getMonthlyCountChange(
+        students,
+        ['approvedAt', 'updatedAt', 'enrolledAt', 'createdAt'],
+        (student) => student.status === 'approved',
+      ),
     },
     {
       label: 'Pending',
       value: summary?.pendingStudents ?? pending,
       icon: Clock,
       color: 'bg-amber-500',
-      change: '-2%',
+      change: getMonthlyCountChange(
+        students,
+        ['enrolledAt', 'createdAt'],
+        (student) => student.status === 'pending',
+      ),
     },
     {
       label: 'Teachers',
       value: summary?.totalTeachers ?? teachers.length,
       icon: GraduationCap,
       color: 'bg-purple-500',
-      change: '+1%',
+      change: getMonthlyCountChange(teachers, ['joinDate', 'createdAt']),
     },
     {
       label: 'Modules',
       value: summary?.totalModules ?? modules.length,
       icon: BookOpen,
       color: 'bg-cyan-500',
-      change: '+3%',
+      change: getMonthlyCountChange(modules, ['createdAt', 'updatedAt']),
     },
     {
       label: 'Paid Payments',
       value: `${(paidRevenue / 1000).toFixed(0)}K`,
       icon: CreditCard,
       color: 'bg-rose-500',
-      change: '+18%',
+      change: getMonthlyAmountChange(
+        payments,
+        ['paidDate', 'createdAt'],
+        isPaidPayment,
+      ),
     },
   ];
 
@@ -277,54 +412,116 @@ export default function DashboardHome() {
               No module enrolments yet
             </div>
           ) : (
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={moduleChartData}
-                  margin={{ top: 16, right: 16, left: -18, bottom: 76 }}
-                  barCategoryGap={18}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="#eef2f7"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="name"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={<ModuleAxisTick />}
-                    interval={0}
-                    height={82}
-                  />
-                  <YAxis
-                    allowDecimals={false}
-                    domain={[0, maxModuleStudents]}
-                    ticks={moduleChartTicks}
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 12, fill: '#334155' }}
-                  />
-                  <Tooltip
-                    cursor={{ fill: '#f8fafc' }}
-                    formatter={(value) => [`${value} students`, 'Enrolled']}
-                    labelFormatter={(label) => String(label)}
-                  />
-                  <Bar
-                    dataKey="students"
-                    fill="#6366f1"
-                    radius={[8, 8, 0, 0]}
-                    maxBarSize={38}
-                    label={{
-                      position: 'top',
-                      fill: '#334155',
-                      fontSize: 12,
-                      fontWeight: 700,
-                    }}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <>
+              <div
+                className="sm:hidden"
+                style={{ height: mobileModuleChartHeight }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={moduleChartData}
+                    layout="vertical"
+                    margin={{ top: 6, right: 28, left: -18, bottom: 6 }}
+                    barCategoryGap={12}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#eef2f7"
+                      horizontal={false}
+                    />
+                    <XAxis
+                      type="number"
+                      allowDecimals={false}
+                      domain={[0, maxModuleStudents]}
+                      ticks={moduleChartTicks}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: '#64748b' }}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={108}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: '#334155' }}
+                      tickFormatter={(name) =>
+                        splitModuleName(name, 11).join(' ')
+                      }
+                    />
+                    <Tooltip
+                      cursor={{ fill: '#f8fafc' }}
+                      formatter={(value) => [`${value} students`, 'Enrolled']}
+                      labelFormatter={(label) => String(label)}
+                    />
+                    <Bar
+                      dataKey="students"
+                      fill="#6366f1"
+                      radius={[0, 7, 7, 0]}
+                      barSize={22}
+                      label={{
+                        position: 'right',
+                        fill: '#334155',
+                        fontSize: 11,
+                        fontWeight: 700,
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div
+                className="hidden sm:block"
+                style={{ height: moduleChartHeight }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={moduleChartData}
+                    margin={{ top: 16, right: 18, left: -18, bottom: 50 }}
+                    barCategoryGap={18}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#eef2f7"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="name"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={<ModuleAxisTick />}
+                      interval={0}
+                      height={56}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      domain={[0, maxModuleStudents]}
+                      ticks={moduleChartTicks}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 12, fill: '#334155' }}
+                    />
+                    <Tooltip
+                      cursor={{ fill: '#f8fafc' }}
+                      formatter={(value) => [`${value} students`, 'Enrolled']}
+                      labelFormatter={(label) => String(label)}
+                    />
+                    <Bar
+                      dataKey="students"
+                      fill="#6366f1"
+                      radius={[8, 8, 0, 0]}
+                      maxBarSize={54}
+                      label={{
+                        position: 'top',
+                        fill: '#334155',
+                        fontSize: 12,
+                        fontWeight: 700,
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </>
           )}
         </div>
 

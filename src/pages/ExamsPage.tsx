@@ -19,29 +19,35 @@ import { examApi } from '@/api/exam.api';
 import api from '@/lib/axios';
 import CompactSelect from '@/components/ui/CompactSelect';
 import CompactDatePicker from '@/components/ui/CompactDatePicker';
-const BATCHES = [
-  'May 2024 Batch',
-  'September 2024 Batch',
-  'January 2025 Batch',
-  'May 2025 Batch',
-];
+import { useDataStore } from '@/store/dataStore';
 
-const emptyExam: Omit<Exam, 'id'> = {
-  title: '',
-  moduleId: '',
-  moduleName: '',
-  batch: BATCHES[0],
-  date: '',
-  startTime: '09:00',
-  endTime: '11:00',
-  venue: '',
-  description: '',
-  totalMarks: 100,
-  status: 'upcoming',
-  createdAt: new Date().toISOString(),
-};
 
 export default function ExamsPage() {
+  
+  const { students, fetchStudents } = useDataStore();
+
+  
+  const BATCHES = Array.from(
+    new Set(
+      students.map((s: any) => s.batch).filter(Boolean),
+    ),
+  );
+
+  const emptyExam: Omit<Exam, 'id'> = {
+    title: '',
+    moduleId: '',
+    moduleName: '',
+    batch: BATCHES[0] || '',
+    date: '',
+    startTime: '09:00',
+    endTime: '11:00',
+    venue: '',
+    description: '',
+    totalMarks: 100,
+    status: 'upcoming',
+    createdAt: new Date().toISOString(),
+  };
+
   const [modules, setModules] = useState<any[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [search, setSearch] = useState('');
@@ -55,11 +61,12 @@ export default function ExamsPage() {
   useEffect(() => {
     loadExams();
     loadModules();
+    fetchStudents(); 
   }, []);
 
   const loadModules = async () => {
     try {
-      const res: any = await api.get('/modules');
+      const res: any = await api.get('/modules', { params: { status: 'active' } });
       // Interceptor returns the unwrapped value directly, not an AxiosResponse
       const list = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
       setModules(list);
@@ -72,7 +79,7 @@ export default function ExamsPage() {
     try {
       const data = await examApi.getAll();
 
-const list = Array.isArray(data) ? data : [];
+      const list = Array.isArray(data) ? data : [];
 
       const formatted = list.map((e: any) => ({
         id: e.id || e._id,
@@ -523,6 +530,9 @@ const list = Array.isArray(data) ? data : [];
               {BATCHES.map((b) => (
                 <option key={b}>{b}</option>
               ))}
+              {form.batch && !BATCHES.includes(form.batch) && (
+                <option value={form.batch}>{form.batch}</option>
+              )}
             </select>
           </div>
 

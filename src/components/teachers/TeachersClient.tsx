@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { Teacher } from '@/types';
-import { teacherApi, type TeacherFromApi } from '@/api/teacher.api';
+import { teacherApi } from '@/api/teacher.api';
+import { apiClient } from '@/api/axiosClient';
 import Modal from '@/components/ui/Modal';
 import {
   Plus,
@@ -14,232 +15,28 @@ import {
   Search,
   Loader2,
   ChevronDown,
-  X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-// ─── TagInput ─────────────────────────────────────────────────────────────────
-function TagInput({
-  tags,
-  onChange,
-  placeholder,
-  hint,
-  showChevron = false,
-}: {
-  tags: string[];
-  onChange: (tags: string[]) => void;
-  placeholder?: string;
-  hint?: string;
-  showChevron?: boolean;
-}) {
-  const [val, setVal] = useState('');
-
-  const add = () => {
-    const t = val.trim();
-    if (t && !tags.includes(t)) onChange([...tags, t]);
-    setVal('');
-  };
-
-  return (
-    <div>
-      <div className="relative">
-        <input
-          type="text"
-          value={val}
-          onChange={e => setVal(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              add();
-            }
-          }}
-          onBlur={add}
-          placeholder={placeholder}
-          className="w-full border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base text-[#374151] placeholder:text-[#6B7280] bg-white"
-          style={{ height: '46px', paddingLeft: '13px', paddingRight: showChevron ? '40px' : '13px' }}
-        />
-        {showChevron && (
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none" style={{ color: '#9CA3AF' }} />
-        )}
-      </div>
-      {hint && (
-        <p className="mt-1" style={{ fontSize: '10px', lineHeight: '15px', color: '#9CA3AF' }}>
-          {hint}
-        </p>
-      )}
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-2">
-          {tags.map((tag, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium"
-            >
-              {tag}
-              <button
-                type="button"
-                onClick={() => onChange(tags.filter((_, j) => j !== i))}
-                className="hover:text-red-500 transition-colors"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function countWords(text: string): number {
-  return text.trim() ? text.trim().split(/\s+/).length : 0;
-}
-
-function formatSubjects(subjects: string[]): string {
-  return subjects.join(', ');
-}
-
-function normalizeSubject(subject: TeacherFromApi['subject'] | string[]): string[] {
-  if (Array.isArray(subject)) return subject;
-  return subject.split(',').map(s => s.trim()).filter(Boolean);
-}
-
-function normalizePhotoUrl(url?: string): string {
-  if (!url) return '';
-  return url.trim().replace(/\.r2\.devya\b/gi, '.r2.dev');
-}
-
-const TITLE_PREFIXES = new Set([
-  'mr', 'mrs', 'ms', 'miss', 'dr', 'prof',
-  'mr.', 'mrs.', 'ms.', 'miss.', 'dr.', 'prof.',
-]);
-
-function stripTitle(name: string): string {
-  return (name || '')
-    .trim()
-    .split(/\s+/)
-    .filter(p => !TITLE_PREFIXES.has(p.toLowerCase()))
-    .join(' ');
-}
-
-function titleFromGender(gender: Teacher['gender']): string {
-  if (gender === 'male') return 'Mr.';
-  if (gender === 'female') return 'Ms.';
-  return '';
-}
-
-const FEMALE_NAMES = new Set([
-  'nimali', 'geerthika', 'sara', 'sarah', 'mary', 'emma', 'olivia', 'sophia',
-  'priya', 'anjali', 'deepika', 'kavya', 'lakshmi', 'shanthi', 'malini',
-  'kumari', 'nisha', 'divya', 'ramya', 'thanuja', 'dilani', 'sandya',
-  'jane', 'linda', 'susan', 'jessica', 'amanda', 'fatima', 'aisha',
-]);
-
-const MALE_NAMES = new Set([
-  'michael', 'david', 'john', 'james', 'robert', 'william', 'hari', 'gowsikan',
-  'gowsi', 'joe', 'suka', 'siva', 'kumar', 'raj', 'ravi', 'arun', 'vijay',
-  'anil', 'sunil', 'mahesh', 'suresh', 'ramesh', 'athithya', 'kajan',
-  'mohamed', 'ahmed', 'thomas', 'daniel', 'peter', 'paul', 'mark',
-]);
-
-function inferGender(name: string): Teacher['gender'] {
-  const trimmed = (name || '').trim().toLowerCase();
-  if (/^(mr|dr|prof)\.?\s/.test(trimmed)) return 'male';
-  if (/^(mrs|ms|miss)\.?\s/.test(trimmed)) return 'female';
-  const first = stripTitle(name).split(/\s+/)[0]?.toLowerCase() ?? '';
-  if (!first) return '';
-  if (FEMALE_NAMES.has(first)) return 'female';
-  if (MALE_NAMES.has(first)) return 'male';
-  return '';
-}
-
-function displayName(t: Teacher): string {
-  const clean = stripTitle(t.name);
-  const gender = t.gender || inferGender(t.name);
-  const title = titleFromGender(gender);
-  return title ? `${title} ${clean}` : clean;
-}
-
-function getInitials(name: string): string {
-  const parts = stripTitle(name).split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-}
-
-function mapApiTeacher(t: TeacherFromApi): Teacher {
-  return {
-    id: t._id,
-    name: t.fullName,
-    firstName: t.firstName ?? '',
-    lastName: t.lastName ?? '',
-    email: t.email,
-    phone: t.phone,
-    gender: t.gender || inferGender(t.fullName),
-    subject: normalizeSubject(t.subject),
-    qualification: t.qualification ?? '',
-    experience: t.experience,
-    address: t.address,
-    joinDate: t.joinDate,
-    status: t.status,
-    photoUrl: normalizePhotoUrl(t.photoUrl),
-    degree: t.degree ?? [],
-    specializations: t.specializations ?? [],
-    awards: t.awards ?? [],
-    achievements: t.achievements ?? [],
-    biography: t.biography ?? '',
-  };
-}
-
-// ─── Form type ────────────────────────────────────────────────────────────────
-type TeacherForm = {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  subjectText: string;
-  qualification: string[];
-  address: string;
-  experience: string;
-  joinDate: string;
-  specializations: string[];
-  biography: string;
-  status: 'active' | 'inactive';
-  awards: string[];
-  achievements: string[];
-};
-
-const emptyTeacher: TeacherForm = {
-  firstName: '',
-  lastName: '',
-  email: '',
-  phone: '',
-  subjectText: '',
-  qualification: [],
-  address: '',
-  experience: '',
-  joinDate: new Date().toISOString().split('T')[0],
-  specializations: [],
-  biography: '',
-  status: 'active',
-  awards: [],
-  achievements: [],
-};
-
-// ─── Shared label style ───────────────────────────────────────────────────────
-const LABEL: React.CSSProperties = {
-  display: 'block',
-  fontWeight: 700,
-  fontSize: '14px',
-  lineHeight: '20px',
-  color: '#374151',
-  marginBottom: '8px',
-};
-
-const INPUT_BASE =
-  'w-full border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base text-[#374151] placeholder:text-[#6B7280] bg-white';
-
-const INPUT_STYLE: React.CSSProperties = { height: '46px', paddingLeft: '13px', paddingRight: '13px' };
+import {
+  type TeacherForm,
+  emptyTeacher,
+  MAX_SUBJECTS,
+  countWords,
+  isValidEmail,
+  isValidSriLankanPhone,
+  isValidJoinDate,
+  isValidSubject,
+  formatSubjects,
+  dedupeCaseInsensitive,
+  displayName,
+  mapApiTeacher,
+  LABEL,
+  INPUT_BASE,
+  INPUT_STYLE,
+} from '@/lib/teachers';
+import { TagInput } from '@/components/teachers/TagInput';
+import { SubjectMultiSelect } from '@/components/teachers/SubjectMultiSelect';
+import { TeacherAvatar } from '@/components/teachers/TeacherAvatar';
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function TeachersPage() {
@@ -249,6 +46,8 @@ export default function TeachersPage() {
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editTeacher, setEditTeacher] = useState<Teacher | null>(null);
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // formRef stays in sync with form state but updated SYNCHRONOUSLY so that
   // handleSubmit always reads the latest tag arrays even when onBlur fires
@@ -265,10 +64,49 @@ export default function TeachersPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoRemoved, setPhotoRemoved] = useState(false);
+  const [previewBroken, setPreviewBroken] = useState(false);
 
   useEffect(() => {
     fetchTeachers();
+    fetchAvailableSubjects();
   }, []);
+
+  const fetchAvailableSubjects = async () => {
+    try {
+      // Use the same apiClient as the teacher list so the auth token matches
+      // (dashboardApi/lib-axios reads a different token key and can 401 → []).
+      const modules = await apiClient<any[]>('/modules');
+      // Load every module from the Modules page as a selectable subject.
+      const collected: string[] = [];
+      if (Array.isArray(modules)) {
+        modules.forEach((m: any) => {
+          if (m?.name && String(m.name).trim()) collected.push(String(m.name).trim());
+          if (m?.subject) {
+            const s = Array.isArray(m.subject) ? m.subject : [m.subject];
+            s.forEach((sub: string) => { if (sub && sub.trim()) collected.push(sub.trim()); });
+          }
+        });
+      }
+      // Distinct (case-insensitive), alphabetically sorted
+      setAvailableSubjects(dedupeCaseInsensitive(collected).sort((a, b) => a.localeCompare(b)));
+    } catch {
+      // Silently fail - subject options are a nice-to-have
+    }
+  };
+
+  // Re-collect teacher subjects when teachers change
+  useEffect(() => {
+    if (teachers.length > 0) {
+      setAvailableSubjects(prev => {
+        const merged = [...prev];
+        teachers.forEach(t => {
+          t.subject.forEach(s => { if (s.trim()) merged.push(s.trim()); });
+        });
+        return dedupeCaseInsensitive(merged).sort((a, b) => a.localeCompare(b));
+      });
+    }
+  }, [teachers]);
+
 
   const fetchTeachers = async () => {
     try {
@@ -303,6 +141,8 @@ export default function TeachersPage() {
     setPhotoFile(null);
     setPhotoPreview(null);
     setPhotoRemoved(false);
+    setPreviewBroken(false);
+    setFormErrors({});
     setModalOpen(true);
   };
 
@@ -314,7 +154,7 @@ export default function TeachersPage() {
       lastName,
       email: t.email,
       phone: t.phone,
-      subjectText: t.subject.join(', '),
+      subjects: dedupeCaseInsensitive(t.subject.map(s => s.trim()).filter(Boolean)),
       qualification: (t.qualification ?? '').split(',').map(s => s.trim()).filter(Boolean),
       address: t.address,
       experience: t.experience,
@@ -327,8 +167,11 @@ export default function TeachersPage() {
     });
     setEditTeacher(t);
     setPhotoFile(null);
-    setPhotoPreview(t.photoUrl ?? null);
+    // Fix BUG-008: Ensure photoPreview is set properly from the teacher's photoUrl
+    setPhotoPreview(t.photoUrl && t.photoUrl.trim() ? t.photoUrl : null);
     setPhotoRemoved(false);
+    setPreviewBroken(false);
+    setFormErrors({});
     setModalOpen(true);
   };
 
@@ -336,6 +179,7 @@ export default function TeachersPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setPhotoFile(file);
+    setPreviewBroken(false);
     const reader = new FileReader();
     reader.onload = () => setPhotoPreview(reader.result as string);
     reader.readAsDataURL(file);
@@ -344,20 +188,61 @@ export default function TeachersPage() {
   const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    const subjects = form.subjectText.split(',').map(s => s.trim()).filter(Boolean);
-    if (subjects.length === 0) {
-      toast.error('Please enter at least one subject');
-      return;
-    }
-    if (form.biography && countWords(form.biography) > 100) {
-      toast.error('Bio must not exceed 100 words');
-      return;
-    }
+    // ─── Validate all fields (BUG-007) ───
+    const errors: Record<string, string> = {};
+
     const fullName = [form.firstName.trim(), form.lastName.trim()].filter(Boolean).join(' ');
     if (!fullName) {
-      toast.error('Please enter a first name');
+      errors.firstName = 'Please enter a first name';
+    }
+
+    // Email validation
+    if (!form.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!isValidEmail(form.email)) {
+      errors.email = 'Please enter a valid email address (e.g. name@domain.com)';
+    }
+
+    // Phone validation (Sri Lankan format)
+    if (!form.phone.trim()) {
+      errors.phone = 'Phone number is required';
+    } else if (!isValidSriLankanPhone(form.phone)) {
+      errors.phone = 'Enter a valid Sri Lankan phone number (e.g. 077 123 4567 or +94 77 123 4567)';
+    }
+
+    // Subject validation
+    const subjects = dedupeCaseInsensitive(form.subjects.map(s => s.trim()).filter(Boolean));
+    if (subjects.length === 0) {
+      errors.subject = 'Please select at least one subject';
+    } else if (subjects.length > MAX_SUBJECTS) {
+      errors.subject = `You can select a maximum of ${MAX_SUBJECTS} subjects`;
+    } else {
+      const invalidSubjects = subjects.filter(s => !isValidSubject(s));
+      if (invalidSubjects.length > 0) {
+        errors.subject = `Invalid subject(s): "${invalidSubjects.join('", "')}". Subjects must start with a letter and contain only letters, numbers, spaces, and common punctuation.`;
+      }
+    }
+
+    // Join date validation
+    if (!form.joinDate) {
+      errors.joinDate = 'Join date is required';
+    } else if (!isValidJoinDate(form.joinDate)) {
+      errors.joinDate = 'Please enter a valid date (between 1990 and next year)';
+    }
+
+    // Bio validation
+    if (form.biography && countWords(form.biography) > 100) {
+      errors.biography = 'Bio must not exceed 100 words';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      const firstError = Object.values(errors)[0];
+      toast.error(firstError);
       return;
     }
+
+    setFormErrors({});
 
     try {
       setSaving(true);
@@ -475,25 +360,11 @@ export default function TeachersPage() {
             <div key={t.id} className="flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 items-center gap-3">
-                  {t.photoUrl ? (
-                    <img
-                      src={t.photoUrl}
-                      alt={t.name}
-                      className="h-12 w-12 shrink-0 rounded-xl object-cover"
-                      onError={e => {
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.nextElementSibling?.removeAttribute('style');
-                      }}
-                    />
-                  ) : null}
-                  <div
-                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-100"
-                    style={t.photoUrl ? { display: 'none' } : undefined}
-                  >
-                    <span className="text-indigo-600 font-bold text-lg">
-                      {getInitials(t.name)}
-                    </span>
-                  </div>
+                  <TeacherAvatar
+                    src={t.photoUrl}
+                    name={t.name}
+                    className="h-12 w-12 shrink-0 rounded-xl"
+                  />
                   <div className="min-w-0">
                     <h3 className="break-words font-semibold text-gray-800">{displayName(t)}</h3>
                     <p className="break-words text-sm font-medium text-indigo-600">
@@ -566,11 +437,12 @@ export default function TeachersPage() {
           {/* 1 ── Profile Picture ── */}
           <div className="md:col-span-2 flex items-start gap-6 pb-5 border-b border-gray-100">
             <label htmlFor="teacher-photo-upload" className="cursor-pointer shrink-0">
-              {photoPreview ? (
+              {photoPreview && !previewBroken ? (
                 <img
                   src={photoPreview}
                   alt="Preview"
                   className="w-32 h-32 rounded-full object-cover"
+                  onError={() => setPreviewBroken(true)}
                 />
               ) : (
                 <div
@@ -667,36 +539,36 @@ export default function TeachersPage() {
             <input
               type="email"
               value={form.email}
-              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+              onChange={e => { setForm(f => ({ ...f, email: e.target.value })); setFormErrors(err => ({ ...err, email: '' })); }}
               placeholder="john.doe@school.edu"
               required
-              className={INPUT_BASE}
+              className={`${INPUT_BASE} ${formErrors.email ? '!border-red-400' : ''}`}
               style={INPUT_STYLE}
             />
+            {formErrors.email && <p className="mt-1 text-xs text-red-500">{formErrors.email}</p>}
           </div>
           <div>
             <label style={LABEL}>Contact Number</label>
             <input
-              type="text"
+              type="tel"
               value={form.phone}
-              onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-              placeholder="+1 (555) 000-0000"
+              onChange={e => { setForm(f => ({ ...f, phone: e.target.value })); setFormErrors(err => ({ ...err, phone: '' })); }}
+              placeholder="+94 77 123 4567"
               required
-              className={INPUT_BASE}
+              className={`${INPUT_BASE} ${formErrors.phone ? '!border-red-400' : ''}`}
               style={INPUT_STYLE}
             />
+            {formErrors.phone && <p className="mt-1 text-xs text-red-500">{formErrors.phone}</p>}
           </div>
 
           {/* 4 ── Subject | Qualifications ── */}
           <div>
             <label style={LABEL}>Subject</label>
-            <input
-              type="text"
-              value={form.subjectText}
-              onChange={e => setForm(f => ({ ...f, subjectText: e.target.value }))}
-              placeholder="Mathematics"
-              className={INPUT_BASE}
-              style={INPUT_STYLE}
+            <SubjectMultiSelect
+              selected={form.subjects}
+              onChange={subjects => { setForm(f => ({ ...f, subjects })); setFormErrors(err => ({ ...err, subject: '' })); }}
+              options={availableSubjects}
+              error={formErrors.subject}
             />
           </div>
           <div>
@@ -740,11 +612,14 @@ export default function TeachersPage() {
             <input
               type="date"
               value={form.joinDate}
-              onChange={e => setForm(f => ({ ...f, joinDate: e.target.value }))}
+              onChange={e => { setForm(f => ({ ...f, joinDate: e.target.value })); setFormErrors(err => ({ ...err, joinDate: '' })); }}
+              min="1990-01-01"
+              max={new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0]}
               required
-              className={INPUT_BASE}
+              className={`${INPUT_BASE} ${formErrors.joinDate ? '!border-red-400' : ''}`}
               style={INPUT_STYLE}
             />
+            {formErrors.joinDate && <p className="mt-1 text-xs text-red-500">{formErrors.joinDate}</p>}
           </div>
 
           {/* 7 ── Area of Specialization | Status ── */}

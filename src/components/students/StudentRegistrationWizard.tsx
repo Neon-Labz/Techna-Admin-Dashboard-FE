@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import toast from 'react-hot-toast';
 import {
   BookOpen,
   Check,
@@ -13,6 +14,12 @@ import {
   User,
 } from 'lucide-react';
 import type { Student, OLResult } from '../../types';
+import {
+  MAIN_SUBJECTS,
+  BASKET_SUBJECTS,
+  MAX_MAIN_SUBJECTS,
+  MAX_BASKET_SUBJECTS,
+} from '../../utils/studentPayload';
 
 const DISTRICTS = [
   'Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo', 'Galle',
@@ -62,6 +69,8 @@ type FormState = Omit<
   dob: string;
   modules: string[];
   subjects: string[];
+  mainSubjects: string[];
+  basketSubject: string;
   status: Student['status'];
   enrolledAt: string;
   confirmPassword: string;
@@ -116,6 +125,8 @@ const emptyForm: FormState = {
   olResults: [{ ...emptyOL }],
   subjects: [],
   modules: [],
+  mainSubjects: [],
+  basketSubject: '',
   declarationAccepted: false,
   declarationRules: false,
   declarationAccuracy: false,
@@ -172,15 +183,73 @@ export default function StudentRegistrationWizard({
       if (!form.fullNameEnglish?.trim()) {
         nextErrors.fullNameEnglish = 'Full name English is required';
       }
-      if (!form.dob) nextErrors.dob = 'Date of birth is required';
-      if (!form.nicNo?.trim()) nextErrors.nicNo = 'NIC number is required';
+
+      // Email
+      if (!form.email.trim()) {
+        nextErrors.email = 'Email is required';
+      } else {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(form.email)) {
+          nextErrors.email = 'Enter a valid email address';
+        }
+      }
+
+      // NIC — old format: 9 digits + V/X; new format: 12 digits
+      if (!form.nicNo?.trim()) {
+        nextErrors.nicNo = 'NIC number is required';
+      } else {
+        const oldNic = /^[0-9]{9}[vVxX]$/;
+        const newNic = /^[0-9]{12}$/;
+        if (!oldNic.test(form.nicNo) && !newNic.test(form.nicNo)) {
+          nextErrors.nicNo = 'Enter a valid NIC (e.g. 991234567V or 199912345678)';
+        }
+      }
+
+      // WhatsApp / phone — 9-10 digits
       if (!form.whatsappNo?.trim()) {
         nextErrors.whatsappNo = 'WhatsApp number is required';
+      } else {
+        const phoneRegex = /^[0-9]{9,10}$/;
+        if (!phoneRegex.test(form.whatsappNo.replace(/\s/g, ''))) {
+          nextErrors.whatsappNo = 'Enter a valid phone number (9–10 digits)';
+        }
       }
-      if (!form.email.trim()) nextErrors.email = 'Email is required';
-      if (!form.password) nextErrors.password = 'Password is required';
+
+      // Password strength
+      if (!form.password) {
+        nextErrors.password = 'Password is required';
+      } else if (form.password.length < 8) {
+        nextErrors.password = 'Password must be at least 8 characters';
+      } else if (!/[A-Z]/.test(form.password)) {
+        nextErrors.password = 'Password must contain an uppercase letter';
+      } else if (!/[0-9]/.test(form.password)) {
+        nextErrors.password = 'Password must contain a number';
+      }
+
       if (form.password !== form.confirmPassword) {
         nextErrors.confirmPassword = 'Passwords do not match';
+      }
+
+      // Date of birth — must be in the past, age 10–30
+      if (!form.dob) {
+        nextErrors.dob = 'Date of birth is required';
+      } else {
+        const dob = new Date(form.dob);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (dob >= today) {
+          nextErrors.dob = 'Date of birth cannot be today or a future date';
+        } else {
+          const age = today.getFullYear() - dob.getFullYear();
+          if (age < 10 || age > 30) {
+            nextErrors.dob = 'Please verify the date of birth (expected age: 10–30 years)';
+          }
+        }
+      }
+
+      // Address
+      if (!form.address?.trim()) {
+        nextErrors.address = 'Address is required';
       }
     }
 
@@ -194,8 +263,11 @@ export default function StudentRegistrationWizard({
     }
 
     if (step === 5) {
-      if ((form.subjects || []).length === 0) {
-        nextErrors.subjects = 'Select at least one subject';
+      if ((form.mainSubjects || []).length !== MAX_MAIN_SUBJECTS) {
+        nextErrors.mainSubjects = `Select exactly ${MAX_MAIN_SUBJECTS} main subjects`;
+      }
+      if (!form.basketSubject) {
+        nextErrors.basketSubject = `Select exactly ${MAX_BASKET_SUBJECTS} basket subject`;
       }
       if (!form.declarationRules || !form.declarationAccuracy) {
         nextErrors.declaration = 'Both declarations are required';
@@ -203,7 +275,13 @@ export default function StudentRegistrationWizard({
     }
 
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+
+    const errKeys = Object.keys(nextErrors);
+    if (errKeys.length > 0) {
+      toast.error(nextErrors[errKeys[0]]);
+    }
+
+    return errKeys.length === 0;
   };
 
   const updateOlRow = (index: number, key: keyof OLResult, value: string) => {
@@ -215,19 +293,54 @@ export default function StudentRegistrationWizard({
     }));
   };
 
-  const toggleSubject = (subject: string) => {
-    setForm((prev) => {
-      const current = prev.subjects || [];
-      const updated = current.includes(subject)
-        ? current.filter((s) => s !== subject)
-        : [...current, subject];
+  // Multi-select, max 2: clicking a third subject is blocked with an error
+  const toggleMainSubject = (subject: string) => {
+    const already = (form.mainSubjects || []).includes(subject);
 
-      return {
+    if (!already && (form.mainSubjects || []).length >= 2) {
+      toast.error('Only 2 main subjects can be selected.');
+      return;
+    }
+
+    const nextMain = already
+      ? (form.mainSubjects || []).filter((s) => s !== subject)
+      : [...(form.mainSubjects || []), subject];
+
+    const combined = [...nextMain, form.basketSubject].filter(Boolean);
+
+    setForm((prev) => ({
+      ...prev,
+      mainSubjects: nextMain,
+      subjects: combined,
+      modules: combined,
+    }));
+  };
+
+  // Single-select: only one basket subject allowed. Same blocking behavior.
+  const selectBasketSubject = (subject: string) => {
+    if (form.basketSubject === subject) {
+      const combined = [...(form.mainSubjects || [])].filter(Boolean);
+      setForm((prev) => ({
         ...prev,
-        subjects: updated,
-        modules: updated,
-      };
-    });
+        basketSubject: '',
+        subjects: combined,
+        modules: combined,
+      }));
+      return;
+    }
+
+    if (form.basketSubject && form.basketSubject !== subject) {
+      toast.error('Only one basket subject can be selected.');
+      return;
+    }
+
+    const combined = [...(form.mainSubjects || []), subject].filter(Boolean);
+    setForm((prev) => ({
+      ...prev,
+      basketSubject: subject,
+      subjects: combined,
+      modules: combined,
+    }));
   };
 
   const submit = async () => {
@@ -236,7 +349,9 @@ export default function StudentRegistrationWizard({
     setSubmitting(true);
 
     const fullNameEnglish = form.fullNameEnglish?.trim() || form.name.trim();
-    const selectedSubjects = form.subjects || [];
+    const selectedSubjects = [...(form.mainSubjects || []), form.basketSubject].filter(
+      Boolean,
+    );
 
     try {
       await onSubmit({
@@ -358,8 +473,11 @@ export default function StudentRegistrationWizard({
               value={form.address}
               onChange={(e) => set('address', e.target.value)}
               rows={2}
-              className={`${inputCls()} resize-none`}
+              className={`${inputCls(errors.address)} resize-none`}
             />
+            {errors.address && (
+              <p className="mt-1 text-xs text-red-500">{errors.address}</p>
+            )}
           </label>
         </div>
       )}
@@ -422,8 +540,6 @@ export default function StudentRegistrationWizard({
             onChange={(value) => set('religion', value)}
             inputCls={inputCls}
           />
-
-         
 
           <Field
             label="Postal Code"
@@ -654,55 +770,103 @@ export default function StudentRegistrationWizard({
       {step === 5 && (
         <div className="space-y-5">
           <div>
-  <label className="block text-sm font-medium text-gray-700 mb-1">
-    Batch
-  </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Batch
+            </label>
 
-  <input
-    type="text"
-    value={form.batch}
-    onChange={(e) => handleChange('batch', e.target.value)}
-    placeholder="Enter batch (e.g. May 2026 Batch)"
-    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-  />
-</div>
+            <input
+              type="text"
+              value={form.batch}
+              onChange={(e) => handleChange('batch', e.target.value)}
+              placeholder="Enter batch (e.g. May 2026 Batch)"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+            />
+          </div>
+
           <div>
             <div className="mb-2 text-sm font-medium text-gray-700">
-              Subject Selection
+              Main Subjects <span className="text-red-500">*</span>
+              <span className="ml-1 text-xs font-normal text-gray-400">
+                (select exactly 2) — {(form.mainSubjects || []).length}/2 selected
+              </span>
+            </div>
+            <p className="mb-3 text-xs text-gray-500">
+              Select exactly {MAX_MAIN_SUBJECTS} Main Subjects and{' '}
+              {MAX_BASKET_SUBJECTS} Basket Subject.
+            </p>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {MAIN_SUBJECTS.map((subject) => {
+                const checked = (form.mainSubjects || []).includes(subject);
+                const limitReached = (form.mainSubjects || []).length >= MAX_MAIN_SUBJECTS;
+                const disabled = !checked && limitReached;
+
+                return (
+                  <label
+                    key={subject}
+                    className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${
+                      checked
+                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                        : disabled
+                          ? 'cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400'
+                          : 'border-gray-200 bg-white text-gray-700'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={disabled}
+                      onChange={() => toggleMainSubject(subject)}
+                    />
+                    <span>{subject}</span>
+                  </label>
+                );
+              })}
+            </div>
+
+            {errors.mainSubjects && (
+              <p className="mt-1 text-xs text-red-500">
+                {errors.mainSubjects}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <div className="mb-2 text-sm font-medium text-gray-700">
+              Basket Subjects <span className="text-red-500">*</span>
+              <span className="ml-1 text-xs font-normal text-gray-400">
+                (select only 1)
+              </span>
             </div>
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {modulesLoading ? (
-                <p className="text-sm text-gray-400">Loading modules...</p>
-              ) : modules.length === 0 ? (
-                <p className="text-sm text-gray-400">No modules found</p>
-              ) : (
-                modules.map((module) => {
-                  const checked = (form.subjects || []).includes(module.name);
+              {BASKET_SUBJECTS.map((subject) => {
+                const checked = form.basketSubject === subject;
 
-                  return (
-                    <label
-                      key={module._id || module.id || module.name}
-                      className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${
-                        checked
-                          ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                          : 'border-gray-200 bg-white text-gray-700'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleSubject(module.name)}
-                      />
-                      <span>{module.name}</span>
-                    </label>
-                  );
-                })
-              )}
+                return (
+                  <label
+                    key={subject}
+                    className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${
+                      checked
+                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                        : 'border-gray-200 bg-white text-gray-700'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => selectBasketSubject(subject)}
+                    />
+                    <span>{subject}</span>
+                  </label>
+                );
+              })}
             </div>
 
-            {errors.subjects && (
-              <p className="mt-1 text-xs text-red-500">{errors.subjects}</p>
+            {errors.basketSubject && (
+              <p className="mt-1 text-xs text-red-500">
+                {errors.basketSubject}
+              </p>
             )}
           </div>
 
@@ -719,8 +883,12 @@ export default function StudentRegistrationWizard({
               <span>Batch: {form.batch || '-'}</span>
               <span>
                 Subjects:{' '}
-                {(form.subjects || []).length > 0
-                  ? form.subjects.join(', ')
+                {[...(form.mainSubjects || []), form.basketSubject]
+                  .filter(Boolean)
+                  .length > 0
+                  ? [...(form.mainSubjects || []), form.basketSubject]
+                      .filter(Boolean)
+                      .join(', ')
                   : '-'}
               </span>
             </div>

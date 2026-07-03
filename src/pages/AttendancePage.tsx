@@ -11,8 +11,6 @@ import { useToast } from '@/hooks/useToast';
 import Toast from '@/components/common/Toast';
 import DeleteModal from '@/components/common/DeleteModal';
 
-const BATCHES = ['', 'May 2024 Batch', 'September 2024 Batch', 'January 2025 Batch', 'May 2025 Batch'];
-
 function formatDate(dateStr: string) {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return dateStr;
@@ -239,7 +237,7 @@ function CompactDatePicker({
 export default function AttendancePage() {
   const router = useRouter();
   const { toasts, addToast, removeToast } = useToast();
-  // ── Existing state ──────────────────────────────────────────────────────────
+
   const [modules, setModules] = useState<ApiModule[]>([]);
   const [students, setStudents] = useState<ApiStudent[]>([]);
   const [attendances, setAttendances] = useState<ApiAttendance[]>([]);
@@ -249,12 +247,15 @@ export default function AttendancePage() {
   const [filterDate, setFilterDate] = useState('');
   const [search, setSearch] = useState('');
 
-  // ── Collapsible row state ───────────────────────────────────────────────────
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
 
-  // ── Delete modal state ──────────────────────────────────────────────────────
   const [deleteTarget, setDeleteTarget] = useState<ApiAttendance | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // ✅ Derive BATCHES dynamically from loaded students — no hardcode
+  const BATCHES = Array.from(
+    new Set(students.map(s => s.batch).filter(Boolean))
+  ) as string[];
 
   useEffect(() => {
     Promise.all([getModules(), getStudents()])
@@ -277,8 +278,6 @@ export default function AttendancePage() {
     fetchAttendance(filterDate || undefined);
   }, [filterDate, fetchAttendance]);
 
-
-  // ── markAttendance (keep existing logic) ────────────────────────────────────
   const markAttendance = async (studentId: string, moduleId: string, status: 'present' | 'absent') => {
     try {
       const existing = attendances.find(a => a.studentId === studentId && a.moduleId === moduleId);
@@ -312,7 +311,6 @@ export default function AttendancePage() {
     }
   };
 
-  // ── Grouped data for collapsible table ──────────────────────────────────────
   const filteredAttendances = attendances.filter(a => {
     const student = students.find(s => s.studentId === a.studentId);
     const matchModule = !filterModule || a.moduleId === filterModule;
@@ -340,7 +338,6 @@ export default function AttendancePage() {
     }
   }, [groupedModuleKeys.join('|'), expandedModules.size]);
 
-  // ── Summary counts — derived from filteredAttendances (same source as table) ─
   const totalStudents = new Set(filteredAttendances.map(a => a.studentId)).size;
   const totalPresent = filteredAttendances.filter(a => a.status === 'present').length;
   const totalAbsent = filteredAttendances.filter(a => a.status === 'absent').length;
@@ -370,7 +367,7 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      {/* Summary cards (unchanged) */}
+      {/* Summary cards */}
       <div className="mb-4 grid grid-cols-1 gap-2 md:mb-6 md:grid-cols-3 md:gap-4">
         <div className="rounded-lg border border-gray-100 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-4">
           <div className="flex items-center gap-3">
@@ -415,6 +412,7 @@ export default function AttendancePage() {
               Clear Filter
             </button>
           )}
+
           <CompactSelect
             value={filterBatch}
             onChange={setFilterBatch}
@@ -435,9 +433,21 @@ export default function AttendancePage() {
               })),
             ]}
           />
+
+          {/* ✅ Dynamic batch dropdown — from loaded students */}
+          <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)} className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl sm:text-sm">
+            <option value="">All Batches</option>
+            {BATCHES.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+
+          <select value={filterModule} onChange={e => setFilterModule(e.target.value)} className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl sm:text-sm">
+            <option value="">All Modules</option>
+            {modules.map(m => <option key={m._id} value={m._id}>{m.name}</option>)}
+          </select>
         </div>
       </div>
 
+      {/* Mobile Cards */}
       <div className="space-y-3 md:hidden">
         {Object.entries(groupedByModule).map(([moduleName, records]) => {
           const isExpanded = expandedModules.has(moduleName);
@@ -561,7 +571,7 @@ export default function AttendancePage() {
         )}
       </div>
 
-      {/* Collapsible Attendance Table */}
+      {/* Desktop Table */}
       <div className="hidden overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm md:block">
         <div className="overflow-x-auto">
           <table className="w-full table-fixed">
@@ -586,7 +596,6 @@ export default function AttendancePage() {
 
                 return (
                   <Fragment key={moduleName}>
-                    {/* Outer row */}
                     <tr
                       className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
                       onClick={() => toggleModule(moduleName)}
@@ -605,7 +614,6 @@ export default function AttendancePage() {
                       <td className="px-4 py-3 text-center text-xs font-medium text-gray-600">{uniqueStudents}</td>
                     </tr>
 
-                    {/* Inner expanded table */}
                     {isExpanded && (
                       <tr>
                         <td colSpan={6} className="p-0 border-b border-gray-100">
@@ -706,7 +714,7 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      {/* Attendance Legend */}
+      {/* Legend */}
       <div className="mt-4 flex items-center gap-4 text-xs text-gray-500">
         <span className="flex items-center gap-1.5"><span className="w-5 h-5 bg-emerald-500 rounded text-white text-xs flex items-center justify-center font-bold">P</span> Present</span>
         <span className="flex items-center gap-1.5"><span className="w-5 h-5 bg-red-500 rounded text-white text-xs flex items-center justify-center font-bold">A</span> Absent</span>

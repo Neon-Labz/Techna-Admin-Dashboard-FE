@@ -27,6 +27,9 @@ export interface ApiModule {
   fee: number;
   batch: string;
   status: 'active' | 'inactive';
+  term?: string;
+  unit?: number;
+  subjectCategory?: 'main' | 'basket' | 'none';
   resources: ApiResource[];
   createdAt: string;
   updatedAt: string;
@@ -109,6 +112,9 @@ export interface CreateModuleDto {
   fee: number;
   batch: string;
   status?: 'active' | 'inactive';
+  term?: string;
+  unit?: number;
+  subjectCategory?: 'main' | 'basket' | 'none';
 }
 
 export interface UpdateModuleDto {
@@ -120,6 +126,9 @@ export interface UpdateModuleDto {
   fee?: number;
   batch?: string;
   status?: 'active' | 'inactive';
+  term?: string;
+  unit?: number;
+  subjectCategory?: 'main' | 'basket' | 'none';
 }
 
 export interface CreateVideoDto {
@@ -152,8 +161,13 @@ export interface AttendanceFilters {
 
 // ─── Axios instance ────────────────────────────────────────────────────────────
 
+// Every call site in this file already prefixes its path with '/api/'
+// (e.g. api.get('/api/modules')), so the baseURL must be the bare host —
+// strip a trailing '/api' from the shared env var to avoid '/api/api/...'.
+const API_HOST = (process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:4000/api').replace(/\/api\/?$/, '');
+
 const api: AxiosInstance = axios.create({
-  baseURL: 'http://localhost:4000',
+  baseURL: API_HOST,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -229,8 +243,8 @@ export const updatePayment = (id: string, data: Partial<ApiPayment>): Promise<Ap
 
 // ─── Modules ───────────────────────────────────────────────────────────────────
 
-export const getModules = (): Promise<ApiModule[]> =>
-  api.get<ApiModule[]>('/api/modules').then((r) => r.data);
+export const getModules = (status?: string): Promise<ApiModule[]> =>
+  api.get<ApiModule[]>('/api/modules', { params: status ? { status } : undefined }).then((r) => r.data);
 
 export const getModuleById = (id: string): Promise<ApiModule> =>
   api.get<ApiModule>(`/api/modules/${id}`).then((r) => r.data);
@@ -246,8 +260,8 @@ export const deleteModule = (id: string): Promise<{ message: string }> =>
 
 // ─── Teachers ──────────────────────────────────────────────────────────────────
 
-export const getTeachers = (): Promise<ApiTeacher[]> =>
-  api.get<ApiTeacher[]>('/api/teachers').then((r) => r.data);
+export const getTeachers = (status?: string): Promise<ApiTeacher[]> =>
+  api.get<ApiTeacher[]>('/api/teachers', { params: status ? { status } : undefined }).then((r) => r.data);
 
 // ─── Students ──────────────────────────────────────────────────────────────────
 

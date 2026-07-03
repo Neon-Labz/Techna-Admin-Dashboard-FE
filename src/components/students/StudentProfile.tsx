@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Student, PaymentRecord } from '../../types';
 import { useDataStore } from '../../store/dataStore';
+import { attendanceApi } from '@/api/attendance.api';
+import { paymentApi } from '@/api/payment.api';
 import {
   X,
   Download,
@@ -112,6 +114,8 @@ export default function StudentProfile({
 
   const [showPayModal, setShowPayModal] = useState(false);
   const [qrImageFailed, setQrImageFailed] = useState(false);
+  const [localAttendance, setLocalAttendance] = useState<any[]>(s.attendance || []);
+  const [localPayments, setLocalPayments] = useState<any[]>(s.payments || []);
   const [payForm, setPayForm] = useState<{
     moduleId: string;
     amount: string;
@@ -169,17 +173,21 @@ export default function StudentProfile({
     setQrImageFailed(false);
   }, [s.id, s._id, s.qrCodeUrl]);
 
+  useEffect(() => {
+    if (!s.studentId) return;
+    attendanceApi.getByStudent(s.studentId).then(setLocalAttendance).catch(() => {});
+    paymentApi.getByStudent(s.studentId || s.id).then(setLocalPayments).catch(() => {});
+  }, [s.studentId, s.id]);
+
   const getAttendanceStatus = (moduleId: string) => {
-    const attendance = s.attendance || [];
-    const rec = attendance.find(
-      (a: any) => a.moduleId === moduleId && a.date === today,
+    const rec = localAttendance.find(
+      (a: any) => a.moduleId === moduleId && (a.date === today || String(a.date).startsWith(today)),
     );
     return rec?.status || null;
   };
 
   const getModulePayment = (moduleId: string) => {
-    const payments = s.payments || [];
-    return payments.find(
+    return localPayments.find(
       (p: any) => p.moduleId === moduleId && p.status === 'paid',
     );
   };
@@ -247,11 +255,41 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
     }
   };
 
-  const handlePaySubmit = (e: React.FormEvent) => {
+  const handleAttendanceClick = async (
+    moduleId: string,
+    moduleName: string,
+    date: string,
+    status: 'present' | 'absent',
+  ) => {
+    onAttendanceUpdate(moduleId, date, status);
+    setLocalAttendance(prev => {
+      const filtered = prev.filter(
+        (a: any) => !(a.moduleId === moduleId && (a.date === date || String(a.date).startsWith(date))),
+      );
+      return [...filtered, { moduleId, date, status }];
+    });
+    try {
+      await attendanceApi.markAttendance({
+        studentId: s.studentId,
+        moduleId,
+        moduleName,
+        date,
+        status,
+      });
+    } catch (err: any) {
+      if (err?.response?.status !== 409) {
+        toast.error('Failed to save attendance');
+      }
+    }
+  };
+
+  const handlePaySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const mod: any = studentModules.find((m: any) => m.id === payForm.moduleId);
     if (!mod) return;
+
+    const receiptNo = `REC-${Date.now()}`;
 
     onPaymentAdd({
       studentId: s.id || s._id,
@@ -262,9 +300,28 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
       paidDate: payForm.paidDate,
       method: payForm.method,
       status: 'paid',
-      receiptNo: `REC-${Date.now()}`,
+      receiptNo,
       batch: s.batch,
     });
+
+    try {
+      const saved = await paymentApi.create({
+        studentId: s.studentId || s.id || s._id,
+        studentName: studentName,
+        moduleId: payForm.moduleId,
+        moduleName: mod.name,
+        amount: Number(payForm.amount),
+        paidDate: payForm.paidDate,
+        method: payForm.method,
+        status: 'paid',
+        receiptNo,
+        batch: s.batch,
+      });
+      setLocalPayments(prev => [...prev, saved]);
+    } catch (err) {
+      console.error('Payment API failed:', err);
+      toast.error('Payment saved locally but failed to sync to server');
+    }
 
     setShowPayModal(false);
     setPayForm({
@@ -333,8 +390,16 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
               <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
                 <div className="rounded-t-2xl bg-gradient-to-r from-indigo-500 to-purple-500 px-4 py-3 text-white">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/30 bg-white/20 text-xl font-bold">
-                      {studentName.charAt(0).toUpperCase()}
+                    <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-white/30 bg-white/20 text-xl font-bold">
+                      {(s.avatar || s.profilePhoto) ? (
+                        <img
+                          src={s.avatar || s.profilePhoto}
+                          alt={studentName}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span>{studentName.charAt(0).toUpperCase()}</span>
+                      )}
                     </div>
 
                     <div className="min-w-0">
@@ -455,7 +520,7 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
                         <div className="flex gap-2">
                           <button
                             onClick={() =>
-                              onAttendanceUpdate(m.id, today, 'present')
+                              handleAttendanceClick(m.id, m.name, today, 'present')
                             }
                             className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
                               att === 'present'
@@ -468,7 +533,7 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
 
                           <button
                             onClick={() =>
-                              onAttendanceUpdate(m.id, today, 'absent')
+                              handleAttendanceClick(m.id, m.name, today, 'absent')
                             }
                             className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
                               att === 'absent'
