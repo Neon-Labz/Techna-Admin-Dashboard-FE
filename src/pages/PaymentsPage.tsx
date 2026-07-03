@@ -185,8 +185,6 @@ function PaymentModal({
 
   const [form, setForm] = useState({
     studentId: initialData?.studentId ?? '',
-    moduleId:  initialData?.moduleId  ?? '',
-    amount:    initialData?.amount != null ? String(initialData.amount) : '',
     paidDate:  initialData?.paidDate  ?? new Date().toISOString().split('T')[0],
     method:    (initialData?.method   ?? 'cash') as 'cash' | 'bank' | 'online',
     status:    (initialData?.status   ?? 'paid') as 'paid' | 'pending' | 'overdue',
@@ -194,19 +192,29 @@ function PaymentModal({
     notes:     initialData?.notes     ?? '',
   });
 
-  // ── Multi-subject selection state (Add mode only) ──────────────────────────
-  // Each selected module gets its own editable fee amount, defaulting to
-  // FEE_STRUCTURE.subjectFee.
+  // ── Multi-subject selection state (used in BOTH Add and Edit mode). In Add
+  // mode this starts empty; in Edit mode it's seeded from every payment
+  // record that shares the same student + payment date as the record being
+  // edited, so the whole "batch" of subjects/fees recorded that day can be
+  // reviewed and adjusted together, not just the single record clicked. ──
   const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>([]);
   const [subjectFees,       setSubjectFees]       = useState<Record<string, string>>({});
 
-  // ── Additional one-time fees (Admission, ID Card, etc. — Add mode only) ───
+  // ── Additional one-time fees (Admission, ID Card, etc.) — used in BOTH modes. ──
   // includedFeeIds holds the ids of ADDITIONAL_FEES currently checked;
   // feeAmounts holds their (editable) amounts, keyed by the same id.
   const [includedFeeIds, setIncludedFeeIds] = useState<string[]>([]);
   const [feeAmounts,     setFeeAmounts]     = useState<Record<string, string>>(
     Object.fromEntries(ADDITIONAL_FEES.map(f => [f.id, String(f.defaultAmount)]))
   );
+
+  // ── Edit mode only: maps a selection key ("subject:<moduleId>" or
+  // "fee:<feeType>") to the ALREADY-SAVED PaymentRecord it corresponds to.
+  // On submit, keys present here are updated (paymentApi.update); keys with
+  // no entry here are brand new and get created (paymentApi.create). Items
+  // that existed here but get unchecked are simply left untouched on the
+  // server — this UI can add and edit records, not delete them. ──
+  const [existingRecordMap, setExistingRecordMap] = useState<Record<string, PaymentRecord>>({});
 
   useEffect(() => {
     (async () => {
@@ -322,26 +330,64 @@ function PaymentModal({
       // Merge with (don't overwrite) the enrollment-based ids, so a student who
       // has enrolled in 6 modules but only paid for 1 still sees all 6 as options.
       setRegisteredModuleIds(prev => [...new Set([...prev, ...paymentIds])] as string[]);
-      // First-time payer detection: no prior payment records at all →
-      // pre-tick the Admission Fee checkbox for convenience (still editable).
-      setIsFirstPayment(merged.length === 0);
-      setIncludedFeeIds(merged.length === 0 ? ['admission'] : []);
+
+      if (isEdit && initialData) {
+        // ── Edit mode: seed the multi-subject / additional-fee selection from
+        // every payment record that shares the same student + payment date as
+        // the record being edited (i.e. the whole "batch" recorded that day),
+        // so the user can review, edit, and add to all of them at once. ──
+        const group = merged.filter(p => p.paidDate === initialData.paidDate);
+        if (!group.some(p => p.id === initialData.id)) group.push(initialData);
+
+        const map: Record<string, PaymentRecord> = {};
+        const subjIds: string[] = [];
+        const subjFeesInit: Record<string, string> = {};
+        const feeIdsInit: string[] = [];
+        const feeAmountsInit: Record<string, string> = Object.fromEntries(
+          ADDITIONAL_FEES.map(f => [f.id, String(f.defaultAmount)])
+        );
+
+        group.forEach(p => {
+          if (p.feeType && p.feeType !== 'subject') {
+            map[`fee:${p.feeType}`] = p;
+            feeIdsInit.push(p.feeType);
+            feeAmountsInit[p.feeType] = String(p.amount);
+          } else if (p.moduleId) {
+            map[`subject:${p.moduleId}`] = p;
+            subjIds.push(p.moduleId);
+            subjFeesInit[p.moduleId] = String(p.amount);
+          }
+        });
+
+        setExistingRecordMap(map);
+        setSelectedModuleIds(subjIds);
+        setSubjectFees(subjFeesInit);
+        setIncludedFeeIds(feeIdsInit);
+        setFeeAmounts(feeAmountsInit);
+        setRegisteredModuleIds(prev => [...new Set([...prev, ...subjIds])]);
+      } else {
+        // First-time payer detection: no prior payment records at all →
+        // pre-tick the Admission Fee checkbox for convenience (still editable).
+        setIsFirstPayment(merged.length === 0);
+        setIncludedFeeIds(merged.length === 0 ? ['admission'] : []);
+      }
     } catch {
       // retain nameBasedIds already applied
     } finally {
       setFetchingMods(false);
     }
-  }, [allModules]);
+  }, [allModules, isEdit, initialData]);
 
   const handleStudentChange = async (studentId: string) => {
     const s = students.find(x => x._id === studentId);
-    setForm(f => ({ ...f, studentId, moduleId: '', batch: s?.batch ?? f.batch }));
+    setForm(f => ({ ...f, studentId, batch: s?.batch ?? f.batch }));
     setRegisteredModuleIds([]);
     setUnmatchedNames([]);
     setSelectedModuleIds([]);
     setSubjectFees({});
     setIsFirstPayment(false);
     setIncludedFeeIds([]);
+    setExistingRecordMap({});
     if (!studentId || !s) return;
     await loadEnrollmentForStudent(s);
   };
@@ -405,44 +451,12 @@ function PaymentModal({
   }, [selectedModuleIds, subjectFees, includedFeeIds, feeAmounts]);
 
   const handleSubmit = async () => {
-    // ── Edit mode keeps the original single-record flow ──
-    if (isEdit) {
-      if (!form.studentId || !form.moduleId || !form.amount || !form.paidDate) {
-        toast.error('Please fill all required fields');
-        return;
-      }
-      const student   = students.find(s => s._id === form.studentId);
-      const moduleRec = allModules.find(m => m.id === form.moduleId);
-      const payload: CreatePaymentPayload = {
-        studentId:   form.studentId,
-        studentName: student?.name,
-        moduleId:    form.moduleId,
-        moduleName:  moduleRec?.name,
-        feeType:     'subject',
-        amount:      Number(form.amount),
-        paidDate:    form.paidDate,
-        method:      form.method,
-        status:      form.status,
-        batch:       form.batch || student?.batch || 'N/A',
-        notes:       form.notes || undefined,
-      };
-      setSaving(true);
-      try {
-        const result = await paymentApi.update(initialData!.id, payload);
-        toast.success('Payment updated successfully!');
-        onSuccess(result);
-        onClose();
-      } catch (err: unknown) {
-        const axiosErr = err as { response?: { data?: { message?: string | string[] } } };
-        const msg = axiosErr?.response?.data?.message ?? 'Failed to update payment';
-        toast.error(Array.isArray(msg) ? msg.join(', ') : (msg as string));
-      } finally {
-        setSaving(false);
-      }
-      return;
-    }
-
-    // ── Add mode: multi-subject + additional fees, EACH as its own payment record ──
+    // ── Both Add and Edit mode now use the same multi-subject + additional-fees
+    // flow. Each selected chip/checkbox becomes one line item. In Edit mode,
+    // a line item that matches an ALREADY-SAVED record (via existingRecordMap)
+    // is updated in place; anything new gets created as a fresh record. Items
+    // that were checked originally but got unchecked are simply left alone on
+    // the server — this form can add and edit, but not delete, records. ──
     if (!form.studentId || !form.paidDate) {
       toast.error('Please select a student and payment date');
       return;
@@ -455,20 +469,23 @@ function PaymentModal({
     const student = students.find(s => s._id === form.studentId);
 
     // ── Plain subject line items — amounts are NEVER touched by extra fees ──
-    const subjectLineItems: CreatePaymentPayload[] = selectedModuleIds.map((id) => {
+    const subjectLineItems: { key: string; payload: CreatePaymentPayload }[] = selectedModuleIds.map((id) => {
       const moduleRec = allModules.find(m => m.id === id);
       return {
-        studentId:   form.studentId,
-        studentName: student?.name,
-        moduleId:    id,
-        moduleName:  moduleRec?.name,
-        feeType:     'subject',
-        amount:      Number(subjectFees[id]) || 0,
-        paidDate:    form.paidDate,
-        method:      form.method,
-        status:      form.status,
-        batch:       form.batch || student?.batch || 'N/A',
-        notes:       form.notes || undefined,
+        key: `subject:${id}`,
+        payload: {
+          studentId:   form.studentId,
+          studentName: student?.name,
+          moduleId:    id,
+          moduleName:  moduleRec?.name,
+          feeType:     'subject',
+          amount:      Number(subjectFees[id]) || 0,
+          paidDate:    form.paidDate,
+          method:      form.method,
+          status:      form.status,
+          batch:       form.batch || student?.batch || 'N/A',
+          notes:       form.notes || undefined,
+        },
       };
     });
 
@@ -478,35 +495,54 @@ function PaymentModal({
     // never checks them against the (student, module, month) uniqueness
     // rule, so they never collide with a subject's payment slot and never
     // require a matching Module/Subject record to exist. ──
-    const feeLineItems: CreatePaymentPayload[] = includedFeeIds.map(id => {
+    const feeLineItems: { key: string; payload: CreatePaymentPayload }[] = includedFeeIds.map(id => {
       const fee = ADDITIONAL_FEES.find(f => f.id === id)!;
       return {
-        studentId:   form.studentId,
-        studentName: student?.name,
-        feeType:     id as 'admission' | 'idcard',
-        moduleName:  fee.label,
-        amount:      Number(feeAmounts[id]) || 0,
-        paidDate:    form.paidDate,
-        method:      form.method,
-        status:      form.status,
-        batch:       form.batch || student?.batch || 'N/A',
-        notes:       form.notes || undefined,
+        key: `fee:${id}`,
+        payload: {
+          studentId:   form.studentId,
+          studentName: student?.name,
+          feeType:     id as 'admission' | 'idcard',
+          moduleName:  fee.label,
+          amount:      Number(feeAmounts[id]) || 0,
+          paidDate:    form.paidDate,
+          method:      form.method,
+          status:      form.status,
+          batch:       form.batch || student?.batch || 'N/A',
+          notes:       form.notes || undefined,
+        },
       };
     });
 
-    const lineItems: CreatePaymentPayload[] = [...subjectLineItems, ...feeLineItems];
+    const lineItems = [...subjectLineItems, ...feeLineItems];
 
     setSaving(true);
     try {
-      // Create sequentially so receipt numbering / any server-side ordering
-      // stays predictable, and so a failure partway through is easy to spot
-      // instead of firing all requests at once and losing track of which failed.
-      for (const payload of lineItems) {
-        const result = await paymentApi.create(payload);
-        onSuccess(result);
+      // Sequential so receipt numbering / any server-side ordering stays
+      // predictable, and a failure partway through is easy to spot instead
+      // of firing all requests at once and losing track of which failed.
+      let updatedCount = 0;
+      let createdCount = 0;
+      for (const item of lineItems) {
+        const existing = isEdit ? existingRecordMap[item.key] : undefined;
+        if (existing) {
+          const result = await paymentApi.update(existing.id, item.payload);
+          onSuccess(result);
+          updatedCount++;
+        } else {
+          const result = await paymentApi.create(item.payload);
+          onSuccess(result);
+          createdCount++;
+        }
       }
+
+      const parts: string[] = [];
+      if (updatedCount) parts.push(`${updatedCount} updated`);
+      if (createdCount) parts.push(`${createdCount} added`);
       toast.success(
-        lineItems.length > 1
+        parts.length > 0
+          ? `Payment ${parts.join(', ')} successfully!`
+          : lineItems.length > 1
           ? `${lineItems.length} payments recorded successfully!`
           : 'Payment recorded successfully!'
       );
@@ -551,56 +587,10 @@ function PaymentModal({
             </select>
           </div>
 
-          {isEdit ? (
-            <>
-              {/* ── Edit mode: original single-module dropdown, unchanged ── */}
-              <div className="col-span-2 flex flex-col gap-1">
-                <div className="flex items-center justify-between">
-                  <Label text="Module" required />
-                  {fetchingMods && (
-                    <span className="text-xs text-gray-400">Loading…</span>
-                  )}
-                  {isFiltered && (
-                    <span className="text-xs text-indigo-500 font-medium">
-                      {filteredModules.length} enrolled module{filteredModules.length !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                  {showingAllModulesFallback && (
-                    <span className="text-xs text-amber-500">No enrolment data — showing all</span>
-                  )}
-                </div>
-                <select
-                  value={form.moduleId}
-                  onChange={e => setForm(f => ({ ...f, moduleId: e.target.value }))}
-                  disabled={!form.studentId || fetchingMods}
-                  className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed">
-                  <option value="">
-                    {fetchingMods ? 'Loading modules…' : form.studentId ? 'Select module…' : 'Select a student first'}
-                  </option>
-                  {filteredModules.map(m => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </select>
-                {unmatchedNames.length > 0 && (
-                  <p className="mt-1 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5 leading-snug">
-                    Registered but no matching Module record found for:{' '}
-                    <span className="font-medium">{unmatchedNames.join(', ')}</span>.
-                    Add these in Module management, or check the spelling matches
-                    exactly what's in the student's subject list.
-                  </p>
-                )}
-              </div>
-              <div className="flex flex-col gap-1">
-                <Label text="Amount (LKR)" required />
-                <input type="number" min={0} value={form.amount}
-                  onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                  placeholder="e.g. 10000"
-                  className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </div>
-            </>
-          ) : (
-            <>
-              {/* ── Add mode: multi-subject checklist + additional fees ── */}
+          <>
+              {/* ── Multi-subject checklist + additional fees — used in both
+                   Add mode (fresh selection) and Edit mode (pre-seeded from
+                   every record saved for this student on this payment date). ── */}
               <div className="col-span-2 flex flex-col gap-1">
                 <div className="flex items-center justify-between">
                   <Label text="Subjects / Modules" required />
@@ -742,8 +732,7 @@ function PaymentModal({
                 <span className="text-sm font-medium text-indigo-600">Total Amount</span>
                 <span className="text-lg font-bold text-indigo-700">LKR {totalAmount.toLocaleString()}</span>
               </div>
-            </>
-          )}
+          </>
 
           <div className="flex flex-col gap-1">
             <Label text="Payment Date" required />
@@ -855,8 +844,11 @@ function StudentTableRow({
     return earliest;
   }, [payments, year]);
 
-  const toggleTracking = useCallback(async () => {
-    if (tracking) { setExpanded(e => !e); return; }
+  // ── Fetch logic extracted so it can be called both on user click AND
+  // automatically whenever this student's payment records change (e.g. a
+  // new payment was just added / edited), without needing a full page
+  // refresh to see the updated 12-month calendar. ──
+  const fetchTracking = useCallback(async () => {
     setLoadingTrack(true);
     try {
       const res  = await fetch(
@@ -865,13 +857,34 @@ function StudentTableRow({
       );
       const json = await res.json();
       setTracking(json.data ?? json);
-      setExpanded(true);
     } catch {
       toast.error('Failed to load tracking for ' + studentId);
     } finally {
       setLoadingTrack(false);
     }
-  }, [studentId, year, token, tracking, fromMonth]);
+  }, [studentId, year, token, fromMonth]);
+
+  const toggleTracking = useCallback(async () => {
+    if (tracking) { setExpanded(e => !e); return; }
+    setExpanded(true);
+    await fetchTracking();
+  }, [tracking, fetchTracking]);
+
+  // ── Auto-refresh: whenever this student's `payments` prop changes (a
+  // payment was just added/edited for them), drop the cached tracking data
+  // and, if the calendar is currently open, refetch immediately — so the
+  // update shows up right away instead of only after a full page refresh. ──
+  const paymentsKey = useMemo(
+    () => payments.map(p => `${p.id}:${p.amount}:${p.status}:${p.paidDate}`).join('|'),
+    [payments]
+  );
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    setTracking(null);
+    if (expanded) fetchTracking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentsKey]);
 
   const paidSet    = useMemo(() => new Set(tracking?.paidMonths    ?? []), [tracking]);
   const pendingSet = useMemo(() => new Set(tracking?.pendingMonths ?? []), [tracking]);
@@ -1098,12 +1111,9 @@ function PaymentMobileCard({
     return earliest;
   }, [payments, year]);
 
-  const toggleTracking = useCallback(async () => {
-    if (tracking) {
-      setExpanded(e => !e);
-      return;
-    }
-
+  // ── Fetch logic extracted so it can be triggered both on click AND
+  // automatically when this student's payments change (see effect below). ──
+  const fetchTracking = useCallback(async () => {
     setLoadingTrack(true);
     try {
       const res = await fetch(
@@ -1112,13 +1122,37 @@ function PaymentMobileCard({
       );
       const json = await res.json();
       setTracking(json.data ?? json);
-      setExpanded(true);
     } catch {
       toast.error('Failed to load tracking for ' + studentId);
     } finally {
       setLoadingTrack(false);
     }
-  }, [fromMonth, studentId, token, tracking, year]);
+  }, [fromMonth, studentId, token, year]);
+
+  const toggleTracking = useCallback(async () => {
+    if (tracking) {
+      setExpanded(e => !e);
+      return;
+    }
+    setExpanded(true);
+    await fetchTracking();
+  }, [tracking, fetchTracking]);
+
+  // ── Auto-refresh: same fix as StudentTableRow — invalidate + refetch the
+  // cached tracking data whenever this student's payment records change, so
+  // a freshly added/edited payment shows up in the calendar immediately
+  // instead of needing a full page refresh. ──
+  const paymentsKey = useMemo(
+    () => payments.map(p => `${p.id}:${p.amount}:${p.status}:${p.paidDate}`).join('|'),
+    [payments]
+  );
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    setTracking(null);
+    if (expanded) fetchTracking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentsKey]);
 
   const paidSet = useMemo(() => new Set(tracking?.paidMonths ?? []), [tracking]);
   const pendingSet = useMemo(() => new Set(tracking?.pendingMonths ?? []), [tracking]);
