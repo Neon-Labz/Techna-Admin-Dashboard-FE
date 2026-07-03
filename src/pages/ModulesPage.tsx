@@ -54,11 +54,6 @@ const EMPTY_FORM: FormState = {
 
 
 
-const capitalizeWords = (str: string) =>
-  str.trim().split(' ')
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(' ');
-
 function extractErrorMessage(err: unknown): string {
   if (isAxiosError(err)) {
     const msg = err.response?.data?.message;
@@ -227,7 +222,7 @@ export default function ModulesPage() {
     setSubmitting(true);
     try {
       const base: CreateModuleDto = {
-        name: capitalizeWords(form.name),
+        name: form.name.trim(),
         teacherId: form.teacherId,
         teacherName: form.teacherName,
         description: form.description.trim(),
