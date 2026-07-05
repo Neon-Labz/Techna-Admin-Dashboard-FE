@@ -33,14 +33,18 @@ export default function QRScanPage() {
           videoRef.current.srcObject = stream;
           videoRef.current.play();
         }
-        scan();
+        rafRef.current = requestAnimationFrame(scan);
       } catch {
         setCameraError('Camera access denied or not available.');
         setCameraActive(false);
       }
     };
 
-    const scan = () => {
+    let lastScan = 0;
+    const SCAN_INTERVAL = 200; // ms between decode attempts
+    const SCALE = 0.5;         // decode at half resolution for speed
+
+    const scan = (timestamp: number) => {
       if (stopped) return;
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -48,10 +52,15 @@ export default function QRScanPage() {
         rafRef.current = requestAnimationFrame(scan);
         return;
       }
+      if (timestamp - lastScan < SCAN_INTERVAL) {
+        rafRef.current = requestAnimationFrame(scan);
+        return;
+      }
+      lastScan = timestamp;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      canvas.width = video.videoWidth * SCALE;
+      canvas.height = video.videoHeight * SCALE;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(imageData.data, imageData.width, imageData.height);
