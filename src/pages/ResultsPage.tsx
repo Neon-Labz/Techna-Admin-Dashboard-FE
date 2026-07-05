@@ -74,12 +74,95 @@ const formatDate = (date?: string) => {
   return d.toLocaleDateString('en-GB');
 };
 
+type SelectOption = {
+  value: string;
+  label: string;
+};
+
+function CompactSelect({
+  value,
+  options,
+  placeholder,
+  onChange,
+  className = '',
+}: {
+  value: string;
+  options: SelectOption[];
+  placeholder: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = options.find((option) => option.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className={`relative min-w-0 ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-left text-sm outline-none focus:border-blue-500"
+      >
+        <span
+          className={selected ? 'truncate text-slate-700' : 'truncate text-slate-400'}
+        >
+          {selected?.label || placeholder}
+        </span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-slate-400" />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-50 mt-1 max-h-56 min-w-0 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+              className={`block w-full min-w-0 px-3 py-2 text-left text-sm hover:bg-blue-50 ${
+                option.value === value
+                  ? 'bg-blue-50 font-semibold text-blue-700'
+                  : 'text-slate-700'
+              }`}
+            >
+              <span className="block truncate">{option.label}</span>
+            </button>
+          ))}
+
+          {options.length === 0 && (
+            <p className="px-3 py-2 text-sm text-slate-400">No options</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ResultsPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [results, setResults] = useState<ResultItem[]>([]);
   const [studentSearch, setStudentSearch] = useState('');
   const [studentDropdown, setStudentDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const resultFormRef = useRef<HTMLDivElement>(null);
 
   const [selectedStudent, setSelectedStudent] = useState<{
     studentId: string;
@@ -217,7 +300,7 @@ export default function ResultsPage() {
   }, [students, flatResults, search, batchFilter, moduleFilter, examFilter]);
 
   const batches = Array.from(
-    new Set(students.map((s) => s.batch).filter(Boolean)),
+    new Set(students.map((s) => s.batch).filter((batch): batch is string => Boolean(batch))),
   );
 
   const modules = Array.from(
@@ -347,7 +430,12 @@ export default function ResultsPage() {
         })),
       );
       setEditingId(resultId);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      requestAnimationFrame(() => {
+        resultFormRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+      });
     } catch {
       toast.error('Failed to edit result');
     }
@@ -370,7 +458,10 @@ export default function ResultsPage() {
         <p className="mt-1 text-sm text-slate-500">Dashboard / Results</p>
       </div>
 
-      <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+      <div
+        ref={resultFormRef}
+        className="scroll-mt-24 rounded-xl border border-gray-100 bg-white p-4 shadow-sm"
+      >
         <h2 className="mb-4 text-base font-bold text-slate-900">
           {editingId ? 'Edit Result' : 'Add New Result'}
         </h2>
@@ -451,7 +542,7 @@ export default function ResultsPage() {
           </div>
         </div>
 
-        <div className="mt-4 hidden overflow-x-auto rounded-lg border border-gray-100 lg:block">
+        <div className="relative z-10 mt-4 hidden overflow-visible rounded-lg border border-gray-100 lg:block">
           <table className="w-full min-w-[850px] text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
               <tr>
@@ -477,37 +568,37 @@ export default function ResultsPage() {
                 return (
                   <tr key={index} className="border-t border-gray-100">
                     <td className="px-4 py-2">
-                      <select
+                      <CompactSelect
                         value={row.moduleName}
-                        onChange={(e) =>
-                          updateRow(index, 'moduleName', e.target.value)
+                        placeholder="Search module..."
+                        onChange={(nextValue) =>
+                          updateRow(index, 'moduleName', nextValue)
                         }
-                        className="w-full rounded-lg border border-gray-200 px-3 py-1.5 outline-none focus:border-blue-500"
-                      >
-                        <option value="">Search module...</option>
-                        {(selectedStudent?.modules || []).map((module) => (
-                          <option key={module} value={module}>
-                            {module}
-                          </option>
-                        ))}
-                      </select>
+                        className="w-full"
+                        options={(selectedStudent?.modules || []).map((module) => ({
+                          value: module,
+                          label: module,
+                        }))}
+                      />
                     </td>
 
                     <td className="px-4 py-2">
-                      <select
+                      <CompactSelect
                         value={row.examType}
-                        onChange={(e) =>
+                        placeholder="Select exam type"
+                        onChange={(nextValue) =>
                           updateRow(
                             index,
                             'examType',
-                            e.target.value as 'Mid exam' | 'Final exam',
+                            nextValue as 'Mid exam' | 'Final exam',
                           )
                         }
-                        className="w-full rounded-lg border border-gray-200 px-3 py-1.5 outline-none focus:border-blue-500"
-                      >
-                        <option value="Mid exam">Mid exam</option>
-                        <option value="Final exam">Final exam</option>
-                      </select>
+                        className="w-full"
+                        options={[
+                          { value: 'Mid exam', label: 'Mid exam' },
+                          { value: 'Final exam', label: 'Final exam' },
+                        ]}
+                      />
                     </td>
 
                     <td className="px-4 py-2">
@@ -586,40 +677,38 @@ export default function ResultsPage() {
                     <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">
                       Module / Subject
                     </label>
-                    <select
+                    <CompactSelect
                       value={row.moduleName}
-                      onChange={(e) =>
-                        updateRow(index, 'moduleName', e.target.value)
+                      placeholder="Search module..."
+                      onChange={(nextValue) =>
+                        updateRow(index, 'moduleName', nextValue)
                       }
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
-                    >
-                      <option value="">Search module...</option>
-                      {(selectedStudent?.modules || []).map((module) => (
-                        <option key={module} value={module}>
-                          {module}
-                        </option>
-                      ))}
-                    </select>
+                      options={(selectedStudent?.modules || []).map((module) => ({
+                        value: module,
+                        label: module,
+                      }))}
+                    />
                   </div>
 
                   <div>
                     <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">
                       Exam Type
                     </label>
-                    <select
+                    <CompactSelect
                       value={row.examType}
-                      onChange={(e) =>
+                      placeholder="Select exam type"
+                      onChange={(nextValue) =>
                         updateRow(
                           index,
                           'examType',
-                          e.target.value as 'Mid exam' | 'Final exam',
+                          nextValue as 'Mid exam' | 'Final exam',
                         )
                       }
-                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
-                    >
-                      <option value="Mid exam">Mid exam</option>
-                      <option value="Final exam">Final exam</option>
-                    </select>
+                      options={[
+                        { value: 'Mid exam', label: 'Mid exam' },
+                        { value: 'Final exam', label: 'Final exam' },
+                      ]}
+                    />
                   </div>
 
                   <div>
@@ -697,58 +786,58 @@ export default function ResultsPage() {
       </div>
 
       <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-6">
-        <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center">
-          <h2 className="mr-auto text-lg font-bold text-slate-900">
+        <div className="mb-4 space-y-3">
+          <h2 className="text-lg font-bold text-slate-900">
             Results List
           </h2>
 
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search student..."
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-          />
+          <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search student..."
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500 md:w-44"
+            />
 
-          <select
-            value={batchFilter}
-            onChange={(e) => setBatchFilter(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-          >
-            <option value="all">All Batches</option>
-            {batches.map((batch) => (
-              <option key={batch} value={batch}>
-                {batch}
-              </option>
-            ))}
-          </select>
+            <CompactSelect
+              value={batchFilter}
+              placeholder="All Batches"
+              onChange={setBatchFilter}
+              className="w-full md:w-36"
+              options={[
+                { value: 'all', label: 'All Batches' },
+                ...batches.map((batch) => ({ value: batch, label: batch })),
+              ]}
+            />
 
-          <select
-            value={moduleFilter}
-            onChange={(e) => setModuleFilter(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-          >
-            <option value="all">All Modules</option>
-            {modules.map((module) => (
-              <option key={module} value={module}>
-                {module}
-              </option>
-            ))}
-          </select>
+            <CompactSelect
+              value={moduleFilter}
+              placeholder="All Modules"
+              onChange={setModuleFilter}
+              className="w-full md:flex-1"
+              options={[
+                { value: 'all', label: 'All Modules' },
+                ...modules.map((module) => ({ value: module, label: module })),
+              ]}
+            />
 
-          <select
-            value={examFilter}
-            onChange={(e) => setExamFilter(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-500"
-          >
-            <option value="all">All Exam Types</option>
-            <option value="Mid exam">Mid exam</option>
-            <option value="Final exam">Final exam</option>
-          </select>
+            <CompactSelect
+              value={examFilter}
+              placeholder="All Exam Types"
+              onChange={setExamFilter}
+              className="w-full md:w-40"
+              options={[
+                { value: 'all', label: 'All Exam Types' },
+                { value: 'Mid exam', label: 'Mid exam' },
+                { value: 'Final exam', label: 'Final exam' },
+              ]}
+            />
 
-          <button className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-600">
-            <Filter className="h-4 w-4" />
-            Filter
-          </button>
+            <button className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-600 md:w-auto">
+              <Filter className="h-4 w-4" />
+              Filter
+            </button>
+          </div>
         </div>
 
        {/* Desktop Results Table */}

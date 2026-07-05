@@ -10,7 +10,12 @@ import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 import { paymentApi, PaymentRecord, CreatePaymentPayload } from '@/api/payment.api';
 import api from '@/lib/axios';
+import CompactSelect from '@/components/ui/CompactSelect';
+import CompactDatePicker from '@/components/ui/CompactDatePicker';
 import { useDataStore } from '@/store/dataStore';
+
+
+
 
 const MONTHS = [
   { num: '01', label: 'Jan' }, { num: '02', label: 'Feb' },
@@ -576,8 +581,19 @@ function PaymentModal({
         <div className="px-6 py-5 grid grid-cols-2 gap-4">
           <div className="col-span-2 flex flex-col gap-1">
             <Label text="Student" required />
+            <CompactSelect
+              value={form.studentId}
+              onChange={value => void handleStudentChange(value)}
+              options={[
+                { value: '', label: 'Select student...' },
+                ...students.map(s => ({
+                  value: s._id,
+                  label: `${s.name} (${s.studentId}) - ${s.status}`,
+                })),
+              ]}
+            />
             <select value={form.studentId} onChange={e => handleStudentChange(e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="hidden">
               <option value="">Select student…</option>
               {students.map(s => (
                 <option key={s._id} value={s._id}>
@@ -736,14 +752,27 @@ function PaymentModal({
 
           <div className="flex flex-col gap-1">
             <Label text="Payment Date" required />
+            <CompactDatePicker
+              value={form.paidDate}
+              onChange={value => setForm(f => ({ ...f, paidDate: value }))}
+            />
             <input type="date" value={form.paidDate}
               onChange={e => setForm(f => ({ ...f, paidDate: e.target.value }))}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="hidden" />
           </div>
           <div className="flex flex-col gap-1">
             <Label text="Method" required />
+            <CompactSelect
+              value={form.method}
+              onChange={value => setForm(f => ({ ...f, method: value as 'cash' | 'bank' | 'online' }))}
+              options={[
+                { value: 'cash', label: 'Cash' },
+                { value: 'bank', label: 'Bank Transfer' },
+                { value: 'online', label: 'Online' },
+              ]}
+            />
             <select value={form.method} onChange={e => setForm(f => ({ ...f, method: e.target.value as 'cash' | 'bank' | 'online' }))}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="hidden">
               <option value="cash">Cash</option>
               <option value="bank">Bank Transfer</option>
               <option value="online">Online</option>
@@ -751,8 +780,17 @@ function PaymentModal({
           </div>
           <div className="flex flex-col gap-1">
             <Label text="Status" required />
+            <CompactSelect
+              value={form.status}
+              onChange={value => setForm(f => ({ ...f, status: value as 'paid' | 'pending' | 'overdue' }))}
+              options={[
+                { value: 'paid', label: 'Paid' },
+                { value: 'pending', label: 'Pending' },
+                { value: 'overdue', label: 'Overdue' },
+              ]}
+            />
             <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as 'paid' | 'pending' | 'overdue' }))}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="hidden">
               <option value="paid">Paid</option>
               <option value="pending">Pending</option>
               <option value="overdue">Overdue</option>
@@ -1341,7 +1379,7 @@ export default function PaymentsPage() {
   useEffect(() => {
     fetchPayments();
     fetchStudents(); 
-  }, [fetchPayments]);
+  }, [fetchPayments, fetchStudents]);
 
   const allModules = Array.from(
     new Map(
@@ -2012,72 +2050,88 @@ export default function PaymentsPage() {
       </div>
 
       {/* ── Filters ── */}
-      <div className="mb-4 flex flex-row gap-2 sm:mb-5 sm:flex-row sm:gap-3">
-        <div className="relative flex-1">
+      <div className="mb-4 flex flex-wrap items-start gap-2 sm:mb-5 sm:gap-3 xl:flex-nowrap">
+        <div className="relative w-full flex-none xl:flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search student name or receipt no…"
             className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl sm:text-sm" />
         </div>
-        {/* ── Mobile filter dropdown ── */}
-        <details className="relative sm:hidden">
-          <summary className="flex h-full w-11 cursor-pointer list-none items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500">
+        <details className="w-full sm:hidden">
+          <summary className="flex h-10 w-11 cursor-pointer list-none items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500">
             <Filter className="h-4 w-4" />
           </summary>
-          <div className="absolute right-0 z-20 mt-2 grid w-52 gap-2 rounded-lg border border-gray-100 bg-white p-3 shadow-lg">
-           
-            <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              <option value="">All Batches</option>
-              {BATCHES.map(b => <option key={b} value={b}>{b}</option>)}
-            </select>
-            <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              <option value="">All Modules</option>
-              {allModules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              <option value="">All Status</option>
-              <option value="paid">Paid</option>
-              <option value="pending">Pending</option>
-              <option value="overdue">Overdue</option>
-            </select>
-            <select value={trackingYear} onChange={e => setTrackingYear(Number(e.target.value))}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              {[2024, 2025, 2026, 2027].map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
+          <div className="mt-2 grid w-full min-w-0 gap-2 rounded-lg border border-gray-100 bg-white p-3 shadow-sm">
+            <CompactSelect
+              value={filterBatch}
+              onChange={setFilterBatch}
+              options={BATCHES.map(b => ({ value: b, label: b || 'All Batches' }))}
+            />
+            <CompactSelect
+              value={filterModule}
+              onChange={setFilterModule}
+              options={[
+                { value: '', label: 'All Modules' },
+                ...allModules.map(m => ({ value: m.id, label: m.name })),
+              ]}
+            />
+            <CompactSelect
+              value={filterStatus}
+              onChange={setFilterStatus}
+              options={[
+                { value: '', label: 'All Status' },
+                { value: 'paid', label: 'Paid' },
+                { value: 'pending', label: 'Pending' },
+                { value: 'overdue', label: 'Overdue' },
+              ]}
+            />
+            <CompactSelect
+              value={String(trackingYear)}
+              onChange={value => setTrackingYear(Number(value))}
+              options={[2024, 2025, 2026, 2027].map(y => ({
+                value: String(y),
+                label: String(y),
+              }))}
+            />
           </div>
         </details>
-        {/* ── Desktop filters ── */}
-        <div className="hidden items-center gap-2 flex-wrap sm:flex">
+        <div className="hidden w-full flex-wrap items-center gap-2 sm:flex xl:w-auto xl:flex-nowrap">
           <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          
-          <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">All Batches</option>
-            {BATCHES.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-          <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">All Modules</option>
-            {allModules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">All Status</option>
-            <option value="paid">Paid</option>
-            <option value="pending">Pending</option>
-            <option value="overdue">Overdue</option>
-          </select>
-          <select value={trackingYear} onChange={e => setTrackingYear(Number(e.target.value))}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            {[2024, 2025, 2026, 2027].map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+          <CompactSelect
+            value={filterBatch}
+            onChange={setFilterBatch}
+            className="w-full sm:w-40"
+            options={BATCHES.map(b => ({ value: b, label: b || 'All Batches' }))}
+          />
+          <CompactSelect
+            value={filterModule}
+            onChange={setFilterModule}
+            className="w-full sm:w-48 xl:w-56"
+            options={[
+              { value: '', label: 'All Modules' },
+              ...allModules.map(m => ({ value: m.id, label: m.name })),
+            ]}
+          />
+          <CompactSelect
+            value={filterStatus}
+            onChange={setFilterStatus}
+            className="w-full sm:w-36"
+            options={[
+              { value: '', label: 'All Status' },
+              { value: 'paid', label: 'Paid' },
+              { value: 'pending', label: 'Pending' },
+              { value: 'overdue', label: 'Overdue' },
+            ]}
+          />
+          <CompactSelect
+            value={String(trackingYear)}
+            onChange={value => setTrackingYear(Number(value))}
+            className="w-full sm:w-24"
+            options={[2024, 2025, 2026, 2027].map(y => ({
+              value: String(y),
+              label: String(y),
+            }))}
+          />
         </div>
       </div>
 
