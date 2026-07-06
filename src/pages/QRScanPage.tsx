@@ -16,6 +16,8 @@ export default function QRScanPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number>(0);
+  const studentsRef = useRef(students);
+  useEffect(() => { studentsRef.current = students; }, [students]);
 
   const openStudent = (s: Student) => setScannedStudent(s);
 
@@ -24,6 +26,11 @@ export default function QRScanPage() {
     if (!cameraActive) return;
 
     let stopped = false;
+
+    const stopLocal = () => {
+      streamRef.current?.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    };
 
     const startCamera = async () => {
       try {
@@ -41,8 +48,7 @@ export default function QRScanPage() {
     };
 
     let lastScan = 0;
-    const SCAN_INTERVAL = 200; // ms between decode attempts
-    const SCALE = 0.5;         // decode at half resolution for speed
+    const SCAN_INTERVAL = 300;
 
     const scan = (timestamp: number) => {
       if (stopped) return;
@@ -59,21 +65,32 @@ export default function QRScanPage() {
       lastScan = timestamp;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      canvas.width = video.videoWidth * SCALE;
-      canvas.height = video.videoHeight * SCALE;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
       if (code?.data) {
+        console.log('QR raw data:', code.data);
         try {
           const parsed = JSON.parse(code.data);
-          const found = students.find(s => s.qrToken === parsed.qrToken);
+          const all = studentsRef.current;
+          // match by qrToken (StudentScanPopup QR) OR by studentId (StudentProfile QR)
+          const found = all.find(s =>
+            (parsed.qrToken && s.qrToken === parsed.qrToken) ||
+            (parsed.studentId && s.studentId === parsed.studentId)
+          );
           if (found) {
-            stopCamera();
+            stopLocal();
             openStudent(found);
             return;
           }
-        } catch { /* not our QR format, keep scanning */ }
+        } catch {
+          // plain text studentId fallback
+          const plain = code.data.trim();
+          const found = studentsRef.current.find(s => s.studentId === plain);
+          if (found) { stopLocal(); openStudent(found); return; }
+        }
       }
       rafRef.current = requestAnimationFrame(scan);
     };
@@ -83,7 +100,7 @@ export default function QRScanPage() {
     return () => {
       stopped = true;
       cancelAnimationFrame(rafRef.current);
-      stopCamera();
+      stopLocal();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameraActive]);
