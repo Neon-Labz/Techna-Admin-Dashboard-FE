@@ -407,7 +407,7 @@ export default function AttendancePage() {
                                       <td className="pl-12 pr-4 py-2.5 text-xs text-gray-600">{displayDate}</td>
                                       <td className="px-4 py-2.5 text-xs font-mono text-gray-500">{record.studentId}</td>
                                       <td className="px-4 py-2.5 text-xs text-gray-700">{studentName}</td>
-                                      <td className="px-4 py-2.5 text-xs text-gray-500">—</td>
+                                      <td className="px-4 py-2.5 text-xs text-gray-500">{formatTime(record.markedAt)}</td>
                                       <td className="px-4 py-2.5 text-center">
                                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                                           record.status === 'present'
