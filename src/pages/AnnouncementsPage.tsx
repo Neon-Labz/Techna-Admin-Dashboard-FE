@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Calendar,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Edit2,
   Megaphone,
   Trash2,
@@ -22,6 +25,253 @@ const emptyForm: Announcement = {
   content: '',
   author: 'Super Admin',
 };
+
+type SelectOption = {
+  value: string;
+  label: string;
+};
+
+function CompactSelect({
+  value,
+  options,
+  onChange,
+  onOpen,
+  className = '',
+}: {
+  value: string;
+  options: SelectOption[];
+  onChange: (value: string) => void;
+  onOpen?: () => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = options.find((option) => option.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [open]);
+
+  const toggleOpen = () => {
+    if (!open) onOpen?.();
+    setOpen((current) => !current);
+  };
+
+  return (
+    <div ref={ref} className={`relative min-w-0 ${className}`}>
+      <button
+        type="button"
+        onClick={toggleOpen}
+        className="flex h-11 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-4 text-left text-sm text-slate-900 outline-none focus:border-indigo-500"
+      >
+        <span className="truncate">{selected?.label || value}</span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-40 mt-1 max-h-56 min-w-0 overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+              className={`block w-full min-w-0 px-4 py-2 text-left text-sm hover:bg-indigo-50 ${
+                option.value === value
+                  ? 'bg-indigo-50 font-semibold text-indigo-700'
+                  : 'text-slate-700'
+              }`}
+            >
+              <span className="block truncate">{option.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const formatDateValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const parseDateValue = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+};
+
+function CompactDatePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedDate = parseDateValue(value);
+  const [viewDate, setViewDate] = useState(selectedDate || new Date());
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (selectedDate) setViewDate(selectedDate);
+  }, [value]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [open]);
+
+  const calendarDays = useMemo(() => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const startOffset = firstDay.getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const days: Array<number | null> = Array.from(
+      { length: startOffset },
+      () => null,
+    );
+
+    for (let day = 1; day <= totalDays; day += 1) {
+      days.push(day);
+    }
+
+    while (days.length % 7 !== 0) {
+      days.push(null);
+    }
+
+    return days;
+  }, [viewDate]);
+
+  const changeMonth = (offset: number) => {
+    setViewDate(
+      (current) => new Date(current.getFullYear(), current.getMonth() + offset, 1),
+    );
+  };
+
+  const selectDay = (day: number) => {
+    const nextDate = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
+    onChange(formatDateValue(nextDate));
+    setOpen(false);
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex h-11 w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-4 text-left text-sm text-slate-900 outline-none focus:border-indigo-500"
+      >
+        <span className={value ? 'truncate' : 'truncate text-slate-400'}>
+          {value || 'Select date'}
+        </span>
+        <Calendar className="h-4 w-4 shrink-0 text-slate-500" />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-40 mt-1 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => changeMonth(-1)}
+              className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            <p className="text-sm font-semibold text-slate-800">
+              {viewDate.toLocaleString('en-US', {
+                month: 'short',
+                year: 'numeric',
+              })}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => changeMonth(1)}
+              className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-slate-400">
+            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
+              <span key={day}>{day}</span>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1">
+            {calendarDays.map((day, index) => {
+              const dayValue = day
+                ? formatDateValue(
+                    new Date(viewDate.getFullYear(), viewDate.getMonth(), day),
+                  )
+                : '';
+              const selected = dayValue && dayValue === value;
+
+              return day ? (
+                <button
+                  key={dayValue}
+                  type="button"
+                  onClick={() => selectDay(day)}
+                  className={`h-8 rounded-lg text-xs font-semibold ${
+                    selected
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-700 hover:bg-indigo-50'
+                  }`}
+                >
+                  {day}
+                </button>
+              ) : (
+                <span key={`empty-${index}`} className="h-8" />
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AnnouncementsPage() {
   const formRef = useRef<HTMLDivElement | null>(null);
@@ -177,11 +427,9 @@ export default function AnnouncementsPage() {
               <label className="mb-1.5 block text-xs font-bold text-slate-800">
                 Date
               </label>
-              <input
-                type="date"
+              <CompactDatePicker
                 value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className="h-11 w-full rounded-lg border border-slate-300 px-4 text-sm text-slate-900 outline-none focus:border-indigo-500"
+                onChange={(date) => setForm({ ...form, date })}
               />
             </div>
 
@@ -189,29 +437,21 @@ export default function AnnouncementsPage() {
               <label className="mb-1.5 block text-xs font-bold text-slate-800">
                 Target Audience
               </label>
-              <div className="relative">
-                <select
-                  value={form.batch}
-                  onClick={loadBatches}
-                  onFocus={loadBatches}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      audience: 'All Students',
-                      batch: e.target.value,
-                    })
-                  }
-                  className="h-11 w-full appearance-none rounded-lg border border-slate-300 px-4 pr-10 text-sm text-slate-900 outline-none focus:border-indigo-500"
-                >
-                  <option value="None">All Students</option>
-                  {batches.map((batch) => (
-                    <option key={batch} value={batch}>
-                      {batch}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-700" />
-              </div>
+              <CompactSelect
+                value={form.batch || 'None'}
+                onOpen={loadBatches}
+                onChange={(value) =>
+                  setForm({
+                    ...form,
+                    audience: 'All Students',
+                    batch: value,
+                  })
+                }
+                options={[
+                  { value: 'None', label: 'All Students' },
+                  ...batches.map((batch) => ({ value: batch, label: batch })),
+                ]}
+              />
             </div>
           </div>
 
@@ -257,24 +497,17 @@ export default function AnnouncementsPage() {
             Recent Announcements
           </h2>
 
-          <div className="relative w-full sm:w-auto">
-            <select
-              value={filterBatch}
-              onClick={loadBatches}
-              onFocus={loadBatches}
-              onChange={(e) => setFilterBatch(e.target.value)}
-              className="h-11 w-full appearance-none rounded-lg border border-slate-300 px-3 pr-10 text-sm text-slate-700 outline-none focus:border-indigo-500 sm:min-w-36"
-            >
-              <option value="All">All</option>
-              <option value="All Students">All Students</option>
-              {batches.map((batch) => (
-                <option key={batch} value={batch}>
-                  {batch}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-700" />
-          </div>
+          <CompactSelect
+            value={filterBatch}
+            onOpen={loadBatches}
+            onChange={setFilterBatch}
+            className="w-full sm:w-44"
+            options={[
+              { value: 'All', label: 'All' },
+              { value: 'All Students', label: 'All Students' },
+              ...batches.map((batch) => ({ value: batch, label: batch })),
+            ]}
+          />
         </div>
 
         {/* Mobile card view */}

@@ -4,6 +4,7 @@ import { getModules, addResourceUrl, syncResourcesWithR2, toggleResourcePublish,
 import { validateVideoForm } from '@/lib/validation';
 
 import Modal from '@/components/ui/Modal';
+import CompactSelect from '@/components/ui/CompactSelect';
 import { Play, Upload, Search, Video, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import Toast from '@/components/common/Toast';
@@ -247,21 +248,26 @@ export default function VideosPage() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search videos..."
             className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white" />
         </div>
-        <div className="flex items-center gap-2">
-          <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="all">All Subjects</option>
-            {modules.map(m => <option key={m._id} value={m._id}>{capitalizeWords(m.name)}</option>)}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <select value={filterPublish} onChange={e => setFilterPublish(e.target.value as 'all' | 'published' | 'unpublished')}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="all">All Videos</option>
-            <option value="published">Published Only</option>
-            <option value="unpublished">Unpublished Only</option>
-          </select>
-        </div>
+
+        <CompactSelect
+          value={filterModule}
+          onChange={setFilterModule}
+          className="w-full sm:w-56"
+          options={[
+            { value: 'all', label: 'All Modules' },
+            ...modules.map(m => ({ value: m._id, label: capitalizeWords(m.name) })),
+          ]}
+        />
+        <CompactSelect
+          value={filterPublish}
+          onChange={value => setFilterPublish(value as 'all' | 'published' | 'unpublished')}
+          className="w-full sm:w-44"
+          options={[
+            { value: 'all', label: 'All Videos' },
+            { value: 'published', label: 'Published Only' },
+            { value: 'unpublished', label: 'Unpublished Only' },
+          ]}
+        />
       </div>
 
       {/* Video Grid */}
@@ -324,15 +330,27 @@ export default function VideosPage() {
       </Modal>
 
       {/* Upload Modal */}
-      <Modal isOpen={uploadOpen} onClose={() => { if (!uploading) setUploadOpen(false); }} title="Add Lecture Video" size="lg">
+      <Modal
+        isOpen={uploadOpen}
+        onClose={() => { if (!uploading) setUploadOpen(false); }}
+        title="Add Lecture Video"
+        size="lg"
+        height="content"
+      >
         <form onSubmit={handleUpload} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-            <select required value={uploadModuleId} onChange={e => setUploadModuleId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
-              <option value="">Select subject...</option>
-              {modules.map(m => <option key={m._id} value={m._id}>{capitalizeWords(m.name)} ({m.batch})</option>)}
-            </select>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Module</label>
+            <CompactSelect
+              value={uploadModuleId}
+              onChange={setUploadModuleId}
+              options={[
+                { value: '', label: 'Select module...' },
+                ...modules.map(m => ({
+                  value: m._id,
+                  label: `${capitalizeWords(m.name)} (${m.batch})`,
+                })),
+              ]}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>

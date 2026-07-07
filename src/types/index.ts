@@ -142,8 +142,14 @@ export interface PaymentRecord {
   id: string;
   studentId: string;
   studentName: string;
-  moduleId: string;
+  // Admission Fee / ID Card Fee payments are one-time fees with no real
+  // Module record behind them, so moduleId is optional — only 'subject'
+  // feeType payments are guaranteed to have one.
+  moduleId?: string;
   moduleName: string;
+  // 'subject'   -> recurring fee tied to a real Module (has moduleId)
+  // 'admission' | 'idcard' -> one-time fee, no moduleId
+  feeType?: 'subject' | 'admission' | 'idcard';
   amount: number;
   paidDate: string;
   method: 'cash' | 'bank' | 'online';
