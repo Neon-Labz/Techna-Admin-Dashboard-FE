@@ -2043,12 +2043,6 @@ export default function PaymentsPage() {
               <option value="pending">Pending</option>
               <option value="overdue">Overdue</option>
             </select>
-            <select value={trackingYear} onChange={e => setTrackingYear(Number(e.target.value))}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              {[2024, 2025, 2026, 2027].map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
           </div>
         </details>
         {/* ── Desktop filters ── */}
@@ -2071,12 +2065,6 @@ export default function PaymentsPage() {
             <option value="paid">Paid</option>
             <option value="pending">Pending</option>
             <option value="overdue">Overdue</option>
-          </select>
-          <select value={trackingYear} onChange={e => setTrackingYear(Number(e.target.value))}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            {[2024, 2025, 2026, 2027].map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
           </select>
         </div>
       </div>
