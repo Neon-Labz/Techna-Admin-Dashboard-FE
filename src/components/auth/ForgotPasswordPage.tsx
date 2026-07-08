@@ -45,10 +45,10 @@ export default function ForgotPasswordPage() {
           {/* Logo */}
           <div className="flex flex-col items-center mb-6">
             <Image
-              src="/logo.png"
+              src="/new1.png"
               alt="Techna"
-              width={180}
-              height={180}
+              width={130}
+              height={60}
               className="object-contain"
               priority
             />

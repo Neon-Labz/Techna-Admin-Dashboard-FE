@@ -70,14 +70,14 @@ export default function LoginPage() {
       <Toast toasts={toasts} removeToast={removeToast} />
 
       <div className="w-full max-w-md relative z-10">
-        <div className="bg-white rounded-3xl shadow-2xl p-8 sm:p-10">
-          <div className="flex flex-col items-center mb-1">
+        <div className="bg-white rounded-3xl shadow-2xl px-8 pt-5 pb-10 sm:px-10 sm:pt-6 sm:pb-10">
+          <div className="flex justify-center mb-2">
             <Image
-              src="/logo.png"
-              alt="Techna"
-              width={140}
-              height={140}
-              className="object-contain"
+              src="/new1.png"
+              alt="Techna Logo"
+              width={160}
+              height={70}
+              className="w-[160px] h-auto object-contain"
               priority
             />
           </div>
@@ -168,14 +168,6 @@ export default function LoginPage() {
                 />
                 Remember me
               </label>
-
-              {/* <button
-                type="button"
-                onClick={() => router.push('/forgot-password')}
-                className="text-sm font-medium text-blue-600 hover:text-blue-700"
-              >
-                Forgot password?
-              </button> */}
             </div>
 
             <button
