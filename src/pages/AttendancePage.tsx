@@ -494,7 +494,7 @@ export default function AttendancePage() {
                               ? 'bg-emerald-50 text-emerald-600'
                               : 'bg-red-50 text-red-500'
                           }`}>
-                            {record.status}
+                            {record.status.toUpperCase()}
                           </span>
                         </div>
 
@@ -646,7 +646,7 @@ export default function AttendancePage() {
                                             ? 'bg-emerald-100 text-emerald-700'
                                             : 'bg-red-100 text-red-700'
                                         }`}>
-                                          {record.status === 'present' ? 'Present' : 'Absent'}
+                                          {record.status === 'present' ? 'PRESENT' : 'ABSENT'}
                                         </span>
                                       </td>
                                       <td className="px-4 py-2.5">

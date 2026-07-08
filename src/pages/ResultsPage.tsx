@@ -595,8 +595,8 @@ export default function ResultsPage() {
                         }
                         className="w-full"
                         options={[
-                          { value: 'Mid exam', label: 'Mid exam' },
-                          { value: 'Final exam', label: 'Final exam' },
+                          { value: 'Mid exam', label: 'MID EXAM' },
+                          { value: 'Final exam', label: 'FINAL EXAM' },
                         ]}
                       />
                     </td>
@@ -705,8 +705,8 @@ export default function ResultsPage() {
                         )
                       }
                       options={[
-                        { value: 'Mid exam', label: 'Mid exam' },
-                        { value: 'Final exam', label: 'Final exam' },
+                        { value: 'Mid exam', label: 'MID EXAM' },
+                        { value: 'Final exam', label: 'FINAL EXAM' },
                       ]}
                     />
                   </div>
@@ -823,13 +823,13 @@ export default function ResultsPage() {
 
             <CompactSelect
               value={examFilter}
-              placeholder="All Exam Types"
+              placeholder="ALL EXAM TYPES"
               onChange={setExamFilter}
               className="w-full md:w-40"
               options={[
-                { value: 'all', label: 'All Exam Types' },
-                { value: 'Mid exam', label: 'Mid exam' },
-                { value: 'Final exam', label: 'Final exam' },
+                { value: 'all', label: 'ALL EXAM TYPES' },
+                { value: 'Mid exam', label: 'MID EXAM' },
+                { value: 'Final exam', label: 'FINAL EXAM' },
               ]}
             />
 
@@ -935,7 +935,7 @@ export default function ResultsPage() {
                             <td className="px-4 py-3 font-medium">
                               {item.moduleName}
                             </td>
-                            <td className="px-4 py-3">{item.examType}</td>
+                            <td className="px-4 py-3">{item.examType.toUpperCase()}</td>
                             <td className="px-4 py-3">{item.marks}</td>
                             <td className="px-4 py-3">
                               <span
@@ -1073,7 +1073,7 @@ export default function ResultsPage() {
                       </p>
 
                       <p className="mt-1 text-xs text-slate-500">
-                        {item.examType} • {formatDate(item.createdAt)}
+                        {item.examType.toUpperCase()} • {formatDate(item.createdAt)}
                       </p>
                     </div>
 

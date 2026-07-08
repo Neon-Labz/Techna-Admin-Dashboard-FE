@@ -24,6 +24,7 @@ import {
   Cell,
 } from 'recharts';
 import { dashboardApi } from '@/api/dashboard.api';
+import { normalizeAlSubjects } from '@/utils/studentPayload';
 
 const COLORS = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'];
 
@@ -230,30 +231,31 @@ export default function DashboardHome() {
   const pending = students.filter((s) => s.status === 'pending').length;
 
   const moduleChartData = modules.map((m) => {
-    const moduleName = m.name || m.moduleName || 'Module';
+  const moduleName = m.name || m.moduleName || 'Module';
 
-    return {
-      name: moduleName,
-      students: students.filter((s) => {
-        const studentModules = Array.isArray(s.modules) ? s.modules : [];
+  return {
+    name: moduleName,
+    students: students.filter((s) => {
+      const studentModules = [s.subjects, s.modules, s.subjectSelection?.subjects, s.subjectSelection?.enrolledModules, s.enrolledModules].flatMap((source) => (Array.isArray(source) ? source : []));
 
-        return studentModules.some((item: any) => {
-          const value =
-            typeof item === 'string'
-              ? item
-              : item?.name || item?.moduleName || item?._id || item?.id;
+      return studentModules.some((item: any) => {
+        const value =
+          typeof item === 'string'
+            ? item
+            : item?.name || item?.moduleName || item?.subject || item?._id || item?.id;
 
-          return (
-            value === m._id ||
-            value === m.id ||
-            value === moduleName ||
-            value === m.name ||
-            value === m.moduleName
-          );
-        });
-      }).length,
-    };
-  });
+        return (
+          value === m._id ||
+          value === m.id ||
+          value === moduleName ||
+          value === m.name ||
+          value === m.moduleName ||
+          normalizeAlSubjects([String(value || '')])[0] === normalizeAlSubjects([String(moduleName || '')])[0]
+        );
+      });
+    }).length,
+  };
+});
 
   const paidPayments = payments.filter(isPaidPayment);
 
@@ -309,7 +311,7 @@ const recentStudents = [...students].slice(-4).reverse();
       change: getMonthlyCountChange(students, ['enrolledAt', 'createdAt']),
     },
     {
-      label: 'Approved',
+      label: 'APPROVED',
       value: summary?.approvedStudents ?? approved,
       icon: UserCheck,
       color: 'bg-emerald-500',
@@ -320,7 +322,7 @@ const recentStudents = [...students].slice(-4).reverse();
       ),
     },
     {
-      label: 'Pending',
+      label: 'PENDING',
       value: summary?.pendingStudents ?? pending,
       icon: Clock,
       color: 'bg-amber-500',
@@ -346,7 +348,7 @@ const recentStudents = [...students].slice(-4).reverse();
     },
     {
       label: 'Paid Payments',
-      value: `${(paidRevenue / 1000).toFixed(0)}K`,
+      value: `${(paidRevenue / 1000).toFixed(1)}K`,
       icon: CreditCard,
       color: 'bg-rose-500',
       change: getMonthlyAmountChange(
@@ -617,7 +619,7 @@ const recentStudents = [...students].slice(-4).reverse();
                         : 'bg-red-100 text-red-700'
                   }`}
                 >
-                  {s.status || 'pending'}
+                  {(s.status || 'pending').toUpperCase()}
                 </span>
               </div>
             ))}
