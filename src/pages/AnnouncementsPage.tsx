@@ -16,6 +16,8 @@ import {
   announcementApi,
   type Announcement,
 } from '@/api/announcement.api';
+import Modal from '@/components/ui/Modal';
+
 
 const emptyForm: Announcement = {
   title: '',
@@ -281,6 +283,8 @@ export default function AnnouncementsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [filterBatch, setFilterBatch] = useState('All');
+  const [deleteItem, setDeleteItem] = useState<Announcement | null>(null);
+
 
   const loadAnnouncements = async () => {
     try {
@@ -535,7 +539,7 @@ export default function AnnouncementsPage() {
                   </button>
 
                   <button
-                    onClick={() => handleDelete(item)}
+onClick={() => setDeleteItem(item)}
                     className="rounded-lg bg-red-100 p-2 text-red-500"
                     type="button"
                   >
@@ -612,7 +616,7 @@ export default function AnnouncementsPage() {
                       </button>
 
                       <button
-                        onClick={() => handleDelete(item)}
+                        onClick={() => setDeleteItem(item)}
                         className="rounded bg-red-50 p-2 text-red-500 hover:bg-red-100"
                         type="button"
                       >
@@ -652,9 +656,54 @@ export default function AnnouncementsPage() {
             <button className="px-2 text-slate-400" type="button">
               &gt;
             </button>
+           
           </div>
         </div>
       </div>
+      <Modal
+  isOpen={!!deleteItem}
+  onClose={() => setDeleteItem(null)}
+  title="Delete Announcement"
+  size="md"
+  closeOnBackdrop={false}
+>
+  <div className="px-2 py-2 text-center">
+    <div className="mx-auto mb-6 flex h-10 w-10 items-center justify-center rounded-full bg-red-50">
+      <Trash2 className="h-8 w-8 text-red-600" />
+    </div>
+
+    <h3 className="mb-4 text-lg font-bold text-slate-900">
+      Remove this announcement?
+    </h3>
+
+    <p className="mx-auto mb-8 max-w-xs text-sm leading-6 text-slate-500">
+      This will permanently delete this announcement.
+    </p>
+
+    <div className="grid grid-cols-2 gap-3">
+      <button
+        type="button"
+        onClick={() => setDeleteItem(null)}
+        className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+      >
+        Cancel
+      </button>
+
+      <button
+        type="button"
+        onClick={async () => {
+          if (deleteItem) {
+            await handleDelete(deleteItem);
+            setDeleteItem(null);
+          }
+        }}
+        className="rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white hover:bg-red-700"
+      >
+        Delete
+      </button>
+    </div>
+  </div>
+</Modal>
     </div>
   );
 }
