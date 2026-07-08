@@ -193,8 +193,12 @@ export default function StudentProfile({
   };
 
   const getModulePayment = (moduleId: string) => {
+    const currentMonth = new Date().toISOString().slice(0, 7); // e.g. "2025-07"
     return localPayments.find(
-      (p: any) => p.moduleId === moduleId && p.status === 'paid',
+      (p: any) =>
+        p.moduleId === moduleId &&
+        p.status === 'paid' &&
+        p.paidDate?.slice(0, 7) === currentMonth,
     );
   };
 
@@ -295,6 +299,32 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
 
     const mod: any = studentModules.find((m: any) => m.id === payForm.moduleId);
     if (!mod) return;
+
+    // Fetch fresh payment data from the API to catch payments made elsewhere (e.g. Payments page)
+    let freshPayments = localPayments;
+    try {
+      const fetched = await paymentApi.getByStudent(s.studentId || s.id || s._id);
+      freshPayments = fetched;
+      setLocalPayments(fetched);
+    } catch {
+      // If fetch fails, fall back to existing localPayments for validation
+    }
+
+    // Duplicate payment validation: check student + module + month
+    const paidMonth = payForm.paidDate.slice(0, 7); // e.g. "2025-07"
+    const isDuplicate = freshPayments.some(
+      (p: any) =>
+        p.moduleId === payForm.moduleId &&
+        p.status === 'paid' &&
+        p.paidDate?.slice(0, 7) === paidMonth,
+    );
+
+    if (isDuplicate) {
+      toast.error(
+        `Payment already exists for ${mod.name} in ${paidMonth}. Only one payment is allowed per student, subject, and month.`,
+      );
+      return;
+    }
 
     const receiptNo = `REC-${Date.now()}`;
 
@@ -667,16 +697,16 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
                   Payment History
                 </h4>
 
-                {(s.payments || []).length === 0 ? (
+                {localPayments.length === 0 ? (
                   <p className="text-[13px] text-slate-400">
                     No payment records
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {(s.payments || []).map((p: any) => (
+                    {localPayments.map((p: any) => (
                       <div
                         key={
-                          p.id || p.receiptNo || `${p.moduleId}-${p.paidDate}`
+                          p.id || p._id || p.receiptNo || `${p.moduleId}-${p.paidDate}`
                         }
                         className="grid grid-cols-[1fr_auto_auto] items-center gap-4 text-[13px]"
                       >
