@@ -1,2 +1,5 @@
 import ModulesPage from '@/pages/ModulesPage';
-export default function Page() { return <ModulesPage />; }
+
+export default function Page() {
+  return <ModulesPage />;
+}

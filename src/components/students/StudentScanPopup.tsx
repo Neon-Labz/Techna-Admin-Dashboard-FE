@@ -42,7 +42,10 @@ export default function StudentScanPopup({ student, onClose, onPaymentAdd, onPay
   };
 
   const openEdit = (p: PaymentRecord) => {
-    setPayForm({ moduleId: p.moduleId, amount: String(p.amount), method: p.method, paidDate: p.paidDate, status: p.status });
+    // p.moduleId can be undefined for one-time fees (Admission Fee / ID Card
+    // Fee) that carry a feeType instead of a real module — fall back to ''
+    // so it still satisfies PayForm's required `string` moduleId.
+    setPayForm({ moduleId: p.moduleId ?? '', amount: String(p.amount), method: p.method, paidDate: p.paidDate, status: p.status });
     setPayModal({ mode: 'edit', payment: p });
   };
 

@@ -37,6 +37,7 @@ const navItems = [
   { path: '/dashboard/qr-scan', icon: QrCode, label: 'QR Scanner' },
   { path: '/dashboard/profile', icon: UserCircle, label: 'Profile' },
 ];
+
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (v: boolean) => void;
@@ -57,39 +58,39 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-20 lg:hidden"
+          className="fixed inset-0 z-[60] bg-black/50 lg:hidden"
           onClick={() => setIsOpen(false)}
         />
       )}
 
       <aside
-        className={`fixed top-0 left-0 h-full w-64 bg-gradient-to-b from-indigo-950 to-indigo-900 z-30 flex flex-col transform transition-transform duration-300 ${
+        className={`fixed top-0 left-0 z-[70] h-full w-64 bg-gradient-to-b from-indigo-950 to-indigo-900 flex flex-col transform transition-transform duration-300 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0 lg:static lg:z-auto`}
       >
-       <div className="relative border-b border-white/10 pt-6 pb-5">
-  <div className="flex flex-col items-start pl-6">
-    <Image
-      src="/new1.png"
-      alt="Techna Logo"
-      width={140}
-      height={60}
-      className="block w-[150px] h-auto object-contain"
-      priority
-    />
+        <div className="relative border-b border-white/10 pt-6 pb-5">
+          <div className="flex flex-col items-start pl-6">
+            <Image
+              src="/new1.png"
+              alt="Techna Logo"
+              width={140}
+              height={60}
+              className="block w-[150px] h-auto object-contain"
+              priority
+            />
 
-    <p className="mt-6 text-white font-bold text-lg tracking-wide">
-      ADMIN PANEL
-    </p>
-  </div>
+            <p className="mt-6 text-white font-bold text-lg tracking-wide">
+              ADMIN PANEL
+            </p>
+          </div>
 
-  <button
-    onClick={() => setIsOpen(false)}
-    className="absolute right-4 top-4 lg:hidden text-white/60 hover:text-white"
-  >
-    <X className="w-5 h-5" />
-  </button>
-</div>
+          <button
+            onClick={() => setIsOpen(false)}
+            className="absolute right-4 top-4 lg:hidden text-white/60 hover:text-white"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
         <nav className="flex-1 overflow-y-auto px-3 pt-4 pb-3 space-y-2">
           {navItems.map(({ path, icon: Icon, label }) => {
