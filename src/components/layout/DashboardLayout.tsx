@@ -361,7 +361,7 @@ export default function DashboardLayout({
               </button>
 
               {notificationsOpen && (
-                <div className="absolute right-0 top-11 z-50 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-gray-200 bg-white shadow-xl">
+                <div className="fixed inset-x-4 top-16 z-50 max-h-[70vh] overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-11 sm:w-80 sm:max-h-none sm:overflow-visible">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                     <div>
                       <h3 className="text-sm font-semibold text-gray-900">
