@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { Exam } from '../types';
 import Modal from '../components/ui/Modal';
+import DeleteModal from '../components/common/DeleteModal';
 import {
   Plus,
   Edit2,
@@ -16,29 +17,34 @@ import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 import { examApi } from '@/api/exam.api';
 import api from '@/lib/axios';
-const BATCHES = [
-  'May 2024 Batch',
-  'September 2024 Batch',
-  'January 2025 Batch',
-  'May 2025 Batch',
-];
-
-const emptyExam: Omit<Exam, 'id'> = {
-  title: '',
-  moduleId: '',
-  moduleName: '',
-  batch: BATCHES[0],
-  date: '',
-  startTime: '09:00',
-  endTime: '11:00',
-  venue: '',
-  description: '',
-  totalMarks: 100,
-  status: 'upcoming',
-  createdAt: new Date().toISOString(),
-};
+import { useDataStore } from '@/store/dataStore';
 
 export default function ExamsPage() {
+  
+  const { students, fetchStudents } = useDataStore();
+
+  
+  const BATCHES = Array.from(
+    new Set(
+      students.map((s: any) => s.batch).filter(Boolean),
+    ),
+  );
+
+  const emptyExam: Omit<Exam, 'id'> = {
+    title: '',
+    moduleId: '',
+    moduleName: '',
+    batch: BATCHES[0] || '',
+    date: '',
+    startTime: '09:00',
+    endTime: '11:00',
+    venue: '',
+    description: '',
+    totalMarks: 100,
+    status: 'upcoming',
+    createdAt: new Date().toISOString(),
+  };
+
   const [modules, setModules] = useState<any[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [search, setSearch] = useState('');
@@ -47,15 +53,17 @@ export default function ExamsPage() {
   const [editExam, setEditExam] = useState<Exam | null>(null);
   const [form, setForm] = useState<Omit<Exam, 'id'>>(emptyExam);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadExams();
     loadModules();
+    fetchStudents(); 
   }, []);
 
   const loadModules = async () => {
     try {
-      const res: any = await api.get('/modules');
+      const res: any = await api.get('/modules', { params: { status: 'active' } });
       // Interceptor returns the unwrapped value directly, not an AxiosResponse
       const list = Array.isArray(res) ? res : (Array.isArray(res?.data) ? res.data : []);
       setModules(list);
@@ -68,7 +76,7 @@ export default function ExamsPage() {
     try {
       const data = await examApi.getAll();
 
-const list = Array.isArray(data) ? data : [];
+      const list = Array.isArray(data) ? data : [];
 
       const formatted = list.map((e: any) => ({
         id: e.id || e._id,
@@ -104,6 +112,8 @@ const list = Array.isArray(data) ? data : [];
     return matchSearch && matchBatch;
   });
 
+  const examToDelete = exams.find((e) => e.id === deleteConfirm);
+
   const openAdd = () => {
     setForm(emptyExam);
     setEditExam(null);
@@ -125,7 +135,7 @@ const list = Array.isArray(data) ? data : [];
       );
 
       const payload = {
-        title: form.title,
+        title: form.title.trim(),
         moduleId: form.moduleId,
         moduleName: mod?.name || mod?.moduleName || form.moduleName,
         batch: form.batch,
@@ -150,8 +160,9 @@ const list = Array.isArray(data) ? data : [];
       setModalOpen(false);
       loadExams();
     } catch (error) {
-      console.error('Save exam error:', error);
-      toast.error('Failed to save exam');
+      const message =
+        error instanceof Error ? error.message : 'Failed to save exam';
+      toast.error(message);
     }
   };
 
@@ -159,6 +170,7 @@ const list = Array.isArray(data) ? data : [];
     if (!deleteConfirm) return;
 
     try {
+      setDeleting(true);
       await examApi.delete(deleteConfirm);
       toast.success('Exam deleted');
       setDeleteConfirm(null);
@@ -166,6 +178,8 @@ const list = Array.isArray(data) ? data : [];
     } catch (error) {
       console.error('Delete exam error:', error);
       toast.error('Failed to delete exam');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -316,25 +330,23 @@ const list = Array.isArray(data) ? data : [];
   };
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
+    <div className="p-3 pb-20 sm:p-6 sm:pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
           <h1 className="text-2xl font-bold text-gray-800">Examinations</h1>
           <p className="text-gray-500 text-sm">{exams.length} total exams</p>
         </div>
 
-        <div className="flex gap-2">
-          <button
+        <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
+            <button
             onClick={downloadTimetable}
-            className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium transition-colors"
-          >
+          className="flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors">
             <Download className="w-4 h-4" /> Timetable PDF
           </button>
 
           <button
             onClick={openAdd}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
-          >
+          className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-colors"          >
             <Plus className="w-4 h-4" /> Publish Exam
           </button>
         </div>
@@ -418,8 +430,8 @@ const list = Array.isArray(data) ? data : [];
         ))}
 
         {filtered.length === 0 && (
-          <div className="col-span-3 text-center py-16 text-gray-400">
-            <ClipboardList className="w-12 h-12 mx-auto mb-3 opacity-30" />
+<div className="col-span-1 md:col-span-2 xl:col-span-3 text-center py-16 text-gray-400">           
+   <ClipboardList className="w-12 h-12 mx-auto mb-3 opacity-30" />
             <p>No exams found</p>
           </div>
         )}
@@ -488,6 +500,9 @@ const list = Array.isArray(data) ? data : [];
               {BATCHES.map((b) => (
                 <option key={b}>{b}</option>
               ))}
+              {form.batch && !BATCHES.includes(form.batch) && (
+                <option value={form.batch}>{form.batch}</option>
+              )}
             </select>
           </div>
 
@@ -510,6 +525,7 @@ const list = Array.isArray(data) ? data : [];
             </label>
             <input
               type="text"
+              required
               value={form.venue}
               onChange={(e) => setForm((f) => ({ ...f, venue: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
@@ -571,32 +587,15 @@ const list = Array.isArray(data) ? data : [];
         </form>
       </Modal>
 
-      <Modal
-        isOpen={!!deleteConfirm}
-        onClose={() => setDeleteConfirm(null)}
+      <DeleteModal
+        open={!!deleteConfirm}
         title="Delete Exam"
-        size="sm"
-      >
-        <p className="text-gray-600 text-sm mb-5">
-          Are you sure you want to delete this exam?
-        </p>
-
-        <div className="flex gap-3">
-          <button
-            onClick={() => setDeleteConfirm(null)}
-            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium"
-          >
-            Cancel
-          </button>
-
-          <button
-            onClick={handleDelete}
-            className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium"
-          >
-            Delete
-          </button>
-        </div>
-      </Modal>
+        itemName={examToDelete?.title}
+        message="This will permanently delete the exam and cannot be undone."
+        loading={deleting}
+        onCancel={() => setDeleteConfirm(null)}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

@@ -1,45 +1,28 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useDataStore } from '../store/dataStore';
-import type { Student, PaymentRecord } from '../types';
-import Modal from '../components/ui/Modal';
-import StudentCard from '../components/students/StudentCard';
-import StudentProfile from '../components/students/StudentProfile';
-import StudentRegistrationWizard from '../components/students/StudentRegistrationWizard';
+import { useDataStore } from '@/store/dataStore';
+import type { Student, PaymentRecord } from '@/types';
+import Modal from '@/components/ui/Modal';
+import DeleteModal from '@/components/common/DeleteModal';
+import StudentCard from '@/components/students/StudentCard';
+import StudentProfile from '@/components/students/StudentProfile';
+import StudentRegistrationWizard from '@/components/students/StudentRegistrationWizard';
 import { Plus, Search, Filter, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { attendanceApi } from '../api/attendance.api';
-import { paymentApi } from '../api/payment.api';
-import { getModules, type ApiModule } from '../lib/api';
-import { cleanOlResults, OL_GRADE_OPTIONS } from '../utils/studentPayload';
-
-const DISTRICT_OPTIONS = [
-  'Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo', 'Galle',
-  'Gampaha', 'Hambantota', 'Jaffna', 'Kalutara', 'Kandy', 'Kegalle',
-  'Kilinochchi', 'Kurunegala', 'Mannar', 'Matale', 'Matara', 'Monaragala',
-  'Mullaitivu', 'Nuwara Eliya', 'Polonnaruwa', 'Puttalam', 'Ratnapura',
-  'Trincomalee', 'Vavuniya',
-];
-
-const RACE_OPTIONS = [
-  'Sinhala',
-  'Tamil',
-  'Indian Tamil',
-  'Muslim',
-  'Burgher',
-  'Malay',
-  'Other',
-];
-
-const RELIGION_OPTIONS = [
-  'Buddhism',
-  'Hinduism',
-  'Islam',
-  'Christianity',
-  'Catholicism',
-  'Other',
-];
+import { getModules, type ApiModule } from '@/lib/api';
+import {
+  cleanOlResults,
+  normalizeAlSubjects,
+  OL_GRADE_OPTIONS,
+  getSubjectCategory,
+  countSubjectsByCategory,
+  subjectLabel,
+  MAIN_SUBJECTS,
+  BASKET_SUBJECTS,
+  MAX_MAIN_SUBJECTS,
+  MAX_BASKET_SUBJECTS,
+} from '@/utils/studentPayload';
 
 const emptyOL = {
   year: '',
@@ -109,11 +92,12 @@ export default function StudentsPage() {
   const [editStudent, setEditStudent] = useState<Student | null>(null);
   const [form, setForm] = useState<any>(emptyStudent);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [rejectDialog, setRejectDialog] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
   const [moduleOptions, setModuleOptions] = useState<ApiModule[]>([]);
   const [modulesLoading, setModulesLoading] = useState(true);
-  const [rejectConfirm, setRejectConfirm] = useState<string | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
-  const [rejectLoading, setRejectLoading] = useState(false);
 
   useEffect(() => {
     fetchStudents();
@@ -122,11 +106,12 @@ export default function StudentsPage() {
   const fetchModuleOptions = async () => {
     setModulesLoading(true);
     try {
-      const fetchedModules = await getModules();
+      const fetchedModules = await getModules('active');
       setModuleOptions(Array.isArray(fetchedModules) ? fetchedModules : []);
     } catch (error) {
       console.error('Failed to load modules:', error);
       setModuleOptions([]);
+      toast.error('Failed to load modules');
     } finally {
       setModulesLoading(false);
     }
@@ -137,7 +122,7 @@ export default function StudentsPage() {
   }, []);
 
   const getStudentName = (s: any) =>
-    s?.name || s?.fullNameEnglish || s?.fullNameTamil || 'Student';
+    s.name || s.fullNameEnglish || s.fullNameTamil || '';
 
   const filtered = students.filter((s: any) => {
     const q = search.toLowerCase();
@@ -153,6 +138,8 @@ export default function StudentsPage() {
     return matchSearch && matchBatch && matchStatus;
   });
 
+  const studentToDelete = students.find((s) => s.id === deleteConfirm);
+
   const openAdd = () => {
     void fetchModuleOptions();
     setForm(emptyStudent);
@@ -166,24 +153,28 @@ export default function StudentsPage() {
   };
 
   const getSelectedModules = (s: any) => {
-    if (Array.isArray(s.subjects) && s.subjects.length > 0) return s.subjects;
-    if (Array.isArray(s.modules) && s.modules.length > 0) return s.modules;
+    if (Array.isArray(s.subjects) && s.subjects.length > 0) {
+      return normalizeAlSubjects(s.subjects);
+    }
+    if (Array.isArray(s.modules) && s.modules.length > 0) {
+      return normalizeAlSubjects(s.modules);
+    }
     if (
       Array.isArray(s.subjectSelection?.subjects) &&
       s.subjectSelection.subjects.length > 0
     ) {
-      return s.subjectSelection.subjects;
+      return normalizeAlSubjects(s.subjectSelection.subjects);
     }
     if (
       Array.isArray(s.subjectSelection?.enrolledModules) &&
       s.subjectSelection.enrolledModules.length > 0
     ) {
-      return s.subjectSelection.enrolledModules;
+      return normalizeAlSubjects(s.subjectSelection.enrolledModules);
     }
     if (Array.isArray(s.enrolledModules) && s.enrolledModules.length > 0) {
-      return s.enrolledModules;
+      return normalizeAlSubjects(s.enrolledModules);
     }
-    return [];
+    return normalizeAlSubjects([]);
   };
 
   const openEdit = (s: any) => {
@@ -252,7 +243,25 @@ export default function StudentsPage() {
           ? prev.modules
           : [];
 
-      const updated = current.includes(moduleName)
+      const alreadySelected = current.includes(moduleName);
+
+      if (!alreadySelected) {
+        const category = getSubjectCategory(moduleName);
+        const counts = countSubjectsByCategory(current);
+        const limit =
+          category === 'main' ? MAX_MAIN_SUBJECTS : MAX_BASKET_SUBJECTS;
+
+        if (counts[category] >= limit) {
+          toast.error(
+            category === 'main'
+              ? `You can select only ${MAX_MAIN_SUBJECTS} Main Subjects`
+              : `You can select only ${MAX_BASKET_SUBJECTS} Basket Subject`,
+          );
+          return prev;
+        }
+      }
+
+      const updated = alreadySelected
         ? current.filter((m: string) => m !== moduleName)
         : [...current, moduleName];
 
@@ -296,8 +305,9 @@ export default function StudentsPage() {
 
     if (!editStudent) return;
 
-    const selectedModules =
-      form.subjects?.length ? form.subjects : form.modules || [];
+    const selectedModules = normalizeAlSubjects(
+      form.subjects?.length ? form.subjects : form.modules || [],
+    );
 
     const payload = {
       ...form,
@@ -325,6 +335,12 @@ export default function StudentsPage() {
     setModalOpen(false);
   };
 
+  const preventEnterSubmit = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+    }
+  };
+
   const handleWizardSubmit = async (payload: any) => {
     try {
       await addStudent(payload);
@@ -338,187 +354,41 @@ export default function StudentsPage() {
   };
 
   const handleApprove = async (id: string) => {
+    await approveStudent(id);
     const s: any = students.find((x) => x.id === id);
-    const name = getStudentName(s);
-    try {
-      await approveStudent(id);
-      toast.success(`${name} approved!`);
-      await fetchStudents();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to approve student');
-    }
+    toast.success(`✅ ${getStudentName(s)} approved!`);
   };
 
-  const getModuleName = (moduleId: string) => {
-    const mod = modules.find(
-      (m: any) => m.id === moduleId || m._id === moduleId || m.name === moduleId,
-    );
-    return mod?.name || moduleId;
-  };
-
-  const normalizeRecordDate = (value?: string) => {
-    if (!value) return '';
-    return value.includes('T') ? value.split('T')[0] : value;
-  };
-
-  const patchStudentRecords = (
-    studentId: string,
-    records: Partial<Pick<Student, 'attendance' | 'payments'>>,
-  ) => {
-    useDataStore.setState((state) => ({
-      students: state.students.map((student) =>
-        student.id === studentId ? { ...student, ...records } : student,
-      ),
-    }));
-
-    setViewStudent((student) =>
-      student?.id === studentId ? { ...student, ...records } : student,
-    );
-  };
-
-  const loadStudentRecords = async (student: Student) => {
-    try {
-      const attendanceStudentId = student.studentId || student.id;
-      const [attendanceRecords, payments] = await Promise.all([
-        attendanceApi.getByStudent(attendanceStudentId),
-        paymentApi.getByStudent(student.id),
-      ]);
-
-      const attendance = attendanceRecords.map((record: any) => ({
-        ...record,
-        id: record.id || record._id,
-        date: normalizeRecordDate(record.date),
-      }));
-
-      patchStudentRecords(student.id, { attendance, payments });
-    } catch (error) {
-      console.warn('Failed to load student records');
-      toast.error('Failed to load student records');
-    }
-  };
-
-  const openProfile = (student: Student) => {
-    setViewStudent(student);
-    void loadStudentRecords(student);
-  };
-
-  const handlePaymentAdd = async (
+  const handlePaymentAdd = (
     studentId: string,
     payment: Omit<PaymentRecord, 'id'>,
   ) => {
-    try {
-      const savedPayment = await paymentApi.create(payment);
-      const currentStudent = students.find((student) => student.id === studentId);
-      const nextPayments = [...(currentStudent?.payments || []), savedPayment];
-
-      patchStudentRecords(studentId, { payments: nextPayments });
-      toast.success('Payment recorded!');
-    } catch (error) {
-      console.warn('Failed to record payment');
-      toast.error('Failed to record payment');
-    }
+    useDataStore.getState().addPayment(studentId, payment);
+    toast.success('Payment recorded!');
   };
 
   const handleStatusChange = async (
-  id: string,
-  status: 'pending' | 'approved' | 'rejected',
-) => {
-  const s: any = students.find((x) => x.id === id);
-  const name = getStudentName(s);
-
-  if (status === 'approved') {
-    try {
-      await approveStudent(id);
-      toast.success(`${name} approved!`);
-      await fetchStudents();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to approve student');
-    }
-    return;
-  }
-
-  if (status === 'rejected') {
-    setRejectConfirm(id);
-    setRejectReason('');
-    return;
-  }
-
-  try {
-    await updateStudent(id, { status });
-    toast.success(`Student status set to ${status}!`);
-    await fetchStudents();
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : 'Failed to update status');
-  }
-};
-
-  const handleRejectConfirm = async () => {
-    if (!rejectConfirm || !rejectReason.trim()) {
-      toast.error('Please provide a rejection reason');
-      return;
-    }
-
-    const s: any = students.find((x) => x.id === rejectConfirm);
-    const name = getStudentName(s);
-
-    setRejectLoading(true);
-    try {
-      await rejectStudent(rejectConfirm, rejectReason.trim());
-      toast.error(`${name} rejected.`);
-      setRejectConfirm(null);
+    id: string,
+    status: 'pending' | 'approved' | 'rejected',
+  ) => {
+    if (status === 'approved') {
+      await handleApprove(id);
+    } else if (status === 'rejected') {
       setRejectReason('');
-      await fetchStudents();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to reject student');
-    } finally {
-      setRejectLoading(false);
+      setRejectDialog(id);
+    } else {
+      await updateStudent(id, { status: 'pending' });
+      toast.success('Student set to pending');
     }
   };
 
-  const handleAttendanceUpdate = async (
+  const handleAttendanceUpdate = (
     studentId: string,
     moduleId: string,
     date: string,
     status: 'present' | 'absent',
   ) => {
-    try {
-      const currentStudent = students.find((student) => student.id === studentId);
-      const attendanceStudentId = currentStudent?.studentId || studentId;
-      const savedAttendance = await attendanceApi.markAttendance({
-        studentId: attendanceStudentId,
-        moduleId,
-        moduleName: getModuleName(moduleId),
-        date,
-        status,
-      });
-      const normalizedAttendance = {
-        ...savedAttendance,
-        id: savedAttendance.id || savedAttendance._id,
-        studentId: attendanceStudentId,
-        moduleId,
-        moduleName: savedAttendance.moduleName || getModuleName(moduleId),
-        date: normalizeRecordDate(savedAttendance.date || date),
-        status,
-        markedAt: savedAttendance.markedAt || new Date().toISOString(),
-      };
-      const existingAttendance = currentStudent?.attendance || [];
-      const nextAttendance = existingAttendance.some(
-        (record) =>
-          record.moduleId === moduleId && normalizeRecordDate(record.date) === date,
-      )
-        ? existingAttendance.map((record) =>
-            record.moduleId === moduleId &&
-            normalizeRecordDate(record.date) === date
-              ? { ...record, ...normalizedAttendance }
-              : record,
-          )
-        : [...existingAttendance, normalizedAttendance];
-
-      patchStudentRecords(studentId, { attendance: nextAttendance });
-    } catch (error) {
-      console.warn('Failed to update attendance');
-      toast.error('Failed to update attendance');
-    }
+    useDataStore.getState().updateAttendance(studentId, moduleId, date, status);
   };
 
   const currentViewStudent = viewStudent
@@ -552,31 +422,19 @@ export default function StudentsPage() {
     ['motherName', 'Mother Name'],
     ['guardianName', 'Guardian Name'],
     ['guardianMobile', 'Guardian Mobile'],
+    ['race', 'Race'],
+    ['religion', 'Religion'],
   ] as const;
 
   const selectedModules =
     form.subjects?.length ? form.subjects : form.modules || [];
 
   const normalizeModuleKey = (value?: string) =>
-    (value || '').trim().toLowerCase();
-
-  const isModuleSelected = (module: ApiModule) => {
-    const moduleKeys = [
-      module._id,
-      (module as any).id,
-      module.name,
-    ]
-      .map(normalizeModuleKey)
-      .filter(Boolean);
-
-    return selectedModules.some((selected: string) =>
-      moduleKeys.includes(normalizeModuleKey(selected)),
-    );
-  };
+    normalizeAlSubjects([value || ''])[0]?.trim().toLowerCase() || '';
 
   return (
     <div className="p-3 pb-20 sm:p-6 sm:pb-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Students</h1>
           <p className="text-gray-500 text-sm">
@@ -588,7 +446,7 @@ export default function StudentsPage() {
 
         <button
           onClick={openAdd}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 sm:w-auto"
         >
           <Plus className="w-4 h-4" /> Add Student
         </button>
@@ -605,12 +463,12 @@ export default function StudentsPage() {
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-400" />
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2 sm:flex">
+          <Filter className="h-4 w-4 shrink-0 text-gray-400" />
           <select
             value={filterBatch}
             onChange={(e) => setFilterBatch(e.target.value)}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+            className="min-w-0 px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
           >
             {batchOptions.map((b) => (
               <option key={b} value={b === 'All Batches' ? '' : b}>
@@ -622,7 +480,7 @@ export default function StudentsPage() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
+            className="min-w-0 px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
           >
             <option value="">All Status</option>
             <option value="pending">Pending</option>
@@ -633,11 +491,11 @@ export default function StudentsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        {filtered.map((s, index) => (
+        {filtered.map((s) => (
           <StudentCard
-            key={s.id || `student-${index}`}
+            key={s.id}
             student={s}
-            onView={() => openProfile(s)}
+            onView={() => setViewStudent(s)}
             onEdit={() => openEdit(s)}
             onDelete={() => setDeleteConfirm(s.id)}
             onApprove={() => handleApprove(s.id)}
@@ -670,7 +528,9 @@ export default function StudentsPage() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editStudent ? 'Edit Student' : 'Add New Student'}
-        size="2xl"
+        size="xl"
+        height="content"
+        closeOnBackdrop={false}
       >
         {!editStudent ? (
           <StudentRegistrationWizard
@@ -682,7 +542,8 @@ export default function StudentsPage() {
         ) : (
           <form
             onSubmit={handleSubmit}
-            className="space-y-4 max-h-[75vh] overflow-y-auto pr-2"
+            onKeyDown={preventEnterSubmit}
+            className="w-full min-w-0 max-w-full space-y-4"
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {editFields.map(([field, label]) => (
@@ -691,88 +552,42 @@ export default function StudentsPage() {
                     {label}
                   </label>
 
-                  {field === 'administrativeDistrict' ? (
-                    <select
-                      value={form.administrativeDistrict || ''}
-                      onChange={(e) =>
-                        handleChange('administrativeDistrict', e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
-                    >
-                      <option value="">Select District</option>
-                      {DISTRICT_OPTIONS.map((district) => (
-                        <option key={district} value={district}>
-                          {district}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type={
-                        field === 'dob'
-                          ? 'date'
-                          : field === 'email'
-                            ? 'email'
-                            : 'text'
-                      }
-                      value={form[field] || ''}
-                      onChange={(e) => handleChange(field, e.target.value)}
-                      required={['fullNameEnglish', 'email', 'phone'].includes(
-                        field,
-                      )}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                    />
-                  )}
+                  <input
+                    type={
+                      field === 'dob'
+                        ? 'date'
+                        : field === 'email'
+                          ? 'email'
+                          : 'text'
+                    }
+                    value={form[field] || ''}
+                    onChange={(e) => handleChange(field, e.target.value)}
+                    required={['fullNameEnglish', 'email', 'phone'].includes(
+                      field,
+                    )}
+                    className="w-full min-w-0 max-w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base"
+                  />
                 </div>
               ))}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Race
-                </label>
-                <select
-                  value={form.race || ''}
-                  onChange={(e) => handleChange('race', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
-                >
-                  <option value="">Select Race</option>
-                  {RACE_OPTIONS.map((race) => (
-                    <option key={race} value={race}>
-                      {race}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Religion
-                </label>
-                <select
-                  value={form.religion || ''}
-                  onChange={(e) => handleChange('religion', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
-                >
-                  <option value="">Select Religion</option>
-                  {RELIGION_OPTIONS.map((religion) => (
-                    <option key={religion} value={religion}>
-                      {religion}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Batch
                 </label>
-                <input
-                  type="text"
-                  value={form.batch || ''}
+                <select
+                  value={form.batch}
                   onChange={(e) => handleChange('batch', e.target.value)}
-                  placeholder="Enter batch"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                />
+                  className="w-full min-w-0 max-w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base"
+                >
+                  {batchOptions
+                    .filter((b) => b !== 'All Batches')
+                    .map((b) => (
+                      <option key={b}>{b}</option>
+                    ))}
+                  {form.batch && !batchOptions.includes(form.batch) && (
+                    <option value={form.batch}>{form.batch}</option>
+                  )}
+                </select>
               </div>
             </div>
 
@@ -805,7 +620,7 @@ export default function StudentsPage() {
                   <select
                     value={form.olCategory || 'Local O/L'}
                     onChange={(e) => handleChange('olCategory', e.target.value)}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="Local O/L">Local O/L</option>
                     <option value="London O/L">London O/L</option>
@@ -820,7 +635,7 @@ export default function StudentsPage() {
                     value={form.olYear || ''}
                     onChange={(e) => handleChange('olYear', e.target.value)}
                     placeholder="e.g. 2024"
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 
@@ -833,7 +648,7 @@ export default function StudentsPage() {
                     onChange={(e) =>
                       handleChange('olIndexNumber', e.target.value)
                     }
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 
@@ -844,7 +659,7 @@ export default function StudentsPage() {
                   <input
                     value={form.olNameUsed || ''}
                     onChange={(e) => handleChange('olNameUsed', e.target.value)}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
 
@@ -855,7 +670,7 @@ export default function StudentsPage() {
                   <select
                     value={form.olAccept || 'Accept'}
                     onChange={(e) => handleChange('olAccept', e.target.value)}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="Accept">Accept</option>
                     <option value="Change">Change</option>
@@ -890,7 +705,7 @@ export default function StudentsPage() {
                             updateOlRow(index, 'year', e.target.value)
                           }
                           placeholder="Year"
-                          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="rounded-lg border border-gray-200 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                         <input
                           value={row.indexNumber || ''}
@@ -898,7 +713,7 @@ export default function StudentsPage() {
                             updateOlRow(index, 'indexNumber', e.target.value)
                           }
                           placeholder="Index Number"
-                          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="rounded-lg border border-gray-200 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
 
                         {(
@@ -919,7 +734,7 @@ export default function StudentsPage() {
                               onChange={(e) =>
                                 updateOlRow(index, field, e.target.value)
                               }
-                              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             >
                               <option value="">Select grade</option>
                               {OL_GRADE_OPTIONS.map((grade) => (
@@ -941,37 +756,83 @@ export default function StudentsPage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Enrolled Modules
               </label>
+              <p className="mb-3 text-xs text-gray-500">
+                Select exactly {MAX_MAIN_SUBJECTS} Main Subjects and{' '}
+                {MAX_BASKET_SUBJECTS} Basket Subject.
+              </p>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {modulesLoading ? (
-                  <p className="text-sm text-gray-400">Loading modules...</p>
-                ) : moduleOptions.length === 0 ? (
-                  <p className="text-sm text-gray-400">No modules found</p>
-                ) : (
-                  moduleOptions.map((module) => {
-                    const checked = isModuleSelected(module);
+              {(() => {
+                const counts = countSubjectsByCategory(selectedModules);
+                const isSelected = (subject: string) =>
+                  selectedModules.some(
+                    (s: string) => normalizeModuleKey(s) === normalizeModuleKey(subject),
+                  );
 
-                    return (
-                      <label
-                        key={module._id}
-                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer text-sm ${
-                          checked
-                            ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
-                            : 'bg-white border-gray-200 text-gray-700'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleModule(module.name)}
-                          className="rounded border-gray-300"
-                        />
-                        {module.name}
-                      </label>
-                    );
-                  })
-                )}
-              </div>
+                const renderCategory = (
+                  title: string,
+                  items: string[],
+                  limit: number,
+                  category: 'main' | 'basket',
+                ) => (
+                  <div className="mb-4" key={category}>
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+                        {title}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {counts[category]}/{limit} selected
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {items.map((subject) => {
+                        const checked = isSelected(subject);
+                        const limitReached = counts[category] >= limit;
+                        const disabled = !checked && limitReached;
+
+                        return (
+                          <label
+                            key={subject}
+                            className={`flex items-center gap-3 p-3 rounded-xl border text-sm ${
+                              checked
+                                ? 'bg-indigo-50 border-indigo-500 text-indigo-700 cursor-pointer'
+                                : disabled
+                                  ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
+                                  : 'bg-white border-gray-200 text-gray-700 cursor-pointer'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={disabled}
+                              onChange={() => toggleModule(subject)}
+                              className="rounded border-gray-300"
+                            />
+                            {subjectLabel(subject)}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+
+                return (
+                  <>
+                    {renderCategory(
+                      'Main Subjects',
+                      MAIN_SUBJECTS,
+                      MAX_MAIN_SUBJECTS,
+                      'main',
+                    )}
+                    {renderCategory(
+                      'Basket Subject',
+                      BASKET_SUBJECTS,
+                      MAX_BASKET_SUBJECTS,
+                      'basket',
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             <div className="flex gap-3 pt-2 sticky bottom-0 bg-white">
@@ -994,100 +855,73 @@ export default function StudentsPage() {
         )}
       </Modal>
 
-      <Modal
-        isOpen={!!deleteConfirm}
-        onClose={() => setDeleteConfirm(null)}
-        title="Confirm Delete"
-        size="sm"
-      >
-        <p className="text-gray-600 text-sm mb-5">
-          Are you sure you want to delete this student? All records will be lost.
-        </p>
+      <DeleteModal
+        open={!!deleteConfirm}
+        title="Delete Student"
+        itemName={studentToDelete ? getStudentName(studentToDelete) : undefined}
+        message="This will permanently delete the student profile and all related records."
+        loading={deleting}
+        onCancel={() => setDeleteConfirm(null)}
+        onConfirm={async () => {
+          if (!deleteConfirm) return;
 
-        <div className="flex gap-3">
-          <button
-            onClick={() => setDeleteConfirm(null)}
-            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-
-          <button
-            onClick={() => {
-              if (deleteConfirm) {
-                deleteStudent(deleteConfirm);
-              }
-              setDeleteConfirm(null);
-              toast.success('Student deleted');
-            }}
-            className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700"
-          >
-            Delete
-          </button>
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={!!rejectConfirm}
-        onClose={() => {
-          setRejectConfirm(null);
-          setRejectReason('');
+          setDeleting(true);
+          try {
+            await deleteStudent(deleteConfirm);
+            setDeleteConfirm(null);
+            toast.success('Student deleted');
+          } finally {
+            setDeleting(false);
+          }
         }}
+      />
+
+      <Modal
+        isOpen={!!rejectDialog}
+        onClose={() => setRejectDialog(null)}
         title="Reject Student"
         size="sm"
+        height="content"
       >
         <div className="space-y-4">
-          <p className="text-gray-600 text-sm">
-            Please provide a reason for rejecting this student. A rejection email will be sent to the student&apos;s registered email address.
+          <p className="text-sm text-gray-600">
+            Please provide a reason for rejecting this student. This will be sent to the student by email.
           </p>
-
-          {rejectConfirm && (
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-xs text-gray-500">Student</p>
-              <p className="text-sm font-medium text-gray-800">
-                {getStudentName(students.find((s) => s.id === rejectConfirm))}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                📧 {students.find((s) => s.id === rejectConfirm)?.email}
-              </p>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Rejection Reason <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Enter the reason for rejection..."
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-sm resize-none"
-            />
-            {rejectReason.trim().length > 0 && rejectReason.trim().length < 3 && (
-              <p className="text-xs text-red-500 mt-1">
-                Reason must be at least 3 characters
-              </p>
-            )}
-          </div>
-
-          <div className="flex gap-3">
+          <textarea
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 focus:border-indigo-400 focus:outline-none resize-none"
+            rows={3}
+            placeholder="e.g. Incomplete documentation, seat not available..."
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
             <button
-              onClick={() => {
-                setRejectConfirm(null);
-                setRejectReason('');
-              }}
-              className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50"
+              type="button"
+              onClick={() => setRejectDialog(null)}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
             >
               Cancel
             </button>
-
             <button
-              onClick={handleRejectConfirm}
-              disabled={rejectLoading || rejectReason.trim().length < 3}
-              className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              type="button"
+              disabled={rejecting || !rejectReason.trim()}
+              onClick={async () => {
+                if (!rejectDialog) return;
+                setRejecting(true);
+                try {
+                  await rejectStudent(rejectDialog, rejectReason.trim());
+                  const s: any = students.find((x) => x.id === rejectDialog);
+                  toast.success(`${getStudentName(s)} rejected`);
+                  setRejectDialog(null);
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : 'Failed to reject student');
+                } finally {
+                  setRejecting(false);
+                }
+              }}
+              className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-50"
             >
-              {rejectLoading ? 'Rejecting...' : 'Reject & Send Email'}
+              {rejecting ? 'Rejecting...' : 'Reject & Send Email'}
             </button>
           </div>
         </div>

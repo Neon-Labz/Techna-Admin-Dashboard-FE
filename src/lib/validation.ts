@@ -1,14 +1,22 @@
-const DUMMY_PATTERNS = [
-  /^[a-z]{4,}$/i,
-  /(.)\1{2,}/,
-  /^(test|dummy|asdf|qwerty|zxcv|abcd|abc|xyz|foo|bar|baz|string|undefined|null|na|n\/a|sample|example)\d*$/i,
-  /^[^aeiou]{5,}$/i,
+const DUMMY_VALUES = [
+  'test', 'testing', 'tester',
+  'asdf', 'asdfg', 'asdfasdf',
+  'qwerty', 'qwert',
+  'xxx', 'xxxx', 'xxxxx',
+  'aaa', 'aaaa', 'bbb',
+  'foo', 'bar', 'foobar',
+  'lorem', 'lorem ipsum',
+  'abc', 'abcd', 'abcde',
+  '123', '1234', '12345',
+  'temp', 'tmp',
+  'dummy', 'fake', 'sample',
+  'untitled', 'new module',
 ];
 
 export function isDummyValue(value: string): boolean {
   const trimmed = value.trim().toLowerCase();
   if (!trimmed) return false;
-  return DUMMY_PATTERNS.some(pattern => pattern.test(trimmed));
+  return DUMMY_VALUES.includes(trimmed);
 }
 
 export function validateModuleForm(data: {

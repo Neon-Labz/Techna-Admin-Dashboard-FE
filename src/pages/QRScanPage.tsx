@@ -116,7 +116,7 @@ export default function QRScanPage() {
   const currentStudent = scannedStudent ? students.find(s => s.id === scannedStudent.id) || scannedStudent : null;
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
+    <div className="mx-auto max-w-2xl p-3 pb-20 sm:p-6 sm:pb-6">
       <div className="mb-6 text-center">
         <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
           <QrCode className="w-8 h-8 text-indigo-600" />

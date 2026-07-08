@@ -10,14 +10,7 @@ import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 import { paymentApi, PaymentRecord, CreatePaymentPayload } from '@/api/payment.api';
 import api from '@/lib/axios';
-
-const BATCHES = [
-  '',
-  'May 2024 Batch',
-  'September 2024 Batch',
-  'January 2025 Batch',
-  'May 2025 Batch',
-];
+import { useDataStore } from '@/store/dataStore';
 
 const MONTHS = [
   { num: '01', label: 'Jan' }, { num: '02', label: 'Feb' },
@@ -29,8 +22,8 @@ const MONTHS = [
 ];
 
 interface StudentOption {
-  _id:        string;     // MongoDB ObjectId — used to look up legacy payments
-  studentId:  string;     // display ID e.g. "STU019"
+  _id:        string;
+  studentId:  string;
   name:       string;
   batch:      string;
   moduleRefs: string[];
@@ -45,7 +38,34 @@ interface StudentTracking {
   payments: PaymentRecord[];
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+function extractArrayResponse(value: unknown): any[] {
+  if (Array.isArray(value)) return value;
+
+  if (!value || typeof value !== 'object') return [];
+
+  const data = (value as { data?: unknown }).data;
+  if (Array.isArray(data)) return data;
+
+  if (data && typeof data === 'object') {
+    const nestedData = (data as { data?: unknown }).data;
+    if (Array.isArray(nestedData)) return nestedData;
+
+    const students = (data as { students?: unknown }).students;
+    if (Array.isArray(students)) return students;
+
+    const modules = (data as { modules?: unknown }).modules;
+    if (Array.isArray(modules)) return modules;
+  }
+
+  const students = (value as { students?: unknown }).students;
+  if (Array.isArray(students)) return students;
+
+  const modules = (value as { modules?: unknown }).modules;
+  if (Array.isArray(modules)) return modules;
+
+  return [];
+}
+
 const statusIcon = (s: string) =>
   s === 'paid'    ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> :
   s === 'pending' ? <Clock       className="w-3.5 h-3.5 text-amber-500"   /> :
@@ -56,9 +76,6 @@ const statusColor = (s: string) =>
   s === 'pending' ? 'bg-amber-100  text-amber-700'    :
                     'bg-red-100    text-red-700';
 
-// Strips punctuation and collapses whitespace for fuzzy name matching.
-// Handles mismatches like "Information & Communication Technology"
-// vs "Information Communication Technology" from different data sources.
 const normalizeModuleName = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -67,10 +84,12 @@ function PaymentModal({
   onClose,
   onSuccess,
   initialData,
+  batches = [],
 }: {
   onClose: () => void;
   onSuccess: (p: PaymentRecord) => void;
   initialData?: PaymentRecord | null;
+  batches?: string[];
 }) {
   const isEdit = !!initialData;
   const [students,            setStudents]            = useState<StudentOption[]>([]);
@@ -78,7 +97,6 @@ function PaymentModal({
   const [registeredModuleIds, setRegisteredModuleIds] = useState<string[]>([]);
   const [fetchingMods,        setFetchingMods]        = useState(false);
   const [saving,              setSaving]              = useState(false);
-  // Prevents the edit-mode enrollment useEffect from firing more than once
   const enrollmentInitedRef = useRef(false);
 
   const [form, setForm] = useState({
@@ -92,7 +110,6 @@ function PaymentModal({
     notes:     initialData?.notes     ?? '',
   });
 
-  // lib/axios interceptor already unwraps the envelope → result IS the array directly
   useEffect(() => {
     (async () => {
       try {
@@ -101,10 +118,8 @@ function PaymentModal({
           api.get('/students'),
           api.get('/modules'),
         ]);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sArr: any[] = Array.isArray(sRaw) ? sRaw : (sRaw?.data ?? []);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mArr: any[] = Array.isArray(mRaw) ? mRaw : (mRaw?.data ?? []);
+        const sArr = extractArrayResponse(sRaw);
+        const mArr = extractArrayResponse(mRaw);
 
         setStudents(
           sArr.map(s => ({
@@ -130,12 +145,7 @@ function PaymentModal({
     })();
   }, []);
 
-  // Loads enrolled modules for a given student without touching the form.
-  // Two sources, merged and deduplicated:
-  //   1. student.modules (subject names) → fuzzy-matched against DB module names
-  //   2. payment history → exact moduleId match (reliable for returning students)
   const loadEnrollmentForStudent = useCallback(async (s: StudentOption) => {
-    // Source 1: name-based match using the student's registered subject list
     const nameBasedIds = s.moduleRefs.length > 0
       ? allModules
           .filter(m => s.moduleRefs.some(ref => {
@@ -150,7 +160,6 @@ function PaymentModal({
       setRegisteredModuleIds(nameBasedIds);
     }
 
-    // Source 2: payment history (covers returning students and edge-case name mismatches)
     setFetchingMods(true);
     try {
       const results = await Promise.allSettled([
@@ -163,7 +172,6 @@ function PaymentModal({
         r.status === 'fulfilled' ? r.value : []
       );
       const paymentIds = [...new Set(merged.map(p => p.moduleId).filter(Boolean))];
-      // Merge both sources; functional update picks up nameBasedIds already set above
       setRegisteredModuleIds(prev => [...new Set([...prev, ...paymentIds])]);
     } catch {
       // retain nameBasedIds already applied
@@ -180,8 +188,6 @@ function PaymentModal({
     await loadEnrollmentForStudent(s);
   };
 
-  // In edit mode the student is pre-selected in the form but handleStudentChange
-  // is never called, so populate enrolled modules once students + modules are ready.
   useEffect(() => {
     if (!isEdit || students.length === 0 || allModules.length === 0) return;
     if (enrollmentInitedRef.current) return;
@@ -191,8 +197,6 @@ function PaymentModal({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit, students, allModules]);
 
-  // Show only the modules this student has previously paid for.
-  // Falls back to all modules if no payment history is found (first-time student).
   const filteredModules = useMemo(() => {
     if (!form.studentId || registeredModuleIds.length === 0) return allModules;
     const filtered = allModules.filter(m => registeredModuleIds.includes(m.id));
@@ -205,8 +209,6 @@ function PaymentModal({
     filteredModules.length < allModules.length &&
     filteredModules.length > 0;
 
-  // True when a student is selected and we finished fetching but found no
-  // enrollment data from either source — filteredModules falls back to all.
   const showingAllModulesFallback =
     form.studentId.length > 0 &&
     !fetchingMods &&
@@ -342,20 +344,33 @@ function PaymentModal({
               <option value="overdue">Overdue</option>
             </select>
           </div>
+
+          
           <div className="flex flex-col gap-1">
             <Label text="Batch" />
-            <input type="text" value={form.batch}
+            <select
+              value={form.batch}
               onChange={e => setForm(f => ({ ...f, batch: e.target.value }))}
-              placeholder="e.g. May 2025 Batch"
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">Select batch…</option>
+              {batches.map(b => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+              {/* keep existing value if it's not in current batch list */}
+              {form.batch && !batches.includes(form.batch) && (
+                <option value={form.batch}>{form.batch}</option>
+              )}
+            </select>
           </div>
+
           <div className="col-span-2 flex flex-col gap-1">
             <Label text="Notes" />
             <textarea value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               rows={2}
               placeholder="Optional notes…"
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
           </div>
         </div>
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
@@ -378,7 +393,7 @@ function PaymentModal({
   );
 }
 
-// ── Student Row in TABLE view — click to expand 12-month tracking inline ──────
+
 function StudentTableRow({
   studentId,
   studentName,
@@ -402,16 +417,13 @@ function StudentTableRow({
   const [tracking,     setTracking]     = useState<StudentTracking | null>(null);
   const [loadingTrack, setLoadingTrack] = useState(false);
 
-  // Earliest payment month across all time → only generate pending from that month
   const fromMonth = useMemo(() => {
     if (payments.length === 0) return `${year}-01`;
     const earliest = [...payments]
       .sort((a, b) => a.paidDate.localeCompare(b.paidDate))[0]
-      .paidDate.slice(0, 7);               // "YYYY-MM"
+      .paidDate.slice(0, 7);
     const [eYear] = earliest.split('-').map(Number);
-    // Student started before this year → all months in view are active
     if (eYear < year) return `${year}-01`;
-    // Student started after this year → nothing to show
     if (eYear > year) return `${year}-12`;
     return earliest;
   }, [payments, year]);
@@ -421,7 +433,7 @@ function StudentTableRow({
     setLoadingTrack(true);
     try {
       const res  = await fetch(
-        `http://localhost:4000/api/payments/student/${studentId}/tracking?year=${year}&from=${fromMonth}&to=${year}-12`,
+        `${process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:4000/api'}/payments/student/${studentId}/tracking?year=${year}&from=${fromMonth}&to=${year}-12`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const json = await res.json();
@@ -441,7 +453,6 @@ function StudentTableRow({
 
   return (
     <>
-      {/* ── Main table row ── */}
       <tr
         className="hover:bg-indigo-50/40 transition-colors cursor-pointer border-t border-gray-100"
         onClick={toggleTracking}
@@ -507,13 +518,10 @@ function StudentTableRow({
         </td>
       </tr>
 
-      {/* ── Expanded: 12-month tracking + all payment records ── */}
       {expanded && (
         <tr>
           <td colSpan={9} className="p-0">
             <div className="bg-indigo-50/50 border-t border-b border-indigo-100 px-6 py-5">
-
-              {/* Month pills */}
               <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-3">
                 12-Month Payment Status — {studentName} — {year}
               </p>
@@ -522,7 +530,6 @@ function StudentTableRow({
                   const key        = `${year}-${num}`;
                   const isPaid     = paidSet.has(key);
                   const isPending  = pendingSet.has(key);
-                  // Months before the student's join month — not applicable
                   const isBeforeJoin = tracking && key < fromMonth;
                   return (
                     <div key={num} className="flex flex-col items-center gap-1">
@@ -558,7 +565,6 @@ function StudentTableRow({
                 )}
               </div>
 
-              {/* All payment records for this student */}
               <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-2">
                 All Payment Records
               </p>
@@ -621,8 +627,203 @@ function StudentTableRow({
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+function PaymentMobileCard({
+  studentId,
+  studentName,
+  payments,
+  year,
+  token,
+  onDownloadSlip,
+  onEditPayment,
+}: {
+  studentId: string;
+  studentName: string;
+  payments: PaymentRecord[];
+  year: number;
+  token: string | null;
+  onDownloadSlip: (p: PaymentRecord) => void;
+  onEditPayment: (p: PaymentRecord) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [tracking, setTracking] = useState<StudentTracking | null>(null);
+  const [loadingTrack, setLoadingTrack] = useState(false);
+
+  const fromMonth = useMemo(() => {
+    if (payments.length === 0) return `${year}-01`;
+    const earliest = [...payments]
+      .sort((a, b) => a.paidDate.localeCompare(b.paidDate))[0]
+      .paidDate.slice(0, 7);
+    const [eYear] = earliest.split('-').map(Number);
+    if (eYear < year) return `${year}-01`;
+    if (eYear > year) return `${year}-12`;
+    return earliest;
+  }, [payments, year]);
+
+  const toggleTracking = useCallback(async () => {
+    if (tracking) {
+      setExpanded(e => !e);
+      return;
+    }
+
+    setLoadingTrack(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:4000/api'}/payments/student/${studentId}/tracking?year=${year}&from=${fromMonth}&to=${year}-12`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const json = await res.json();
+      setTracking(json.data ?? json);
+      setExpanded(true);
+    } catch {
+      toast.error('Failed to load tracking for ' + studentId);
+    } finally {
+      setLoadingTrack(false);
+    }
+  }, [fromMonth, studentId, token, tracking, year]);
+
+  const paidSet = useMemo(() => new Set(tracking?.paidMonths ?? []), [tracking]);
+  const pendingSet = useMemo(() => new Set(tracking?.pendingMonths ?? []), [tracking]);
+  const firstPayment = payments[0];
+
+  if (!firstPayment) return null;
+
+  return (
+    <article className="overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm">
+      <div className="p-3">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold text-indigo-600">
+              {firstPayment.receiptNo}
+              {payments.length > 1 && (
+                <span className="ml-1 text-indigo-400">+{payments.length - 1}</span>
+              )}
+            </p>
+            <h3 className="mt-1 truncate text-sm font-bold uppercase leading-tight text-gray-800">
+              {studentName}
+            </h3>
+            <p className="text-[11px] font-medium text-gray-500">{studentId}</p>
+          </div>
+          <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ${statusColor(firstPayment.status)}`}>
+            {statusIcon(firstPayment.status)}
+            {firstPayment.status}
+          </span>
+        </div>
+
+        <div className="mb-3 grid grid-cols-[1fr_auto] gap-4 border-b border-gray-100 pb-3">
+          <div>
+            <p className="text-[10px] font-medium text-gray-400">Amount</p>
+            <p className="text-base font-bold text-gray-900">
+              LKR {firstPayment.amount.toLocaleString()}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-medium text-gray-400">Method</p>
+            <p className="text-xs font-semibold capitalize text-gray-700">{firstPayment.method}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => onDownloadSlip(firstPayment)}
+              className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600"
+            >
+              <Download className="h-3 w-3" /> Slip
+            </button>
+            <button
+              type="button"
+              onClick={() => onEditPayment(firstPayment)}
+              className="flex items-center gap-1 text-[11px] font-semibold text-gray-500"
+            >
+              <Edit2 className="h-3 w-3" /> Edit
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={toggleTracking}
+            className="rounded p-1 text-gray-500"
+            aria-label="Toggle payment history"
+          >
+            {loadingTrack ? (
+              <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+            ) : expanded ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="border-t border-indigo-50 bg-indigo-50/40 px-3 py-4">
+          <p className="mb-3 text-[10px] font-bold uppercase tracking-wide text-indigo-600">
+            12-Month Payment Status - {year}
+          </p>
+          <div className="mb-4 grid grid-cols-6 gap-2">
+            {MONTHS.map(({ num, label }) => {
+              const key = `${year}-${num}`;
+              const isPaid = paidSet.has(key);
+              const isPending = pendingSet.has(key);
+              const isBeforeJoin = tracking && key < fromMonth;
+
+              return (
+                <div key={num} className="flex flex-col items-center gap-1">
+                  <span className="text-[9px] font-semibold text-gray-400">{label.charAt(0)}</span>
+                  <span className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold ${
+                    isBeforeJoin
+                      ? 'border border-dashed border-gray-200 bg-white text-gray-200'
+                      : isPaid
+                        ? 'bg-emerald-500 text-white'
+                        : isPending
+                          ? 'bg-amber-100 text-amber-600'
+                          : 'bg-gray-100 text-gray-300'
+                  }`}>
+                    {isPaid ? <CheckCircle className="h-3.5 w-3.5" /> : label.charAt(0)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-indigo-600">
+            History
+          </p>
+          <div className="space-y-2">
+            {payments.map(p => (
+              <div key={p.id} className="rounded-md border border-indigo-50 bg-white px-3 py-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold text-gray-700">{p.moduleName}</p>
+                    <p className="text-[10px] text-gray-400">{p.paidDate}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-gray-800">LKR {p.amount.toLocaleString()}</p>
+                    <p className={`text-[9px] font-bold uppercase ${p.status === 'paid' ? 'text-emerald-500' : 'text-amber-500'}`}>
+                      {p.status}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+
 export default function PaymentsPage() {
+  
+  const { students, fetchStudents } = useDataStore();
+
+  
+  const BATCHES = Array.from(
+    new Set(students.map((s: any) => s.batch).filter(Boolean))
+  ) as string[];
+
   const [payments,     setPayments]     = useState<PaymentRecord[]>([]);
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState<string | null>(null);
@@ -655,7 +856,10 @@ export default function PaymentsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchPayments(); }, [fetchPayments]);
+  useEffect(() => {
+    fetchPayments();
+    fetchStudents(); 
+  }, [fetchPayments]);
 
   const allModules = Array.from(
     new Map(payments.map(p => [p.moduleId, { id: p.moduleId, name: p.moduleName }])).values()
@@ -695,18 +899,15 @@ export default function PaymentsPage() {
   const generatePaymentSlip = (payment: PaymentRecord) => {
     const drawPDF = (logoDataUrl?: string) => {
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const W   = pdf.internal.pageSize.getWidth();   // 297 mm
-      const H   = pdf.internal.pageSize.getHeight();  // 210 mm
+      const W   = pdf.internal.pageSize.getWidth();
+      const H   = pdf.internal.pageSize.getHeight();
 
-      // ── Top cyan bar ───────────────────────────────────────────────────────
       pdf.setFillColor(0, 174, 219);
       pdf.rect(0, 0, W, 8, 'F');
 
-      // ── White header background ────────────────────────────────────────────
       pdf.setFillColor(255, 255, 255);
       pdf.rect(0, 8, W, 54, 'F');
 
-      // ── Logo (left side, vertically centred in the header) ────────────────
       if (logoDataUrl) {
         try {
           const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
@@ -726,30 +927,25 @@ export default function PaymentsPage() {
         }
       }
 
-      // ── TECHNA bold centered ───────────────────────────────────────────────
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(30);
       pdf.setTextColor(0, 174, 219);
       pdf.text('TECHNA', W / 2, 32, { align: 'center' });
 
-      // ── Email & Contact line ───────────────────────────────────────────────
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9.5);
       pdf.setTextColor(80, 80, 80);
       pdf.text('Email: sivasakthy22@gmail.com  |  Contact: +94 77 170 3549', W / 2, 43, { align: 'center' });
 
-      // ── PAYMENT RECEIPT subtitle ───────────────────────────────────────────
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(14);
       pdf.setTextColor(0, 174, 219);
       pdf.text('PAYMENT RECEIPT', W / 2, 55, { align: 'center' });
 
-      // ── Cyan divider line ──────────────────────────────────────────────────
       pdf.setDrawColor(0, 174, 219);
       pdf.setLineWidth(0.6);
       pdf.line(12, 64, W - 12, 64);
 
-      // ── Two-column layout ──────────────────────────────────────────────────
       const colL     = 14;
       const colR     = W / 2 + 10;
       const colWidth = W / 2 - 22;
@@ -788,20 +984,17 @@ export default function PaymentsPage() {
         return y + 10;
       };
 
-      // ── LEFT column: Student Information ──────────────────────────────────
       yL = sectionTitle('STUDENT INFORMATION', colL, yL);
       yL = dataRow('Student Name', payment.studentName,    colL, yL, true);
       yL = dataRow('Student ID',   payment.studentCode || payment.studentId, colL, yL, false);
       yL = dataRow('Batch',        payment.batch || 'N/A', colL, yL, true);
       yL = dataRow('Receipt No',   payment.receiptNo,      colL, yL, false);
 
-      // ── RIGHT column: Payment Details ─────────────────────────────────────
       yR = sectionTitle('PAYMENT DETAILS', colR, yR);
       yR = dataRow('Module',         payment.moduleName,           colR, yR, true);
       yR = dataRow('Payment Date',   payment.paidDate,             colR, yR, false);
       yR = dataRow('Payment Method', payment.method.toUpperCase(), colR, yR, true);
 
-      // ── Status row — bold colored value ───────────────────────────────────
       {
         const statusColorMap: Record<string, [number, number, number]> = {
           paid:    [22, 163, 74],
@@ -820,7 +1013,6 @@ export default function PaymentsPage() {
         yR += 10;
       }
 
-      // ── Amount box (full width) ────────────────────────────────────────────
       const amtY = Math.max(yL, yR) + 8;
       pdf.setFillColor(0, 174, 219);
       pdf.roundedRect(colL, amtY, W - 28, 26, 5, 5, 'F');
@@ -833,7 +1025,6 @@ export default function PaymentsPage() {
       pdf.setTextColor(255, 255, 255);
       pdf.text(`LKR ${payment.amount.toLocaleString()}`, W / 2, amtY + 20, { align: 'center' });
 
-      // ── Footer cyan bar ────────────────────────────────────────────────────
       pdf.setFillColor(0, 174, 219);
       pdf.rect(0, H - 14, W, 14, 'F');
       pdf.setFont('helvetica', 'bold');
@@ -872,21 +1063,18 @@ export default function PaymentsPage() {
 
     const drawPDF = (logoDataUrl?: string) => {
       const pdf    = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const W      = pdf.internal.pageSize.getWidth();   // 297mm
-      const H      = pdf.internal.pageSize.getHeight();  // 210mm
+      const W      = pdf.internal.pageSize.getWidth();
+      const H      = pdf.internal.pageSize.getHeight();
       const margin  = 12;
-      const usableW = W - margin * 2;                    // 273mm
+      const usableW = W - margin * 2;
       const dateStr = new Date().toISOString().split('T')[0];
 
-      // ── Top cyan bar ────────────────────────────────────────────────────────
       pdf.setFillColor(0, 174, 219);
       pdf.rect(0, 0, W, 8, 'F');
 
-      // ── White header background ─────────────────────────────────────────────
       pdf.setFillColor(255, 255, 255);
       pdf.rect(0, 8, W, 52, 'F');
 
-      // ── Logo (same loading + sizing as generatePaymentSlip) ─────────────────
       if (logoDataUrl) {
         try {
           const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
@@ -903,36 +1091,30 @@ export default function PaymentsPage() {
         }
       }
 
-      // ── TECHNA title ────────────────────────────────────────────────────────
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(28);
       pdf.setTextColor(0, 174, 219);
       pdf.text('TECHNA', W / 2, 30, { align: 'center' });
 
-      // ── Contact line ────────────────────────────────────────────────────────
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(8.5);
       pdf.setTextColor(80, 80, 80);
       pdf.text('Email: sivasakthy22@gmail.com  |  Contact: +94 77 170 3549', W / 2, 40, { align: 'center' });
 
-      // ── PAYMENT REPORT subtitle ─────────────────────────────────────────────
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(13);
       pdf.setTextColor(0, 174, 219);
       pdf.text('PAYMENT REPORT', W / 2, 51, { align: 'center' });
 
-      // ── Cyan divider ────────────────────────────────────────────────────────
       pdf.setDrawColor(0, 174, 219);
       pdf.setLineWidth(0.6);
       pdf.line(margin, 62, W - margin, 62);
 
-      // ── Meta line ───────────────────────────────────────────────────────────
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(7.5);
       pdf.setTextColor(120, 120, 120);
       pdf.text(`Generated: ${dateStr}  |  Total Records: ${filtered.length}`, W / 2, 68, { align: 'center' });
 
-      // ── Summary boxes ───────────────────────────────────────────────────────
       const boxY   = 72;
       const boxH   = 14;
       const boxGap = 4;
@@ -953,12 +1135,10 @@ export default function PaymentsPage() {
       pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.setTextColor(0, 120, 180);
       pdf.text(`Total Records: ${filtered.length}`, margin + (boxW + boxGap) * 2 + boxW / 2, boxY + 9, { align: 'center' });
 
-      // ── Table ───────────────────────────────────────────────────────────────
       const tableY  = boxY + boxH + 8;
       const rowH    = 8;
       const headerH = 10;
 
-      // Column widths — total = 55+43+48+35+28+20+26+18 = 273mm = usableW ✓
       const cols: { header: string; w: number }[] = [
         { header: 'Receipt No', w: 55 },
         { header: 'Student',    w: 43 },
@@ -970,7 +1150,6 @@ export default function PaymentsPage() {
         { header: 'Status',     w: 18 },
       ];
 
-      // Truncate text to fit column (~1.45mm per char at 8pt helvetica)
       const fitText = (text: string, maxMm: number): string => {
         if (!text) return '';
         const maxChars = Math.floor(maxMm / 1.45);
@@ -1010,7 +1189,6 @@ export default function PaymentsPage() {
           y += headerH;
         }
 
-        // Alternating row background
         if (rowIdx % 2 === 0) {
           pdf.setFillColor(255, 255, 255);
         } else {
@@ -1038,14 +1216,12 @@ export default function PaymentsPage() {
           cx += colW;
         });
 
-        // Row separator
         pdf.setDrawColor(224, 224, 224);
         pdf.setLineWidth(0.2);
         pdf.line(margin, y + rowH, margin + usableW, y + rowH);
         y += rowH;
       });
 
-      // ── Footer ──────────────────────────────────────────────────────────────
       pdf.setFillColor(0, 174, 219);
       pdf.rect(0, H - 12, W, 12, 'F');
       pdf.setFont('helvetica', 'bold');
@@ -1092,30 +1268,30 @@ export default function PaymentsPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-3 pb-20 sm:p-6 sm:pb-6">
 
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between mb-6">
+     
+      <div className="mb-4 flex flex-row items-start justify-between gap-3 sm:mb-6 sm:items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Payments</h1>
-          <p className="text-gray-500 text-sm">{payments.length} total records</p>
+          <h1 className="text-lg font-bold text-gray-800 sm:text-2xl">Payments</h1>
+          <p className="text-xs text-gray-500 sm:text-sm">{payments.length} total records</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {loading && (
-            <div className="flex items-center gap-2 text-indigo-500 text-sm">
+            <div className="hidden items-center gap-2 text-sm text-indigo-500 sm:flex">
               <Loader2 className="w-4 h-4 animate-spin" /> Loading…
             </div>
           )}
           <button onClick={fetchPayments} disabled={loading}
-            className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-3 py-2 rounded-xl hover:bg-gray-50 disabled:opacity-50 text-sm">
+            className="hidden items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 sm:flex sm:px-4">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
           <button onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+            className="flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-indigo-700 sm:gap-2 sm:rounded-xl sm:px-4 sm:text-sm">
             <Plus className="w-4 h-4" /> Add Payment
           </button>
           <button onClick={generateAllPDF}
-            className="flex items-center gap-2 bg-white hover:bg-gray-50 text-gray-800 border border-gray-200 px-4 py-2 rounded-xl text-sm font-medium transition-colors">
+            className="hidden items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-50 sm:flex">
             <Download className="w-4 h-4" /> Export PDF
           </button>
         </div>
@@ -1126,55 +1302,90 @@ export default function PaymentsPage() {
       )}
 
       {/* ── Summary cards ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+      <div className="mb-4 grid grid-cols-1 gap-2 md:mb-6 md:grid-cols-3 md:gap-4">
+        <div className="rounded-lg border border-gray-100 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
-              <CheckCircle className="w-5 h-5 text-emerald-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 sm:h-10 sm:w-10 sm:rounded-xl">
+              <CheckCircle className="h-4 w-4 text-emerald-600 sm:h-5 sm:w-5" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Total Collected</p>
-              <p className="text-xl font-bold text-gray-800">LKR {totalPaid.toLocaleString()}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 sm:text-sm sm:font-normal sm:normal-case sm:tracking-normal">Total Collected</p>
+              <p className="text-lg font-bold text-gray-800 sm:text-xl">LKR {totalPaid.toLocaleString()}</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+        <div className="rounded-lg border border-gray-100 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
-              <Clock className="w-5 h-5 text-amber-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 sm:h-10 sm:w-10 sm:rounded-xl">
+              <Clock className="h-4 w-4 text-amber-600 sm:h-5 sm:w-5" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Pending / Overdue</p>
-              <p className="text-xl font-bold text-gray-800">LKR {totalPending.toLocaleString()}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 sm:text-sm sm:font-normal sm:normal-case sm:tracking-normal">Pending / Overdue</p>
+              <p className="text-lg font-bold text-gray-800 sm:text-xl">LKR {totalPending.toLocaleString()}</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+        <div className="rounded-lg border border-gray-100 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
-              <CreditCard className="w-5 h-5 text-indigo-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-100 sm:h-10 sm:w-10 sm:rounded-xl">
+              <CreditCard className="h-4 w-4 text-indigo-600 sm:h-5 sm:w-5" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Filtered Records</p>
-              <p className="text-xl font-bold text-gray-800">{filtered.length}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 sm:text-sm sm:font-normal sm:normal-case sm:tracking-normal">Filtered Records</p>
+              <p className="text-lg font-bold text-gray-800 sm:text-xl">{filtered.length}</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* ── Filters ── */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
+      <div className="mb-4 flex flex-row gap-2 sm:mb-5 sm:flex-row sm:gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search student name or receipt no…"
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white" />
+            className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl sm:text-sm" />
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* ── Mobile filter dropdown ── */}
+        <details className="relative sm:hidden">
+          <summary className="flex h-full w-11 cursor-pointer list-none items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500">
+            <Filter className="h-4 w-4" />
+          </summary>
+          <div className="absolute right-0 z-20 mt-2 grid w-52 gap-2 rounded-lg border border-gray-100 bg-white p-3 shadow-lg">
+           
+            <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">All Batches</option>
+              {BATCHES.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+            <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">All Modules</option>
+              {allModules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">All Status</option>
+              <option value="paid">Paid</option>
+              <option value="pending">Pending</option>
+              <option value="overdue">Overdue</option>
+            </select>
+            <select value={trackingYear} onChange={e => setTrackingYear(Number(e.target.value))}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              {[2024, 2025, 2026, 2027].map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+        </details>
+        {/* ── Desktop filters ── */}
+        <div className="hidden items-center gap-2 flex-wrap sm:flex">
           <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          
           <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)}
             className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            {BATCHES.map(b => <option key={b} value={b}>{b || 'All Batches'}</option>)}
+            <option value="">All Batches</option>
+            {BATCHES.map(b => <option key={b} value={b}>{b}</option>)}
           </select>
           <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
             className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -1197,8 +1408,33 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* ── Table ── */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+     
+      <div className="space-y-3 min-[1300px]:hidden">
+        {studentGroups.map(s => (
+          <PaymentMobileCard
+            key={s.studentId}
+            studentId={s.studentId}
+            studentName={s.studentName}
+            payments={s.payments}
+            year={trackingYear}
+            token={token}
+            onDownloadSlip={generatePaymentSlip}
+            onEditPayment={setEditPayment}
+          />
+        ))}
+
+        {!loading && studentGroups.length === 0 && (
+          <div className="rounded-lg border border-gray-100 bg-white py-12 text-center text-gray-400">
+            <Users className="mx-auto mb-3 h-10 w-10 opacity-30" />
+            <p className="text-sm">No payment records found</p>
+            {payments.length > 0 && (
+              <p className="mt-1 text-xs">Try adjusting your filters</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm min-[1300px]:block">
         <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
           <p className="text-xs text-gray-500">
             Click on a student row to view their 12-month payment history
@@ -1244,17 +1480,29 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* ── Add Payment Modal ── */}
+      
+      <button
+        type="button"
+        onClick={() => setShowAddModal(true)}
+        className="fixed bottom-5 right-5 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-200 md:hidden"
+        aria-label="Add payment"
+      >
+        <CreditCard className="h-5 w-5" />
+      </button>
+
+      
       {showAddModal && (
         <PaymentModal
+          batches={BATCHES}
           onClose={() => setShowAddModal(false)}
           onSuccess={handlePaymentSuccess}
         />
       )}
 
-      {/* ── Edit Payment Modal ── */}
+      
       {editPayment && (
         <PaymentModal
+          batches={BATCHES}
           initialData={editPayment}
           onClose={() => setEditPayment(null)}
           onSuccess={handlePaymentSuccess}

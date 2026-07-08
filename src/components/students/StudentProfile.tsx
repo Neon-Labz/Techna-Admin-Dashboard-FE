@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Student, PaymentRecord } from '../../types';
 import { useDataStore } from '../../store/dataStore';
+import { attendanceApi } from '@/api/attendance.api';
+import { paymentApi } from '@/api/payment.api';
 import {
   X,
   Download,
@@ -112,6 +114,8 @@ export default function StudentProfile({
 
   const [showPayModal, setShowPayModal] = useState(false);
   const [qrImageFailed, setQrImageFailed] = useState(false);
+  const [localAttendance, setLocalAttendance] = useState<any[]>(s.attendance || []);
+  const [localPayments, setLocalPayments] = useState<any[]>(s.payments || []);
   const [payForm, setPayForm] = useState<{
     moduleId: string;
     amount: string;
@@ -152,6 +156,7 @@ export default function StudentProfile({
       }
     );
   });
+  const olResults = Array.isArray(s.olResults) ? s.olResults : [];
 
   const qrData = JSON.stringify({
     studentId: s.studentId,
@@ -168,17 +173,21 @@ export default function StudentProfile({
     setQrImageFailed(false);
   }, [s.id, s._id, s.qrCodeUrl]);
 
+  useEffect(() => {
+    if (!s.studentId) return;
+    attendanceApi.getByStudent(s.studentId).then(setLocalAttendance).catch(() => {});
+    paymentApi.getByStudent(s.studentId || s.id).then(setLocalPayments).catch(() => {});
+  }, [s.studentId, s.id]);
+
   const getAttendanceStatus = (moduleId: string) => {
-    const attendance = s.attendance || [];
-    const rec = attendance.find(
-      (a: any) => a.moduleId === moduleId && a.date === today,
+    const rec = localAttendance.find(
+      (a: any) => a.moduleId === moduleId && (a.date === today || String(a.date).startsWith(today)),
     );
     return rec?.status || null;
   };
 
   const getModulePayment = (moduleId: string) => {
-    const payments = s.payments || [];
-    return payments.find(
+    return localPayments.find(
       (p: any) => p.moduleId === moduleId && p.status === 'paid',
     );
   };
@@ -227,11 +236,14 @@ export default function StudentProfile({
       pdf.text(`Phone: ${getValue(s.phone || s.whatsappNo)}`, 14, 68);
       pdf.text(`Email: ${getValue(s.email)}`, 14, 74);
       pdf.text(`Status: ${getValue(s.status)}`, 14, 80);
-      pdf.text(
-        `Modules: ${studentModules.map((m: any) => m.name).join(', ') || 'N/A'}`,
-        14,
-        86,
-      );
+
+      const modulesText = `Modules: ${
+        studentModules.map((m: any) => m.name).join(', ') || 'N/A'
+      }`;
+
+const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
+
+      pdf.text(moduleLines, 14, 86);
 
       pdf.addImage(qrImage, 'PNG', pageWidth - 50, 38, 32, 32);
 
@@ -243,11 +255,41 @@ export default function StudentProfile({
     }
   };
 
-  const handlePaySubmit = (e: React.FormEvent) => {
+  const handleAttendanceClick = async (
+    moduleId: string,
+    moduleName: string,
+    date: string,
+    status: 'present' | 'absent',
+  ) => {
+    onAttendanceUpdate(moduleId, date, status);
+    setLocalAttendance(prev => {
+      const filtered = prev.filter(
+        (a: any) => !(a.moduleId === moduleId && (a.date === date || String(a.date).startsWith(date))),
+      );
+      return [...filtered, { moduleId, date, status }];
+    });
+    try {
+      await attendanceApi.markAttendance({
+        studentId: s.studentId,
+        moduleId,
+        moduleName,
+        date,
+        status,
+      });
+    } catch (err: any) {
+      if (err?.response?.status !== 409) {
+        toast.error('Failed to save attendance');
+      }
+    }
+  };
+
+  const handlePaySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const mod: any = studentModules.find((m: any) => m.id === payForm.moduleId);
     if (!mod) return;
+
+    const receiptNo = `REC-${Date.now()}`;
 
     onPaymentAdd({
       studentId: s.id || s._id,
@@ -258,9 +300,28 @@ export default function StudentProfile({
       paidDate: payForm.paidDate,
       method: payForm.method,
       status: 'paid',
-      receiptNo: `REC-${Date.now()}`,
+      receiptNo,
       batch: s.batch,
     });
+
+    try {
+      const saved = await paymentApi.create({
+        studentId: s.studentId || s.id || s._id,
+        studentName: studentName,
+        moduleId: payForm.moduleId,
+        moduleName: mod.name,
+        amount: Number(payForm.amount),
+        paidDate: payForm.paidDate,
+        method: payForm.method,
+        status: 'paid',
+        receiptNo,
+        batch: s.batch,
+      });
+      setLocalPayments(prev => [...prev, saved]);
+    } catch (err) {
+      console.error('Payment API failed:', err);
+      toast.error('Payment saved locally but failed to sync to server');
+    }
 
     setShowPayModal(false);
     setPayForm({
@@ -319,21 +380,29 @@ export default function StudentProfile({
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 bg-white p-4 lg:grid-cols-[420px_minmax(0,1fr)] lg:p-5">
-          <aside className="h-full overflow-hidden space-y-4">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto bg-white p-4 lg:grid-cols-[420px_minmax(0,1fr)] lg:overflow-hidden lg:p-5">
+          <aside className="space-y-4 lg:h-full lg:overflow-hidden">
             <div>
               <h3 className="mb-2 text-sm font-bold uppercase tracking-[0.16em] text-slate-400">
                 Student ID Card (PDF Preview)
               </h3>
 
-              <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-md">
+              <div className="w-full min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-md">
                 <div className="rounded-t-2xl bg-gradient-to-r from-indigo-500 to-purple-500 px-4 py-3 text-white">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/30 bg-white/20 text-xl font-bold">
-                      {studentName.charAt(0).toUpperCase()}
+                    <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border border-white/30 bg-white/20 text-xl font-bold">
+                      {(s.avatar || s.profilePhoto) ? (
+                        <img
+                          src={s.avatar || s.profilePhoto}
+                          alt={studentName}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span>{studentName.charAt(0).toUpperCase()}</span>
+                      )}
                     </div>
 
-                    <div>
+                    <div className="min-w-0">
                       <h2 className="text-lg font-bold leading-tight">
                         {studentName}
                       </h2>
@@ -347,7 +416,7 @@ export default function StudentProfile({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-[1fr_125px] gap-3 p-3">
+                <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-3 p-3 sm:grid-cols-[minmax(0,1fr)_125px]">
                   <div className="space-y-1.5 border-r border-dashed border-slate-200 pr-3">
                     <div>
                       <span className="text-[11px] font-bold uppercase text-slate-400">
@@ -432,7 +501,7 @@ export default function StudentProfile({
 
           </aside>
 
-          <main className="h-full min-w-0 space-y-4 overflow-y-auto pr-4">
+          <main className="min-w-0 space-y-4 lg:h-full lg:overflow-y-auto lg:pr-4">
             <ProfileSection title="Attendance (Today)">
               <div className="space-y-2">
                 {studentModules.length > 0 ? (
@@ -451,7 +520,7 @@ export default function StudentProfile({
                         <div className="flex gap-2">
                           <button
                             onClick={() =>
-                              onAttendanceUpdate(m.id, today, 'present')
+                              handleAttendanceClick(m.id, m.name, today, 'present')
                             }
                             className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
                               att === 'present'
@@ -464,7 +533,7 @@ export default function StudentProfile({
 
                           <button
                             onClick={() =>
-                              onAttendanceUpdate(m.id, today, 'absent')
+                              handleAttendanceClick(m.id, m.name, today, 'absent')
                             }
                             className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
                               att === 'absent'
@@ -653,6 +722,74 @@ export default function StudentProfile({
                   value={s.administrativeDistrict || s.district}
                 />
                 <DetailItem label="Postal Code" value={s.postalCode} />
+              </div>
+            </ProfileSection>
+
+            <ProfileSection title="O/L Results">
+              <div className="grid grid-cols-1 gap-x-12 gap-y-4 md:grid-cols-3">
+                <DetailItem label="O/L Category" value={s.olCategory} />
+                <DetailItem label="O/L Year" value={s.olYear} />
+                <DetailItem label="Index Number" value={s.olIndexNumber} />
+                <DetailItem
+                  label="Name Used"
+                  value={s.olNameUsed}
+                  className="md:col-span-2"
+                />
+                <DetailItem label="Accept Status" value={s.olAccept} />
+              </div>
+
+              <div className="mt-5 overflow-hidden rounded-xl border border-slate-100">
+                {olResults.length === 0 ? (
+                  <p className="bg-slate-50 p-4 text-[13px] text-slate-400">
+                    No O/L results added
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-[13px]">
+                      <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400">
+                        <tr>
+                          <th className="px-4 py-3">Year</th>
+                          <th className="px-4 py-3">Index No</th>
+                          <th className="px-4 py-3">English</th>
+                          <th className="px-4 py-3">Mathematics</th>
+                          <th className="px-4 py-3">Science</th>
+                          <th className="px-4 py-3">Sinhala</th>
+                          <th className="px-4 py-3">Tamil</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {olResults.map((row: any, index: number) => (
+                          <tr
+                            key={`${row.year || 'year'}-${row.indexNumber || index}`}
+                            className="border-t border-slate-100"
+                          >
+                            <td className="px-4 py-3 font-bold text-slate-800">
+                              {getValue(row.year)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              {getValue(row.indexNumber)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              {getValue(row.english)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              {getValue(row.mathematics)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              {getValue(row.science)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              {getValue(row.sinhala)}
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              {getValue(row.tamil)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </ProfileSection>
           </main>

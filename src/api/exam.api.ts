@@ -10,12 +10,12 @@ export type ExamPayload = {
   endTime: string;
   venue: string;
   description?: string;
+  totalMarks: number;
+  status: 'upcoming' | 'ongoing' | 'completed';
   isPublished?: boolean;
 };
 
-// The @/lib/axios response interceptor already unwraps the NestJS envelope
-// (response.data?.data ?? response.data), so api.get/post/patch/delete calls
-// resolve with the controller's return value directly — NOT an AxiosResponse.
+
 const unwrapArray = (res: any): any[] => {
   if (Array.isArray(res)) return res;
   if (Array.isArray(res?.data)) return res.data;
