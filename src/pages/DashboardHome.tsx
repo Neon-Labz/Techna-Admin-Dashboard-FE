@@ -27,41 +27,28 @@ import { dashboardApi } from '@/api/dashboard.api';
 
 const COLORS = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'];
 
-const splitModuleName = (name: unknown, maxLineLength = 12) => {
-  const words = String(name || 'Module').split(/\s+/).filter(Boolean);
-  if (words.length === 0) return ['Module'];
-
+const formatModuleAxisLabel = (name: unknown, maxLength = 18) => {
+  const label = String(name || 'Module').trim();
+  if (label.length <= maxLength) return label;
+  return `${label.slice(0, maxLength).trimEnd()}...`;
+};
+const splitModuleName = (name: unknown, maxLength = 11) => {
+  const words = String(name || 'Module').trim().split(/\s+/);
   const lines: string[] = [];
+  let current = '';
 
-  for (const word of words) {
-    if (lines.length === 0) {
-      lines.push(word);
-      continue;
+  words.forEach((word) => {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxLength && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
     }
+  });
 
-    const current = lines[lines.length - 1];
-    const next = `${current} ${word}`;
-
-    if (next.length <= maxLineLength) {
-      lines[lines.length - 1] = next;
-      continue;
-    }
-
-    if (lines.length === 2) break;
-    lines.push(word);
-  }
-
-  const usedWords = lines.join(' ').split(/\s+/).filter(Boolean).length;
-
-  if (usedWords < words.length) {
-    lines[lines.length - 1] = `${lines[lines.length - 1].replace(/\.+$/, '')}...`;
-  }
-
-  return lines.slice(0, 2).map((line) =>
-    line.length > maxLineLength + 3
-      ? `${line.slice(0, maxLineLength).replace(/\.+$/, '')}...`
-      : line,
-  );
+  if (current) lines.push(current);
+  return lines.length ? lines : ['Module'];
 };
 
 const ModuleAxisTick = ({
@@ -73,16 +60,18 @@ const ModuleAxisTick = ({
   y?: number;
   payload?: { value?: unknown };
 }) => {
-  const lines = splitModuleName(payload?.value);
+  const label = formatModuleAxisLabel(payload?.value);
 
   return (
     <g transform={`translate(${x},${y})`}>
-      <text textAnchor="middle" fill="#64748b" fontSize={12}>
-        {lines.map((line, index) => (
-          <tspan key={`${line}-${index}`} x={0} dy={index === 0 ? 12 : 13}>
-            {line}
-          </tspan>
-        ))}
+      <text
+        transform="rotate(-38)"
+        textAnchor="end"
+        fill="#475569"
+        fontSize={11}
+        fontWeight={600}
+      >
+        {label}
       </text>
     </g>
   );
@@ -290,26 +279,27 @@ export default function DashboardHome() {
       ? Array.from({ length: maxModuleStudents + 1 }, (_, index) => index)
       : [0, Math.ceil(maxModuleStudents / 2), maxModuleStudents];
 
-  const moduleChartHeight = 320;
-  const mobileModuleChartHeight = Math.max(220, moduleChartData.length * 42);
+   const moduleChartHeight = 320;
+const mobileModuleChartHeight = Math.max(220, moduleChartData.length * 42);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+const today = new Date();
+today.setHours(0, 0, 0, 0);
 
-  const upcomingExams = exams
-    .filter((exam) => {
-      const examDate = toDate(exam.date);
-      return Boolean(examDate && examDate >= today);
-    })
-    .sort((a, b) => {
-      const firstDate = toDate(a.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      const secondDate = toDate(b.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-      return firstDate - secondDate;
-    })
-    .slice(0, 5);
+const upcomingExams = exams
+  .filter((exam) => {
+    const examDate = toDate(exam.date);
+    return Boolean(examDate && examDate >= today);
+  })
+  .sort((a, b) => {
+    const firstDate = toDate(a.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    const secondDate = toDate(b.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    return firstDate - secondDate;
+  })
+  .slice(0, 5);
 
-  const recentStudents = [...students].slice(-4).reverse();
+const recentStudents = [...students].slice(-4).reverse();
 
+  
   const stats = [
     {
       label: 'Total Students',
@@ -619,7 +609,7 @@ export default function DashboardHome() {
                 </div>
 
                 <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                  className={`inline-flex h-6 w-20 flex-shrink-0 items-center justify-center rounded-full px-2 text-xs font-medium leading-none ${
                     s.status === 'approved'
                       ? 'bg-emerald-100 text-emerald-700'
                       : s.status === 'pending'

@@ -1,12 +1,12 @@
 'use client';
-import { Fragment, useState, useEffect, useCallback } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   getModules, getStudents, getAttendance, createAttendance,
   updateAttendance as apiUpdateAttendance, deleteAttendance,
   type ApiModule, type ApiStudent, type ApiAttendance,
 } from '@/lib/api';
-import { Calendar, Filter, Search, CheckCircle, XCircle, Users, ChevronDown, Trash2, History, Plus } from 'lucide-react';
+import { Calendar, Filter, Search, CheckCircle, XCircle, Users, ChevronDown, ChevronLeft, ChevronRight, Trash2, History, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import Toast from '@/components/common/Toast';
 import DeleteModal from '@/components/common/DeleteModal';
@@ -22,6 +22,216 @@ function formatTime(dateStr?: string) {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return '-';
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+type SelectOption = {
+  value: string;
+  label: string;
+};
+
+function CompactSelect({
+  value,
+  options,
+  onChange,
+  className = '',
+}: {
+  value: string;
+  options: SelectOption[];
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = options.find(option => option.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={ref} className={`relative min-w-0 ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(current => !current)}
+        className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left text-xs outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl sm:text-sm"
+      >
+        <span className="truncate">{selected?.label || value}</span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-40 mt-1 max-h-56 min-w-0 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+          {options.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+              className={`block w-full min-w-0 px-3 py-2 text-left text-xs hover:bg-indigo-50 sm:text-sm ${
+                option.value === value
+                  ? 'bg-indigo-50 font-semibold text-indigo-700'
+                  : 'text-gray-700'
+              }`}
+            >
+              <span className="block truncate">{option.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const formatDateValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const parseDateValue = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+};
+
+function CompactDatePicker({
+  value,
+  max,
+  onChange,
+  className = '',
+}: {
+  value: string;
+  max?: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedDate = parseDateValue(value);
+  const [viewDate, setViewDate] = useState(selectedDate || new Date());
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (selectedDate) setViewDate(selectedDate);
+  }, [value]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  const calendarDays = useMemo(() => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const startOffset = new Date(year, month, 1).getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const days: Array<number | null> = Array.from({ length: startOffset }, () => null);
+
+    for (let day = 1; day <= totalDays; day += 1) days.push(day);
+    while (days.length % 7 !== 0) days.push(null);
+    return days;
+  }, [viewDate]);
+
+  const changeMonth = (offset: number) => {
+    setViewDate(current => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+  };
+
+  const maxDate = max ? parseDateValue(max) : null;
+
+  return (
+    <div ref={ref} className={`relative min-w-0 ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(current => !current)}
+        className="flex w-full min-w-0 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left text-xs outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl sm:text-sm"
+      >
+        <Calendar className="h-4 w-4 shrink-0 text-gray-400" />
+        <span className={value ? 'truncate text-gray-700' : 'truncate text-gray-400'}>
+          {value || 'Select date'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 z-50 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-gray-200 bg-white p-3 shadow-lg sm:left-auto sm:right-0">
+          <div className="mb-3 flex items-center justify-between">
+            <button type="button" onClick={() => changeMonth(-1)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <p className="text-sm font-semibold text-gray-800">
+              {viewDate.toLocaleString('en-US', { month: 'short', year: 'numeric' })}
+            </p>
+            <button type="button" onClick={() => changeMonth(1)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-gray-400">
+            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => <span key={day}>{day}</span>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {calendarDays.map((day, index) => {
+              if (!day) return <span key={`empty-${index}`} className="h-8" />;
+
+              const date = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
+              const dayValue = formatDateValue(date);
+              const disabled = !!maxDate && date > maxDate;
+              const selected = dayValue === value;
+
+              return (
+                <button
+                  key={dayValue}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    onChange(dayValue);
+                    setOpen(false);
+                  }}
+                  className={`h-8 rounded-lg text-xs font-semibold ${
+                    selected
+                      ? 'bg-indigo-600 text-white'
+                      : disabled
+                        ? 'cursor-not-allowed text-gray-300'
+                        : 'text-gray-700 hover:bg-indigo-50'
+                  }`}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function AttendancePage() {
@@ -180,7 +390,7 @@ export default function AttendancePage() {
       </div>
 
       {/* Filters */}
-      <div className="mb-4 flex flex-col gap-2 sm:mb-5 sm:flex-row sm:gap-3">
+      <div className="relative z-30 mb-4 flex flex-col gap-2 sm:mb-5 sm:flex-row sm:gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search student..."
@@ -188,11 +398,12 @@ export default function AttendancePage() {
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
           <Filter className="hidden w-4 flex-shrink-0 text-gray-400 sm:block" />
-          <div className="relative min-w-0">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} max={today}
-              className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-auto sm:rounded-xl sm:text-sm" />
-          </div>
+          <CompactDatePicker
+            value={filterDate}
+            onChange={setFilterDate}
+            max={today}
+            className="min-w-0 sm:w-36"
+          />
           {filterDate && (
             <button
               onClick={() => setFilterDate('')}
@@ -201,6 +412,27 @@ export default function AttendancePage() {
               Clear Filter
             </button>
           )}
+
+          <CompactSelect
+            value={filterBatch}
+            onChange={setFilterBatch}
+            options={BATCHES.map(batch => ({
+              value: batch,
+              label: batch || 'All Batches',
+            }))}
+          />
+          <CompactSelect
+            value={filterModule}
+            onChange={setFilterModule}
+            className="col-span-2 sm:col-span-1"
+            options={[
+              { value: '', label: 'All Modules' },
+              ...modules.map(module => ({
+                value: module._id,
+                label: module.name,
+              })),
+            ]}
+          />
 
           {/* ✅ Dynamic batch dropdown — from loaded students */}
           <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)} className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl sm:text-sm">
@@ -407,7 +639,7 @@ export default function AttendancePage() {
                                       <td className="pl-12 pr-4 py-2.5 text-xs text-gray-600">{displayDate}</td>
                                       <td className="px-4 py-2.5 text-xs font-mono text-gray-500">{record.studentId}</td>
                                       <td className="px-4 py-2.5 text-xs text-gray-700">{studentName}</td>
-                                      <td className="px-4 py-2.5 text-xs text-gray-500">—</td>
+                                      <td className="px-4 py-2.5 text-xs text-gray-500">{formatTime(record.markedAt)}</td>
                                       <td className="px-4 py-2.5 text-center">
                                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                                           record.status === 'present'
