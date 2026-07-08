@@ -80,25 +80,25 @@ export default function LoginPage() {
       </div>
 
       <div className="w-full max-w-md relative z-10">
-        <div className="bg-white rounded-3xl shadow-2xl p-8 sm:p-10">
-          <div className="flex flex-col items-center mb-6">
-            <Image
-              src="/logo.png"
-              alt="Techna"
-              width={180}
-              height={180}
-              className="object-contain"
-              priority
-            />
-          </div>
+        <div className="bg-white rounded-3xl shadow-2xl px-8 pt-7 pb-10 sm:px-10 sm:pt-8 sm:pb-10">
+  <div className="flex flex-col items-center mb-4">
+    <Image
+      src="/new1.png"
+      alt="Techna Logo"
+      width={80}
+      height={60}
+      className="block w-[180px] h-auto object-contain"
+      priority
+    />
+  </div>
 
-          <h2 className="text-3xl font-bold text-gray-800 text-center mb-1">
-            Admin Portal
-          </h2>
+  <h2 className="text-3xl font-bold text-gray-800 text-center mb-1">
+    Admin Portal
+  </h2>
 
-          <p className="text-gray-500 text-sm text-center mb-2">
-            Sign in to your Techna Admin Dashboard
-          </p>
+<p className="text-gray-500 text-sm text-center mb-2">
+  Sign in to your Techna Admin Dashboard
+</p>
 
           <div className="flex items-center justify-center gap-1.5 mb-6">
             <ShieldCheck className="w-4 h-4 text-blue-600" />
