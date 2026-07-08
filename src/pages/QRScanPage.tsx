@@ -194,7 +194,7 @@ export default function QRScanPage() {
                 <p className="text-xs text-gray-500 font-mono">{s.studentId}</p>
               </div>
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${s.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : s.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}`}>
-                {s.status}
+                {s.status.toUpperCase()}
               </span>
             </button>
           ))}

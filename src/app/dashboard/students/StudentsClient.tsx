@@ -432,6 +432,33 @@ export default function StudentsPage() {
 
   const normalizeModuleKey = (value?: string) =>
     normalizeAlSubjects([value || ''])[0]?.trim().toLowerCase() || '';
+  const editSelectButtonClass =
+    'rounded-lg py-2 text-base sm:rounded-lg sm:text-base';
+
+  const editBatchOptions = [
+    { value: '', label: 'Select batch' },
+    ...batchOptions
+      .filter((batch) => batch !== 'All Batches')
+      .map((batch) => ({ value: batch, label: batch })),
+    ...(form.batch && !batchOptions.includes(form.batch)
+      ? [{ value: form.batch, label: form.batch }]
+      : []),
+  ];
+
+  const olCategoryOptions = [
+    { value: 'Local O/L', label: 'Local O/L' },
+    { value: 'London O/L', label: 'London O/L' },
+  ];
+
+  const olAcceptOptions = [
+    { value: 'Accept', label: 'Accept' },
+    { value: 'Change', label: 'Change' },
+  ];
+
+  const olGradeOptions = [
+    { value: '', label: 'Select grade' },
+    ...OL_GRADE_OPTIONS.map((grade) => ({ value: grade, label: grade })),
+  ];
 
   return (
     <div className="p-3 pb-20 sm:p-6 sm:pb-6">
@@ -482,9 +509,9 @@ export default function StudentsPage() {
             className="w-full"
             options={[
               { value: '', label: 'All Status' },
-              { value: 'pending', label: 'Pending' },
-              { value: 'approved', label: 'Approved' },
-              { value: 'rejected', label: 'Rejected' },
+              { value: 'pending', label: 'PENDING' },
+              { value: 'approved', label: 'APPROVED' },
+              { value: 'rejected', label: 'REJECTED' },
             ]}
           />
         </div>
@@ -574,21 +601,13 @@ export default function StudentsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Batch
                 </label>
-                <select
-                  value={form.batch}
-                  onChange={(e) => handleChange('batch', e.target.value)}
-                  className="w-full min-w-0 max-w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-base"
-                >
-                  {batchOptions
-                    .filter((b) => b !== 'All Batches')
-                    .map((b) => (
-                      <option key={b}>{b}</option>
-                    ))}
-                  {form.batch && !batchOptions.includes(form.batch) && (
-                    <option value={form.batch}>{form.batch}</option>
-                  )}
-                </select>
-              </div>
+                <CompactSelect
+                  value={form.batch || ''}
+                  onChange={(value) => handleChange('batch', value)}
+                  className="w-full min-w-0 max-w-full"
+                  buttonClassName={editSelectButtonClass}
+                  options={editBatchOptions}
+                />              </div>
             </div>
 
             <div className="rounded-2xl border border-gray-100 bg-gray-50/60 p-4">
@@ -617,15 +636,13 @@ export default function StudentsPage() {
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     O/L Category
                   </label>
-                  <select
+                  <CompactSelect
                     value={form.olCategory || 'Local O/L'}
-                    onChange={(e) => handleChange('olCategory', e.target.value)}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="Local O/L">Local O/L</option>
-                    <option value="London O/L">London O/L</option>
-                  </select>
-                </div>
+                    onChange={(value) => handleChange('olCategory', value)}
+                    className="w-full"
+                    buttonClassName={editSelectButtonClass}
+                    options={olCategoryOptions}
+                  />                </div>
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
@@ -667,15 +684,13 @@ export default function StudentsPage() {
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     Accept Status
                   </label>
-                  <select
+                  <CompactSelect
                     value={form.olAccept || 'Accept'}
-                    onChange={(e) => handleChange('olAccept', e.target.value)}
-                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="Accept">Accept</option>
-                    <option value="Change">Change</option>
-                  </select>
-                </div>
+                    onChange={(value) => handleChange('olAccept', value)}
+                    className="w-full"
+                    buttonClassName={editSelectButtonClass}
+                    options={olAcceptOptions}
+                  />                </div>
               </div>
 
               <div className="mt-5 space-y-3">
@@ -729,21 +744,15 @@ export default function StudentsPage() {
                             <label className="mb-1 block text-xs font-medium text-gray-500">
                               {label}
                             </label>
-                            <select
+                            <CompactSelect
                               value={row[field] || ''}
-                              onChange={(e) =>
-                                updateOlRow(index, field, e.target.value)
+                              onChange={(value) =>
+                                updateOlRow(index, field, value)
                               }
-                              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            >
-                              <option value="">Select grade</option>
-                              {OL_GRADE_OPTIONS.map((grade) => (
-                                <option key={grade} value={grade}>
-                                  {grade}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                              className="w-full"
+                              buttonClassName={editSelectButtonClass}
+                              options={olGradeOptions}
+                            />                          </div>
                         ))}
                       </div>
                     </div>

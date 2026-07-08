@@ -235,7 +235,7 @@ export default function StudentProfile({
       pdf.text(`Batch: ${getValue(s.batch)}`, 14, 56);
       pdf.text(`Phone: ${getValue(s.phone || s.whatsappNo)}`, 14, 68);
       pdf.text(`Email: ${getValue(s.email)}`, 14, 74);
-      pdf.text(`Status: ${getValue(s.status)}`, 14, 80);
+      pdf.text(`Status: ${getValue(s.status).toUpperCase()}`, 14, 80);
 
       const modulesText = `Modules: ${
         studentModules.map((m: any) => m.name).join(', ') || 'N/A'
@@ -445,7 +445,7 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
                           s.status,
                         )}`}
                       >
-                        {s.status || 'N/A'}
+                        {(s.status || 'N/A').toUpperCase()}
                       </span>
                     </div>
 
@@ -578,7 +578,7 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
                 : 'bg-red-100 text-red-600'
             }`}
           >
-            {a.status === 'present' ? 'Present' : 'Absent'}
+            {a.status === 'present' ? 'PRESENT' : 'ABSENT'}
           </span>
         </div>
       ))}

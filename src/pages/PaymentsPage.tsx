@@ -588,7 +588,7 @@ function PaymentModal({
                 { value: '', label: 'Select student...' },
                 ...students.map(s => ({
                   value: s._id,
-                  label: `${s.name} (${s.studentId}) - ${s.status}`,
+                  label: `${s.name} (${s.studentId}) - ${s.status.toUpperCase()}`,
                 })),
               ]}
             />
@@ -784,16 +784,16 @@ function PaymentModal({
               value={form.status}
               onChange={value => setForm(f => ({ ...f, status: value as 'paid' | 'pending' | 'overdue' }))}
               options={[
-                { value: 'paid', label: 'Paid' },
-                { value: 'pending', label: 'Pending' },
-                { value: 'overdue', label: 'Overdue' },
+                { value: 'paid', label: 'PAID' },
+                { value: 'pending', label: 'PENDING' },
+                { value: 'overdue', label: 'OVERDUE' },
               ]}
             />
             <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as 'paid' | 'pending' | 'overdue' }))}
               className="hidden">
-              <option value="paid">Paid</option>
-              <option value="pending">Pending</option>
-              <option value="overdue">Overdue</option>
+              <option value="paid">PAID</option>
+              <option value="pending">PENDING</option>
+              <option value="overdue">OVERDUE</option>
             </select>
           </div>
 
@@ -972,7 +972,7 @@ function StudentTableRow({
         <td className="px-4 py-3">
           {firstPayment && (
             <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(firstPayment.status)}`}>
-              {statusIcon(firstPayment.status)} {firstPayment.status}
+              {statusIcon(firstPayment.status)} {firstPayment.status.toUpperCase()}
             </span>
           )}
         </td>
@@ -1080,7 +1080,7 @@ function StudentTableRow({
                           <td className="px-4 py-2 text-xs text-gray-500">{p.paidDate}</td>
                           <td className="px-4 py-2">
                             <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(p.status)}`}>
-                              {statusIcon(p.status)} {p.status}
+                              {statusIcon(p.status)} {p.status.toUpperCase()}
                             </span>
                           </td>
                           <td className="px-4 py-2">
@@ -1216,7 +1216,7 @@ function PaymentMobileCard({
           </div>
           <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ${statusColor(firstPayment.status)}`}>
             {statusIcon(firstPayment.status)}
-            {firstPayment.status}
+            {firstPayment.status.toUpperCase()}
           </span>
         </div>
 
@@ -1321,7 +1321,7 @@ function PaymentMobileCard({
                   <div className="text-right">
                     <p className="text-xs font-bold text-gray-800">LKR {p.amount.toLocaleString()}</p>
                     <p className={`text-[9px] font-bold uppercase ${p.status === 'paid' ? 'text-emerald-500' : 'text-amber-500'}`}>
-                      {p.status}
+                      {p.status.toUpperCase()}
                     </p>
                   </div>
                 </div>
@@ -2080,9 +2080,9 @@ export default function PaymentsPage() {
               onChange={setFilterStatus}
               options={[
                 { value: '', label: 'All Status' },
-                { value: 'paid', label: 'Paid' },
-                { value: 'pending', label: 'Pending' },
-                { value: 'overdue', label: 'Overdue' },
+                { value: 'paid', label: 'PAID' },
+                { value: 'pending', label: 'PENDING' },
+                { value: 'overdue', label: 'OVERDUE' },
               ]}
             />
             <CompactSelect
@@ -2118,9 +2118,9 @@ export default function PaymentsPage() {
             className="w-full sm:w-36"
             options={[
               { value: '', label: 'All Status' },
-              { value: 'paid', label: 'Paid' },
-              { value: 'pending', label: 'Pending' },
-              { value: 'overdue', label: 'Overdue' },
+              { value: 'paid', label: 'PAID' },
+              { value: 'pending', label: 'PENDING' },
+              { value: 'overdue', label: 'OVERDUE' },
             ]}
           />
           <CompactSelect

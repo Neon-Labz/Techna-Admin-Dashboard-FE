@@ -625,9 +625,9 @@ export default function StudentsPage() {
             className="px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
           >
             <option value="">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
+            <option value="pending">PENDING</option>
+            <option value="approved">APPROVED</option>
+            <option value="rejected">REJECTED</option>
           </select>
         </div>
       </div>

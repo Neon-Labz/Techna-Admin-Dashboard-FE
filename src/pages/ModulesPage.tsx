@@ -22,6 +22,7 @@ import Modal from '@/components/ui/Modal';
 
 
 
+
 interface FormState {
   name: string;
   description: string;
@@ -336,7 +337,7 @@ export default function ModulesPage() {
                       : 'bg-gray-100 text-gray-500'
                   }`}
                 >
-                  {mod.status}
+                  {mod.status.toUpperCase()}
                 </span>
               </div>
 
@@ -393,14 +394,17 @@ export default function ModulesPage() {
         isOpen={modalOpen}
         onClose={closeModal}
         title={editId ? 'Edit Module' : 'Create New Module'}
-        size="xl"
+        size="lg"
       >
         {formLoading ? (
           <div className="flex items-center justify-center py-10">
             <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 lg:grid-cols-2 gap-3 max-h-[70vh] overflow-y-auto pr-1"
+        >        
             {/* 1. Module Name — full width */}
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Module Name</label>
@@ -528,8 +532,8 @@ export default function ModulesPage() {
                 }
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
               >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
+                <option value="active">ACTIVE</option>
+                <option value="inactive">INACTIVE</option>
               </select>
             </div>
 

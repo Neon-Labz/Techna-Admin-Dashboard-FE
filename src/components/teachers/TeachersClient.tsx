@@ -377,7 +377,7 @@ export default function TeachersPage() {
                     t.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
                   }`}
                 >
-                  {t.status}
+                  {t.status.toUpperCase()}
                 </span>
               </div>
               <div className="space-y-2 text-sm text-gray-600">
@@ -648,8 +648,8 @@ export default function TeachersPage() {
                   MozAppearance: 'none',
                 }}
               >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
+                <option value="active">ACTIVE</option>
+                <option value="inactive">INACTIVE</option>
               </select>
             </div>
           </div>

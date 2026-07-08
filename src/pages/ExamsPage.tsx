@@ -381,7 +381,7 @@ export default function ExamsPage() {
         {filtered.map((e) => (
           <div
             key={e.id}
-            className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5"
+            className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 h-full flex flex-col"
           >
             <div className="flex items-start gap-3 mb-3">
               <div className="w-12 h-12 bg-indigo-600 rounded-xl flex flex-col items-center justify-center text-white">
@@ -401,7 +401,7 @@ export default function ExamsPage() {
               </div>
             </div>
 
-            <div className="space-y-1.5 text-sm text-gray-600 mb-4">
+            <div className="space-y-1.5 text-sm text-gray-600 mb-4 flex-1">
               <p className="flex items-center gap-2">
                 <Calendar className="w-3.5 h-3.5 text-gray-400" />
                 {e.date} · {e.startTime} – {e.endTime}
@@ -413,7 +413,7 @@ export default function ExamsPage() {
               )}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 mt-auto">
               <button
                 onClick={() => openEdit(e)}
                 className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg text-sm font-medium"

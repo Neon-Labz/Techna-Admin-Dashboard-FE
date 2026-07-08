@@ -309,7 +309,7 @@ const recentStudents = [...students].slice(-4).reverse();
       change: getMonthlyCountChange(students, ['enrolledAt', 'createdAt']),
     },
     {
-      label: 'Approved',
+      label: 'APPROVED',
       value: summary?.approvedStudents ?? approved,
       icon: UserCheck,
       color: 'bg-emerald-500',
@@ -320,7 +320,7 @@ const recentStudents = [...students].slice(-4).reverse();
       ),
     },
     {
-      label: 'Pending',
+      label: 'PENDING',
       value: summary?.pendingStudents ?? pending,
       icon: Clock,
       color: 'bg-amber-500',
@@ -617,7 +617,7 @@ const recentStudents = [...students].slice(-4).reverse();
                         : 'bg-red-100 text-red-700'
                   }`}
                 >
-                  {s.status || 'pending'}
+                  {(s.status || 'pending').toUpperCase()}
                 </span>
               </div>
             ))}
