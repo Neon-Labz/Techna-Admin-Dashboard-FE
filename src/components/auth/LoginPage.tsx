@@ -75,9 +75,9 @@ export default function LoginPage() {
             <Image
               src="/new1.png"
               alt="Techna Logo"
-              width={160}
-              height={70}
-              className="w-[160px] h-auto object-contain"
+              width={120}
+              height={52}
+              className="w-[120px] h-auto object-contain"
               priority
             />
           </div>
