@@ -325,8 +325,11 @@ export default function ModulesPage() {
           </>
         ) : (
           filtered.map((mod) => (
-            <div key={mod._id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-              <div className="flex items-start justify-between mb-3">
+              <div
+                key={mod._id}
+                className="flex h-full flex-col bg-white rounded-2xl shadow-sm border border-gray-100 p-5"
+              >
+                <div className="flex items-start justify-between mb-3">
                 <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
                   <BookOpen className="w-5 h-5 text-indigo-600" />
                 </div>
@@ -354,7 +357,7 @@ export default function ModulesPage() {
                 {mod.unit != null && mod.unit > 0 && <p>📚 {mod.unit} Units</p>}
               </div>
 
-              <div className="flex gap-2 mt-4">
+              <div className="mt-auto flex gap-2 mt-4">
                 <button
                   onClick={() => openEdit(mod._id)}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg text-sm font-medium transition-colors"
