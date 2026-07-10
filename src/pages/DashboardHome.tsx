@@ -24,6 +24,7 @@ import {
   Cell,
 } from 'recharts';
 import { dashboardApi } from '@/api/dashboard.api';
+import { isPendingStudentId } from '@/utils/studentId';
 
 const COLORS = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'];
 
@@ -614,7 +615,10 @@ export default function DashboardHome() {
                     {s.name || s.fullNameEnglish || 'Unnamed Student'}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {s.batch || '-'} · {s.studentId || s.admissionNumber || '-'}
+                    {s.batch || '-'} ·{' '}
+                    {isPendingStudentId(s.studentId)
+                      ? s.admissionNumber || 'Pending Approval'
+                      : s.studentId}
                   </p>
                 </div>
 

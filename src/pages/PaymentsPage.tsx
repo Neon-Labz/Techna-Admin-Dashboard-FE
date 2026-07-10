@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import { paymentApi, PaymentRecord, CreatePaymentPayload } from '@/api/payment.api';
 import api from '@/lib/axios';
 import { useDataStore } from '@/store/dataStore';
+import { formatStudentId } from '@/utils/studentId';
 
 const MONTHS = [
   { num: '01', label: 'Jan' }, { num: '02', label: 'Feb' },
@@ -280,7 +281,7 @@ function PaymentModal({
               <option value="">Select student…</option>
               {students.map(s => (
                 <option key={s._id} value={s._id}>
-                  {s.name} ({s.studentId}) — {s.status}
+                  {s.name} ({formatStudentId(s.studentId)}) — {s.status}
                 </option>
               ))}
             </select>

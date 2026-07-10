@@ -14,6 +14,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { resultsApi } from '@/api/results.api';
+import { formatStudentId } from '@/utils/studentId';
 
 type Student = {
   _id?: string;
@@ -405,7 +406,7 @@ export default function ResultsPage() {
                     >
                       <span className="truncate">
                         <span className="font-semibold text-blue-600">
-                          {student.studentId}
+                          {formatStudentId(student.studentId)}
                         </span>{' '}
                         - {student.fullNameEnglish || student.name || 'Student'}
                       </span>
@@ -433,7 +434,7 @@ export default function ResultsPage() {
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold text-slate-900">
-                    {selectedStudent.studentId} - {selectedStudent.studentName}
+                    {formatStudentId(selectedStudent.studentId)} - {selectedStudent.studentName}
                   </p>
                   <p className="text-xs text-slate-500">
                     Batch:{' '}

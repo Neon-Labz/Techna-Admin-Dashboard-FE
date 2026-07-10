@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Student, PaymentRecord } from '../../types';
 import { useDataStore } from '../../store/dataStore';
+import { isPendingStudentId, formatStudentId } from '../../utils/studentId';
 import { attendanceApi } from '@/api/attendance.api';
 import { paymentApi } from '@/api/payment.api';
 import {
@@ -231,7 +232,7 @@ export default function StudentProfile({
 
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9);
-      pdf.text(`Student ID: ${s.studentId}`, 14, 50);
+      pdf.text(`Student ID: ${formatStudentId(s.studentId)}`, 14, 50);
       pdf.text(`Batch: ${getValue(s.batch)}`, 14, 56);
       pdf.text(`Phone: ${getValue(s.phone || s.whatsappNo)}`, 14, 68);
       pdf.text(`Email: ${getValue(s.email)}`, 14, 74);
@@ -247,7 +248,9 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
 
       pdf.addImage(qrImage, 'PNG', pageWidth - 50, 38, 32, 32);
 
-      pdf.save(`${s.studentId}-card.pdf`);
+      pdf.save(
+        `${isPendingStudentId(s.studentId) ? 'pending' : s.studentId}-card.pdf`,
+      );
       toast.success('PDF downloaded!', { id: toastId });
     } catch (error) {
       console.error(error);
@@ -407,7 +410,7 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
                         {studentName}
                       </h2>
                       <p className="mt-0.5 text-[12px] text-indigo-100">
-                        {getValue(s.studentId)}
+                        {formatStudentId(s.studentId)}
                       </p>
                       <p className="text-[12px] text-indigo-100">
                         {getValue(s.batch)}

@@ -41,6 +41,9 @@ const RELIGION_OPTIONS = [
   'Other',
 ];
 
+const MAX_MAIN_SUBJECTS = 2;
+const MAX_BASKET_SUBJECTS = 1;
+
 const emptyOL = {
   year: '',
   indexNumber: '',
@@ -244,23 +247,34 @@ export default function StudentsPage() {
     }));
   };
 
-  const toggleModule = (moduleName: string) => {
+  const toggleModule = (module: ApiModule) => {
     setForm((prev: any) => {
-      const current = Array.isArray(prev.subjects)
+      const current: string[] = Array.isArray(prev.subjects)
         ? prev.subjects
         : Array.isArray(prev.modules)
           ? prev.modules
           : [];
 
-      const updated = current.includes(moduleName)
-        ? current.filter((m: string) => m !== moduleName)
-        : [...current, moduleName];
+      if (current.includes(module.name)) {
+        const updated = current.filter((m: string) => m !== module.name);
+        return { ...prev, subjects: updated, modules: updated };
+      }
 
-      return {
-        ...prev,
-        subjects: updated,
-        modules: updated,
-      };
+      const categoryOf = (name: string) =>
+        moduleOptions.find((m) => m.name === name)?.subjectCategory;
+
+      if (module.subjectCategory === 'main') {
+        const mainCount = current.filter((m) => categoryOf(m) === 'main').length;
+        if (mainCount >= MAX_MAIN_SUBJECTS) return prev;
+      }
+
+      if (module.subjectCategory === 'basket') {
+        const basketCount = current.filter((m) => categoryOf(m) === 'basket').length;
+        if (basketCount >= MAX_BASKET_SUBJECTS) return prev;
+      }
+
+      const updated = [...current, module.name];
+      return { ...prev, subjects: updated, modules: updated };
     });
   };
 
@@ -937,18 +951,24 @@ export default function StudentsPage() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Enrolled Modules
-              </label>
+            {modulesLoading ? (
+              <p className="text-sm text-gray-400">Loading modules...</p>
+            ) : moduleOptions.length === 0 ? (
+              <p className="text-sm text-gray-400">No modules found</p>
+            ) : (
+              <>
+                {(() => {
+                  const mainModules = moduleOptions.filter(
+                    (m) => m.subjectCategory === 'main',
+                  );
+                  const basketModules = moduleOptions.filter(
+                    (m) => m.subjectCategory === 'basket',
+                  );
+                  const otherModules = moduleOptions.filter(
+                    (m) => m.subjectCategory !== 'main' && m.subjectCategory !== 'basket',
+                  );
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {modulesLoading ? (
-                  <p className="text-sm text-gray-400">Loading modules...</p>
-                ) : moduleOptions.length === 0 ? (
-                  <p className="text-sm text-gray-400">No modules found</p>
-                ) : (
-                  moduleOptions.map((module) => {
+                  const renderModule = (module: ApiModule) => {
                     const checked = isModuleSelected(module);
 
                     return (
@@ -963,16 +983,53 @@ export default function StudentsPage() {
                         <input
                           type="checkbox"
                           checked={checked}
-                          onChange={() => toggleModule(module.name)}
+                          onChange={() => toggleModule(module)}
                           className="rounded border-gray-300"
                         />
                         {module.name}
                       </label>
                     );
-                  })
-                )}
-              </div>
-            </div>
+                  };
+
+                  return (
+                    <>
+                      {mainModules.length > 0 && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Main Subjects (select {MAX_MAIN_SUBJECTS})
+                          </label>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {mainModules.map(renderModule)}
+                          </div>
+                        </div>
+                      )}
+
+                      {basketModules.length > 0 && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Basket Subject (select {MAX_BASKET_SUBJECTS})
+                          </label>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {basketModules.map(renderModule)}
+                          </div>
+                        </div>
+                      )}
+
+                      {otherModules.length > 0 && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Other Modules
+                          </label>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {otherModules.map(renderModule)}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </>
+            )}
 
             <div className="flex gap-3 pt-2 sticky bottom-0 bg-white">
               <button
