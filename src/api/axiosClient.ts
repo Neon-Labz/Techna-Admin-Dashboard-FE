@@ -1,5 +1,5 @@
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_SERVER_URL;
+  process.env.NEXT_PUBLIC_API_URL;
 
 interface ApiWrappedResponse<T = unknown> {
   success: boolean;
