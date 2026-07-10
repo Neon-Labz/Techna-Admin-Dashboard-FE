@@ -188,6 +188,7 @@ export default function StudentProfile({
     setPaymentsLoading(true);
 
    
+    const mongoId = s.id || s._id;
     const readableId = s.studentId;
 
     const fetchByReadable = readableId
