@@ -1927,6 +1927,9 @@ export default function PaymentsPage() {
       return [updated, ...prev];
     });
   };
+  const currentYear = new Date().getFullYear();
+
+const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 
   return (
     <div className="p-3 pb-20 sm:p-6 sm:pb-6">
@@ -2038,51 +2041,70 @@ export default function PaymentsPage() {
             <CompactSelect
               value={String(trackingYear)}
               onChange={value => setTrackingYear(Number(value))}
-              options={[2024, 2025, 2026, 2027].map(y => ({
+              options={yearOptions.map(y => ({
                 value: String(y),
                 label: String(y),
               }))}
+            
             />
           </div>
         </details>
         <div className="hidden w-full flex-wrap items-center gap-2 sm:flex xl:w-auto xl:flex-nowrap">
-          <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          <CompactSelect
-            value={filterBatch}
-            onChange={setFilterBatch}
-            className="w-full sm:w-40"
-            options={BATCHES.map(b => ({ value: b, label: b || 'All Batches' }))}
-          />
-          <CompactSelect
-            value={filterModule}
-            onChange={setFilterModule}
-            className="w-full sm:w-48 xl:w-56"
-            options={[
-              { value: '', label: 'All Modules' },
-              ...allModules.map(m => ({ value: m.id, label: m.name })),
-            ]}
-          />
-          <CompactSelect
-            value={filterStatus}
-            onChange={setFilterStatus}
-            className="w-full sm:w-36"
-            options={[
-              { value: '', label: 'All Status' },
-              { value: 'paid', label: 'PAID' },
-              { value: 'pending', label: 'PENDING' },
-              { value: 'overdue', label: 'OVERDUE' },
-            ]}
-          />
-          <CompactSelect
-            value={String(trackingYear)}
-            onChange={value => setTrackingYear(Number(value))}
-            className="w-full sm:w-24"
-            options={[2024, 2025, 2026, 2027].map(y => ({
-              value: String(y),
-              label: String(y),
-            }))}
-          />
-        </div>
+              <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
+
+              <CompactSelect
+                value={filterBatch}
+                onChange={setFilterBatch}
+                className="w-full sm:w-40"
+                options={[
+                  { value: '', label: 'All Batches' },
+                  ...BATCHES.map(b => ({
+                    value: b,
+                    label: b,
+                  })),
+                ]}
+              />
+
+              <CompactSelect
+                value={filterModule}
+                onChange={setFilterModule}
+                className="w-full sm:w-48 xl:w-56"
+                options={[
+                  { value: '', label: 'All Modules' },
+                  ...allModules.map(m => ({
+                    value: m.id,
+                    label: m.name,
+                  })),
+                ]}
+              />
+
+              <CompactSelect
+                value={filterStatus}
+                onChange={setFilterStatus}
+                className="w-full sm:w-36"
+                options={[
+                  { value: '', label: 'All Status' },
+                  { value: 'paid', label: 'PAID' },
+                  { value: 'pending', label: 'PENDING' },
+                  { value: 'overdue', label: 'OVERDUE' },
+                ]}
+              />
+
+              <CompactSelect
+                value={String(trackingYear)}
+                onChange={value => setTrackingYear(Number(value))}
+                className="w-full sm:w-28"
+                options={[
+                  { value: String(trackingYear), label: 'Year' },
+                  ...yearOptions
+                    .filter(y => y !== trackingYear)
+                    .map(y => ({
+                      value: String(y),
+                      label: String(y),
+                    })),
+                ]}
+              />
+            </div>
       </div>
 
      

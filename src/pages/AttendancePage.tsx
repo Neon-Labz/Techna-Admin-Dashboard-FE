@@ -443,62 +443,65 @@ export default function AttendancePage() {
       </div>
 
       {/* Filters */}
-      <div className="relative z-30 mb-4 flex flex-col gap-2 sm:mb-5 sm:flex-row sm:gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search student..."
-            className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl" />
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-          <Filter className="hidden w-4 flex-shrink-0 text-gray-400 sm:block" />
-          <CompactDatePicker
-            value={filterDate}
-            onChange={setFilterDate}
-            max={today}
-            className="min-w-0 sm:w-36"
-          />
-          {filterDate && (
-            <button
-              onClick={() => setFilterDate('')}
-              className="rounded-lg bg-white px-3 py-2.5 text-xs font-semibold text-indigo-600 hover:underline sm:bg-transparent sm:px-0 sm:text-sm"
-            >
-              Clear Filter
-            </button>
-          )}
+<div className="relative z-30 mb-4 flex flex-col gap-2 sm:mb-5 sm:flex-row sm:gap-3">
+  <div className="relative flex-1">
+    <Search className="absolute left-3 top-1/2 w-4 -translate-y-1/2 text-gray-400" />
 
-          <CompactSelect
-            value={filterBatch}
-            onChange={setFilterBatch}
-            options={BATCHES.map(batch => ({
-              value: batch,
-              label: batch || 'All Batches',
-            }))}
-          />
-          <CompactSelect
-            value={filterModule}
-            onChange={setFilterModule}
-            className="col-span-2 sm:col-span-1"
-            options={[
-              { value: '', label: 'All Modules' },
-              ...modules.map(module => ({
-                value: module._id,
-                label: module.name,
-              })),
-            ]}
-          />
+    <input
+      value={search}
+      onChange={e => setSearch(e.target.value)}
+      placeholder="Search student..."
+      className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl"
+    />
+  </div>
 
-          {/* ✅ Dynamic batch dropdown — from loaded students */}
-          <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)} className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl sm:text-sm">
-            <option value="">All Batches</option>
-            {BATCHES.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
+  <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+    <Filter className="hidden w-4 flex-shrink-0 text-gray-400 sm:block" />
 
-          <select value={filterModule} onChange={e => setFilterModule(e.target.value)} className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl sm:text-sm">
-            <option value="">All Modules</option>
-            {modules.map(m => <option key={m._id} value={m._id}>{m.name}</option>)}
-          </select>
-        </div>
-      </div>
+    <CompactDatePicker
+      value={filterDate}
+      onChange={setFilterDate}
+      max={today}
+      className="min-w-0 sm:w-36"
+    />
+
+    {filterDate && (
+      <button
+        type="button"
+        onClick={() => setFilterDate('')}
+        className="rounded-lg bg-white px-3 py-2.5 text-xs font-semibold text-indigo-600 hover:underline sm:bg-transparent sm:px-0 sm:text-sm"
+      >
+        Clear Filter
+      </button>
+    )}
+
+    <CompactSelect
+      value={filterBatch}
+      onChange={setFilterBatch}
+      className="min-w-0 sm:w-40"
+      options={[
+        { value: '', label: 'All Batches' },
+        ...BATCHES.map(batch => ({
+          value: batch,
+          label: batch,
+        })),
+      ]}
+    />
+
+    <CompactSelect
+      value={filterModule}
+      onChange={setFilterModule}
+      className="col-span-2 min-w-0 sm:col-span-1 sm:w-48"
+      options={[
+        { value: '', label: 'All Modules' },
+        ...modules.map(module => ({
+          value: module._id,
+          label: module.name,
+        })),
+      ]}
+    />
+  </div>
+</div>
 
       {/* Mobile Cards */}
       <div className="space-y-3 md:hidden">
