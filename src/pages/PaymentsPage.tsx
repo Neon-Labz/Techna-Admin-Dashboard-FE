@@ -127,6 +127,8 @@ function extractModuleRef(m: unknown): ModuleRef {
 }
 
 function extractStudentModules(s: Record<string, unknown>): unknown[] {
+  // Collect from ALL relevant fields and merge them to maximize module resolution.
+  // The student record may store module IDs in one field and subject names in another.
   const candidates = [
     s.modules,
     s.enrolledModules,
@@ -141,11 +143,28 @@ function extractStudentModules(s: Record<string, unknown>): unknown[] {
           s.basketSubject,
         ]
       : undefined,
+    Array.isArray((s.subjectSelection as any)?.subjects)
+      ? (s.subjectSelection as any).subjects
+      : undefined,
+    Array.isArray((s.subjectSelection as any)?.enrolledModules)
+      ? (s.subjectSelection as any).enrolledModules
+      : undefined,
   ];
+
+  // Merge all non-empty arrays and deduplicate by stringified value
+  const seen = new Set<string>();
+  const merged: unknown[] = [];
   for (const c of candidates) {
-    if (Array.isArray(c) && c.length > 0) return c;
+    if (!Array.isArray(c) || c.length === 0) continue;
+    for (const item of c) {
+      const key = typeof item === 'string' ? item.toLowerCase().trim() : JSON.stringify(item);
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(item);
+      }
+    }
   }
-  return [];
+  return merged;
 }
 
 function PaymentModal({
@@ -254,12 +273,14 @@ function PaymentModal({
       ? allModules
           .filter(m => s.moduleRefs.some(ref => {
             const label = ref.name ?? ref.id ?? '';
+            // Direct ID match (e.g. ref stores the actual module ObjectId)
             if (ref.id && ref.id === m.id) {
               matchedRefLabels.add(label);
               return true;
             }
+            // Name-based matching (case-insensitive, normalized)
+            const normM = normalizeModuleName(m.name);
             if (ref.name) {
-              const normM = normalizeModuleName(m.name);
               const normR = normalizeModuleName(ref.name);
               const isMatch =
                 normM === normR ||
@@ -272,6 +293,14 @@ function PaymentModal({
                   return wordsR.length > 0 && overlap / wordsR.length >= 0.6;
                 })();
               if (isMatch) {
+                matchedRefLabels.add(label);
+                return true;
+              }
+            }
+            // Also try matching ref.id as a name (student may store subject names in modules array)
+            if (ref.id && ref.id !== m.id) {
+              const normRefId = normalizeModuleName(ref.id);
+              if (normRefId && (normM === normRefId || normM.includes(normRefId) || normRefId.includes(normM))) {
                 matchedRefLabels.add(label);
                 return true;
               }

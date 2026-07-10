@@ -152,9 +152,18 @@ export default function StudentProfile({
           ? s.subjectSelection.subjects
           : [];
 
+  // Normalize a module/subject name for comparison: lowercase, strip special chars, collapse whitespace
+  const normalizeForMatch = (name: string) =>
+    name.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+
   const studentModules = studentModuleValues.map((item: string) => {
+    const normItem = normalizeForMatch(item);
     const found = modules.find(
-      (m: any) => m.id === item || m._id === item || m.name === item,
+      (m: any) =>
+        m.id === item ||
+        m._id === item ||
+        m.name === item ||
+        normalizeForMatch(m.name || '') === normItem,
     );
 
     return (
@@ -225,12 +234,30 @@ export default function StudentProfile({
     const currentMonth = new Date().toISOString().slice(0, 7); // e.g. "2025-07"
     // Match by moduleId or moduleName since the payment might store either
     const mod = studentModules.find((m: any) => m.id === moduleId);
-    const moduleName = mod?.name || moduleId;
+    const moduleName = normalizeForMatch(mod?.name || moduleId);
+    const moduleIdLower = moduleId.toLowerCase().trim();
+
+    // Also get the real module ID from the store if available (the MongoDB ObjectId)
+    const realModuleId = (mod?.id || (mod as any)?._id || '').toLowerCase().trim();
+
     return localPayments.find(
-      (p: any) =>
-        (p.moduleId === moduleId || p.moduleName === moduleName || p.moduleName === moduleId || p.moduleId === moduleName) &&
-        p.status === 'paid' &&
-        p.paidDate?.slice(0, 7) === currentMonth,
+      (p: any) => {
+        const pModuleId = (p.moduleId || '').toLowerCase().trim();
+        const pModuleName = normalizeForMatch(p.moduleName || '');
+
+        // Exact matches on ID or normalized name
+        const exactMatch =
+          pModuleId === moduleIdLower ||
+          pModuleName === moduleName ||
+          pModuleId === moduleName;
+
+        // Also match if payment's moduleId matches the store's real module ID
+        const realIdMatch = realModuleId && realModuleId !== moduleName && (
+          pModuleId === realModuleId
+        );
+
+        return (exactMatch || realIdMatch) && p.status === 'paid' && p.paidDate?.slice(0, 7) === currentMonth;
+      },
     );
   };
 
@@ -359,12 +386,19 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
 
     // Duplicate payment validation: check student + module + month
     const paidMonth = payForm.paidDate.slice(0, 7); // e.g. "2025-07"
-    const moduleName = mod.name;
+    const moduleName = normalizeForMatch(mod.name || '');
+    const formModuleIdLower = (payForm.moduleId || '').toLowerCase().trim();
     const isDuplicate = freshPayments.some(
-      (p: any) =>
-        (p.moduleId === payForm.moduleId || p.moduleName === moduleName || p.moduleId === moduleName || p.moduleName === payForm.moduleId) &&
-        p.status === 'paid' &&
-        p.paidDate?.slice(0, 7) === paidMonth,
+      (p: any) => {
+        const pModuleId = (p.moduleId || '').toLowerCase().trim();
+        const pModuleName = normalizeForMatch(p.moduleName || '');
+        const moduleMatch =
+          pModuleId === formModuleIdLower ||
+          pModuleName === moduleName ||
+          pModuleId === moduleName ||
+          pModuleName === formModuleIdLower;
+        return moduleMatch && p.status === 'paid' && p.paidDate?.slice(0, 7) === paidMonth;
+      },
     );
 
     if (isDuplicate) {
@@ -706,25 +740,25 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
                     return (
                       <div
                         key={m.id || m.name}
-                        className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
+                        className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 min-h-[40px] ${
                           paid
                             ? 'border-emerald-200 bg-emerald-50'
                             : 'border-slate-100 bg-white'
                         }`}
                       >
-                        <span className="text-[13px] font-bold text-slate-800">
+                        <span className="text-[13px] font-bold text-slate-800 truncate min-w-0">
                           {m.name}
                         </span>
 
                         {paid ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-emerald-600">
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-xs font-bold text-emerald-600 whitespace-nowrap">
                               LKR {paid.amount?.toLocaleString()}
                             </span>
                             <CheckCircle className="h-4 w-4 text-emerald-600" />
                           </div>
                         ) : (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-shrink-0">
                             <span className="text-xs font-bold text-slate-400">
                               Unpaid
                             </span>
@@ -911,6 +945,25 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
               <form onSubmit={handlePaySubmit} className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Payment Date
+                  </label>
+
+                  <input
+                    type="date"
+                    required
+                    value={payForm.paidDate}
+                    onChange={(e) =>
+                      setPayForm((f) => ({ ...f, paidDate: e.target.value, moduleId: '' }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                  />
+                  <p className="mt-1 text-xs text-gray-400">
+                    Select the month you are paying for
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Module
                   </label>
 
@@ -927,11 +980,24 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
                   >
                     <option value="">Select module...</option>
                     {studentModules.map((m: any) => {
-                      const alreadyPaid = getModulePayment(m.id);
+                      // Check if already paid for the SELECTED month (not just current month)
+                      const selectedMonth = payForm.paidDate?.slice(0, 7) || new Date().toISOString().slice(0, 7);
+                      const moduleNameNorm = normalizeForMatch(m.name || '');
+                      const moduleIdLower = (m.id || '').toLowerCase().trim();
+                      const alreadyPaidForMonth = localPayments.find((p: any) => {
+                        const pModuleId = (p.moduleId || '').toLowerCase().trim();
+                        const pModuleName = normalizeForMatch(p.moduleName || '');
+                        const moduleMatch =
+                          pModuleId === moduleIdLower ||
+                          pModuleName === moduleNameNorm ||
+                          pModuleId === moduleNameNorm ||
+                          pModuleName === moduleIdLower;
+                        return moduleMatch && p.status === 'paid' && p.paidDate?.slice(0, 7) === selectedMonth;
+                      });
                       const fee = m.fee || 1200;
                       return (
-                        <option key={m.id || m.name} value={m.id} disabled={!!alreadyPaid}>
-                          {m.name} - LKR {fee.toLocaleString()}{alreadyPaid ? ' (Paid this month)' : ''}
+                        <option key={m.id || m.name} value={m.id} disabled={!!alreadyPaidForMonth}>
+                          {m.name} - LKR {fee.toLocaleString()}{alreadyPaidForMonth ? ` (Paid for ${selectedMonth})` : ''}
                         </option>
                       );
                     })}
@@ -973,22 +1039,6 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
                     <option value="bank">Bank Transfer</option>
                     <option value="online">Online</option>
                   </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Paid Date
-                  </label>
-
-                  <input
-                    type="date"
-                    required
-                    value={payForm.paidDate}
-                    onChange={(e) =>
-                      setPayForm((f) => ({ ...f, paidDate: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                  />
                 </div>
 
                 <div className="flex gap-3 pt-2">
