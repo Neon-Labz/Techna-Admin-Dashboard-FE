@@ -10,6 +10,7 @@ import { Calendar, Filter, Search, CheckCircle, XCircle, Users, ChevronDown, Tra
 import { useToast } from '@/hooks/useToast';
 import Toast from '@/components/common/Toast';
 import DeleteModal from '@/components/common/DeleteModal';
+import CompactDatePicker from '@/components/ui/CompactDatePicker';
 
 function formatDate(dateStr: string) {
   const d = new Date(dateStr);
@@ -301,7 +302,7 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      {/* Filters */}
+    
       <div className="relative z-30 mb-4 flex flex-col gap-2 sm:mb-5 sm:flex-row sm:gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
