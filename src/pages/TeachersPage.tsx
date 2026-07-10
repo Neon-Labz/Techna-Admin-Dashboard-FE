@@ -461,7 +461,7 @@ export default function TeachersPage() {
                       : 'bg-gray-100 text-gray-500'
                   }`}
                 >
-                  {t.status}
+                  {t.status.toUpperCase()}
                 </span>
               </div>
               <div className="space-y-2 text-sm text-gray-600">
@@ -721,8 +721,8 @@ export default function TeachersPage() {
               }
               className="w-full px-3 py-2 border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
             >
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
+              <option value="active">ACTIVE</option>
+              <option value="inactive">INACTIVE</option>
             </select>
           </div>
 

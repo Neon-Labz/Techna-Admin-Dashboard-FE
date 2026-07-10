@@ -42,6 +42,13 @@ const formatDate = (value: any) => {
   return date.toLocaleDateString();
 };
 
+const formatTime = (value: any) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+};
+
 const normalizeQrImageUrl = (value?: string) => {
   const cleaned = value?.trim().replace(/\*/g, '');
   if (!cleaned) return '';
@@ -180,11 +187,10 @@ export default function StudentProfile({
     paymentApi.getByStudent(s.studentId || s.id).then(setLocalPayments).catch(() => {});
   }, [s.studentId, s.id]);
 
-  const getAttendanceStatus = (moduleId: string) => {
-    const rec = localAttendance.find(
+  const getAttendanceRecord = (moduleId: string) => {
+    return localAttendance.find(
       (a: any) => a.moduleId === moduleId && (a.date === today || String(a.date).startsWith(today)),
     );
-    return rec?.status || null;
   };
 
   const getModulePayment = (moduleId: string) => {
@@ -236,7 +242,7 @@ export default function StudentProfile({
       pdf.text(`Batch: ${getValue(s.batch)}`, 14, 56);
       pdf.text(`Phone: ${getValue(s.phone || s.whatsappNo)}`, 14, 68);
       pdf.text(`Email: ${getValue(s.email)}`, 14, 74);
-      pdf.text(`Status: ${getValue(s.status)}`, 14, 80);
+      pdf.text(`Status: ${getValue(s.status).toUpperCase()}`, 14, 80);
 
       const modulesText = `Modules: ${
         studentModules.map((m: any) => m.name).join(', ') || 'N/A'
@@ -265,11 +271,12 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
     status: 'present' | 'absent',
   ) => {
     onAttendanceUpdate(moduleId, date, status);
+    const markedAt = new Date().toISOString();
     setLocalAttendance(prev => {
       const filtered = prev.filter(
         (a: any) => !(a.moduleId === moduleId && (a.date === date || String(a.date).startsWith(date))),
       );
-      return [...filtered, { moduleId, date, status }];
+      return [...filtered, { moduleId, date, status, markedAt }];
     });
     try {
       await attendanceApi.markAttendance({
@@ -448,7 +455,7 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
                           s.status,
                         )}`}
                       >
-                        {s.status || 'N/A'}
+                        {(s.status || 'N/A').toUpperCase()}
                       </span>
                     </div>
 
@@ -509,7 +516,9 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
               <div className="space-y-2">
                 {studentModules.length > 0 ? (
                   studentModules.map((m: any) => {
-                    const att = getAttendanceStatus(m.id);
+                    const rec = getAttendanceRecord(m.id);
+                    const att = rec?.status || null;
+                    const markedTime = formatTime(rec?.markedAt || rec?.createdAt);
 
                     return (
                       <div
@@ -520,7 +529,13 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
                           {m.name}
                         </span>
 
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-2">
+                          {markedTime ? (
+                            <span className="text-xs text-slate-400">
+                              Marked at: {markedTime}
+                            </span>
+                          ) : null}
+
                           <button
                             onClick={() =>
                               handleAttendanceClick(m.id, m.name, today, 'present')
@@ -572,7 +587,14 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
             {getValue(a.moduleName)}
           </span>
 
-          <span className="text-slate-400">{formatDate(a.date)}</span>
+          <span className="text-slate-400">
+            {formatDate(a.date)}
+            {formatTime(a.markedAt || a.createdAt) ? (
+              <span className="ml-1 text-xs text-slate-400">
+                ({formatTime(a.markedAt || a.createdAt)})
+              </span>
+            ) : null}
+          </span>
 
           <span
             className={`w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase ${
@@ -581,7 +603,7 @@ const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
                 : 'bg-red-100 text-red-600'
             }`}
           >
-            {a.status === 'present' ? 'Present' : 'Absent'}
+            {a.status === 'present' ? 'PRESENT' : 'ABSENT'}
           </span>
         </div>
       ))}

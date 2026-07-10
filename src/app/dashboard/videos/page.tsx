@@ -1,10 +1,11 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getModules, addResourceUrl, toggleResourcePublish, isAxiosError, type ApiModule, type ApiResource } from '@/lib/api';
+import { getModules, addResourceUrl, syncResourcesWithR2, toggleResourcePublish, isAxiosError, type ApiModule, type ApiResource } from '@/lib/api';
 import { validateVideoForm } from '@/lib/validation';
 
 import Modal from '@/components/ui/Modal';
-import { Play, Upload, Search, Video, Eye, EyeOff } from 'lucide-react';
+import CompactSelect from '@/components/ui/CompactSelect';
+import { Play, Upload, Search, Video, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import Toast from '@/components/common/Toast';
 
@@ -35,11 +36,14 @@ const VideoThumbnail = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [thumbnail, setThumbnail] = useState<string | null>(thumbnailUrl || null);
-  const [error, setError] = useState(false);
+  const [status, setStatus] = useState<'ready' | 'generating' | 'failed'>(
+    thumbnailUrl ? 'ready' : src ? 'generating' : 'failed',
+  );
 
   useEffect(() => {
     if (thumbnailUrl || !src) return;
 
+    setStatus('generating');
     const video = document.createElement('video');
     video.crossOrigin = 'anonymous';
     video.src = src;
@@ -55,23 +59,24 @@ const VideoThumbnail = ({
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           setThumbnail(canvas.toDataURL('image/jpeg'));
+          setStatus('ready');
         }
       } catch {
-        setError(true);
+        setStatus('failed');
       }
     };
 
-    video.onerror = () => setError(true);
+    video.onerror = () => setStatus('failed');
     video.load();
   }, [src, thumbnailUrl]);
 
-  if (thumbnail && !error) {
+  if (thumbnail && status !== 'failed') {
     return (
       <img
         src={thumbnail}
         alt={title}
         className="w-full h-full object-cover"
-        onError={() => setError(true)}
+        onError={() => setStatus('failed')}
       />
     );
   }
@@ -82,6 +87,12 @@ const VideoThumbnail = ({
         <Play size={24} className="text-white ml-1" />
       </div>
       <p className="text-white/60 text-xs text-center px-2 line-clamp-1">{title}</p>
+      {status === 'generating' && (
+        <p className="text-white/40 text-[10px]">Generating preview...</p>
+      )}
+      {status === 'failed' && (
+        <p className="text-white/40 text-[10px]">No thumbnail available</p>
+      )}
     </div>
   );
 };
@@ -106,6 +117,7 @@ export default function VideosPage() {
   const [videoUrl, setVideoUrl] = useState('');
   const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [description, setDescription] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
   const fetchModules = useCallback(() => {
     getModules()
@@ -166,6 +178,19 @@ export default function VideosPage() {
     }
   };
 
+  const handleSyncR2 = async () => {
+    setSyncing(true);
+    try {
+      const result = await syncResourcesWithR2();
+      addToast(result.message, 'success');
+      if (result.removed > 0) fetchModules();
+    } catch (err: unknown) {
+      addToast(extractErrorMessage(err), 'error');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleTogglePublish = async (moduleId: string, resourceId: string) => {
     try {
       const result = await toggleResourcePublish(moduleId, resourceId);
@@ -201,9 +226,19 @@ export default function VideosPage() {
           <h1 className="text-2xl font-bold text-gray-800">Lecture Videos</h1>
           <p className="text-gray-500 text-sm">{videos.length} videos · {modules.length} subjects</p>
         </div>
-        <button onClick={() => setUploadOpen(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium">
-          <Upload className="w-4 h-4" /> Add Video
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSyncR2}
+            disabled={syncing}
+            title="Remove records for videos that were deleted directly from Cloudflare R2"
+            className="flex items-center gap-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-60"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} /> {syncing ? 'Syncing...' : 'Sync with R2'}
+          </button>
+          <button onClick={() => setUploadOpen(true)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-medium">
+            <Upload className="w-4 h-4" /> Add Video
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -213,21 +248,26 @@ export default function VideosPage() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search videos..."
             className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white" />
         </div>
-        <div className="flex items-center gap-2">
-          <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="all">All Subjects</option>
-            {modules.map(m => <option key={m._id} value={m._id}>{capitalizeWords(m.name)}</option>)}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <select value={filterPublish} onChange={e => setFilterPublish(e.target.value as 'all' | 'published' | 'unpublished')}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="all">All Videos</option>
-            <option value="published">Published Only</option>
-            <option value="unpublished">Unpublished Only</option>
-          </select>
-        </div>
+
+        <CompactSelect
+          value={filterModule}
+          onChange={setFilterModule}
+          className="w-full sm:w-56"
+          options={[
+            { value: 'all', label: 'All Modules' },
+            ...modules.map(m => ({ value: m._id, label: capitalizeWords(m.name) })),
+          ]}
+        />
+        <CompactSelect
+          value={filterPublish}
+          onChange={value => setFilterPublish(value as 'all' | 'published' | 'unpublished')}
+          className="w-full sm:w-44"
+          options={[
+            { value: 'all', label: 'All Videos' },
+            { value: 'published', label: 'Published Only' },
+            { value: 'unpublished', label: 'Unpublished Only' },
+          ]}
+        />
       </div>
 
       {/* Video Grid */}
@@ -290,15 +330,27 @@ export default function VideosPage() {
       </Modal>
 
       {/* Upload Modal */}
-      <Modal isOpen={uploadOpen} onClose={() => { if (!uploading) setUploadOpen(false); }} title="Add Lecture Video" size="lg">
+      <Modal
+        isOpen={uploadOpen}
+        onClose={() => { if (!uploading) setUploadOpen(false); }}
+        title="Add Lecture Video"
+        size="lg"
+        height="content"
+      >
         <form onSubmit={handleUpload} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-            <select required value={uploadModuleId} onChange={e => setUploadModuleId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
-              <option value="">Select subject...</option>
-              {modules.map(m => <option key={m._id} value={m._id}>{capitalizeWords(m.name)} ({m.batch})</option>)}
-            </select>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Module</label>
+            <CompactSelect
+              value={uploadModuleId}
+              onChange={setUploadModuleId}
+              options={[
+                { value: '', label: 'Select module...' },
+                ...modules.map(m => ({
+                  value: m._id,
+                  label: `${capitalizeWords(m.name)} (${m.batch})`,
+                })),
+              ]}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>

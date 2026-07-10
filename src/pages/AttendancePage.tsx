@@ -1,12 +1,12 @@
 'use client';
-import { Fragment, useState, useEffect, useCallback } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   getModules, getStudents, getAttendance, createAttendance,
   updateAttendance as apiUpdateAttendance, deleteAttendance,
   type ApiModule, type ApiStudent, type ApiAttendance,
 } from '@/lib/api';
-import { Calendar, Filter, Search, CheckCircle, XCircle, Users, ChevronDown, Trash2, History, Plus } from 'lucide-react';
+import { Calendar, Filter, Search, CheckCircle, XCircle, Users, ChevronDown, ChevronLeft, ChevronRight, Trash2, History, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/useToast';
 import Toast from '@/components/common/Toast';
 import DeleteModal from '@/components/common/DeleteModal';
@@ -22,6 +22,216 @@ function formatTime(dateStr?: string) {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return '-';
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+type SelectOption = {
+  value: string;
+  label: string;
+};
+
+function CompactSelect({
+  value,
+  options,
+  onChange,
+  className = '',
+}: {
+  value: string;
+  options: SelectOption[];
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = options.find(option => option.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  return (
+    <div ref={ref} className={`relative min-w-0 ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(current => !current)}
+        className="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left text-xs outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl sm:text-sm"
+      >
+        <span className="truncate">{selected?.label || value}</span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-40 mt-1 max-h-56 min-w-0 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+          {options.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+              className={`block w-full min-w-0 px-3 py-2 text-left text-xs hover:bg-indigo-50 sm:text-sm ${
+                option.value === value
+                  ? 'bg-indigo-50 font-semibold text-indigo-700'
+                  : 'text-gray-700'
+              }`}
+            >
+              <span className="block truncate">{option.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const formatDateValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const parseDateValue = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+};
+
+function CompactDatePicker({
+  value,
+  max,
+  onChange,
+  className = '',
+}: {
+  value: string;
+  max?: string;
+  onChange: (value: string) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedDate = parseDateValue(value);
+  const [viewDate, setViewDate] = useState(selectedDate || new Date());
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (selectedDate) setViewDate(selectedDate);
+  }, [value]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  const calendarDays = useMemo(() => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const startOffset = new Date(year, month, 1).getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const days: Array<number | null> = Array.from({ length: startOffset }, () => null);
+
+    for (let day = 1; day <= totalDays; day += 1) days.push(day);
+    while (days.length % 7 !== 0) days.push(null);
+    return days;
+  }, [viewDate]);
+
+  const changeMonth = (offset: number) => {
+    setViewDate(current => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+  };
+
+  const maxDate = max ? parseDateValue(max) : null;
+
+  return (
+    <div ref={ref} className={`relative min-w-0 ${className}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(current => !current)}
+        className="flex w-full min-w-0 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left text-xs outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl sm:text-sm"
+      >
+        <Calendar className="h-4 w-4 shrink-0 text-gray-400" />
+        <span className={value ? 'truncate text-gray-700' : 'truncate text-gray-400'}>
+          {value || 'Select date'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 z-50 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-gray-200 bg-white p-3 shadow-lg sm:left-auto sm:right-0">
+          <div className="mb-3 flex items-center justify-between">
+            <button type="button" onClick={() => changeMonth(-1)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <p className="text-sm font-semibold text-gray-800">
+              {viewDate.toLocaleString('en-US', { month: 'short', year: 'numeric' })}
+            </p>
+            <button type="button" onClick={() => changeMonth(1)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100">
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-gray-400">
+            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => <span key={day}>{day}</span>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {calendarDays.map((day, index) => {
+              if (!day) return <span key={`empty-${index}`} className="h-8" />;
+
+              const date = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
+              const dayValue = formatDateValue(date);
+              const disabled = !!maxDate && date > maxDate;
+              const selected = dayValue === value;
+
+              return (
+                <button
+                  key={dayValue}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    onChange(dayValue);
+                    setOpen(false);
+                  }}
+                  className={`h-8 rounded-lg text-xs font-semibold ${
+                    selected
+                      ? 'bg-indigo-600 text-white'
+                      : disabled
+                        ? 'cursor-not-allowed text-gray-300'
+                        : 'text-gray-700 hover:bg-indigo-50'
+                  }`}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function AttendancePage() {
@@ -41,6 +251,10 @@ export default function AttendancePage() {
 
   const [deleteTarget, setDeleteTarget] = useState<ApiAttendance | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [contactTarget, setContactTarget] = useState<{
+    student: ApiStudent | null;
+    record: ApiAttendance;
+  } | null>(null);
 
   // ✅ Derive BATCHES dynamically from loaded students — no hardcode
   const BATCHES = Array.from(
@@ -142,6 +356,55 @@ export default function AttendancePage() {
 
   const today = new Date().toISOString().split('T')[0];
 
+  const getStudentName = (student: ApiStudent | undefined, fallback: string) =>
+    student?.fullNameEnglish ?? student?.fullNameTamil ?? fallback;
+
+  const getContactValue = (student: ApiStudent | null | undefined, keys: string[]) => {
+    if (!student) return 'N/A';
+
+    const source = student as unknown as Record<string, unknown>;
+
+    for (const key of keys) {
+      const value = source[key];
+
+      if (typeof value === 'string' && value.trim()) return value.trim();
+      if (typeof value === 'number') return String(value);
+    }
+
+    return 'N/A';
+  };
+
+  const getWhatsAppNumber = (student: ApiStudent | null | undefined) =>
+    getContactValue(student, [
+      'whatsappNo',
+      'whatsAppNo',
+      'whatsappNumber',
+      'whatsAppNumber',
+      'phone',
+      'phoneNumber',
+      'contactNo',
+      'contactNumber',
+      'mobile',
+      'mobileNumber',
+    ]);
+
+  const getParentNumber = (student: ApiStudent | null | undefined) =>
+    getContactValue(student, [
+      'parentPhone',
+      'parentContact',
+      'parentContactNo',
+      'guardianPhone',
+      'guardianContact',
+      'guardianContactNo',
+      'fatherContact',
+      'fatherContactNo',
+      'fatherPhone',
+      'motherContact',
+      'motherContactNo',
+      'motherPhone',
+      'fixedTelephone',
+    ]);
+
   if (loading) return (
     <div className="flex h-64 items-center justify-center p-3 sm:p-6">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
@@ -180,7 +443,7 @@ export default function AttendancePage() {
       </div>
 
       {/* Filters */}
-      <div className="mb-4 flex flex-col gap-2 sm:mb-5 sm:flex-row sm:gap-3">
+      <div className="relative z-30 mb-4 flex flex-col gap-2 sm:mb-5 sm:flex-row sm:gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search student..."
@@ -188,11 +451,12 @@ export default function AttendancePage() {
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
           <Filter className="hidden w-4 flex-shrink-0 text-gray-400 sm:block" />
-          <div className="relative min-w-0">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} max={today}
-              className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:w-auto sm:rounded-xl sm:text-sm" />
-          </div>
+          <CompactDatePicker
+            value={filterDate}
+            onChange={setFilterDate}
+            max={today}
+            className="min-w-0 sm:w-36"
+          />
           {filterDate && (
             <button
               onClick={() => setFilterDate('')}
@@ -201,6 +465,27 @@ export default function AttendancePage() {
               Clear Filter
             </button>
           )}
+
+          <CompactSelect
+            value={filterBatch}
+            onChange={setFilterBatch}
+            options={BATCHES.map(batch => ({
+              value: batch,
+              label: batch || 'All Batches',
+            }))}
+          />
+          <CompactSelect
+            value={filterModule}
+            onChange={setFilterModule}
+            className="col-span-2 sm:col-span-1"
+            options={[
+              { value: '', label: 'All Modules' },
+              ...modules.map(module => ({
+                value: module._id,
+                label: module.name,
+              })),
+            ]}
+          />
 
           {/* ✅ Dynamic batch dropdown — from loaded students */}
           <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)} className="min-w-0 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl sm:text-sm">
@@ -254,7 +539,18 @@ export default function AttendancePage() {
                         <div className="mb-2 flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Student Name</p>
-                            <p className="truncate text-xs font-bold text-gray-800">{studentName}</p>
+                            {record.status === 'absent' ? (
+                              <button
+                                type="button"
+                                onClick={() => setContactTarget({ student: student ?? null, record })}
+                                className="block max-w-full truncate text-left text-xs font-bold text-indigo-600 hover:underline"
+                                title="View contact details"
+                              >
+                                {studentName}
+                              </button>
+                            ) : (
+                              <p className="truncate text-xs font-bold text-gray-800">{studentName}</p>
+                            )}
                             <p className="mt-0.5 text-[10px] font-medium text-gray-500">{record.studentId}</p>
                           </div>
                           <span className={`shrink-0 rounded px-2 py-1 text-[9px] font-bold uppercase ${
@@ -262,7 +558,7 @@ export default function AttendancePage() {
                               ? 'bg-emerald-50 text-emerald-600'
                               : 'bg-red-50 text-red-500'
                           }`}>
-                            {record.status}
+                            {record.status.toUpperCase()}
                           </span>
                         </div>
 
@@ -406,15 +702,31 @@ export default function AttendancePage() {
                                     <tr key={record._id} className="hover:bg-white transition-colors">
                                       <td className="pl-12 pr-4 py-2.5 text-xs text-gray-600">{displayDate}</td>
                                       <td className="px-4 py-2.5 text-xs font-mono text-gray-500">{record.studentId}</td>
-                                      <td className="px-4 py-2.5 text-xs text-gray-700">{studentName}</td>
-                                      <td className="px-4 py-2.5 text-xs text-gray-500">—</td>
+                                      <td className="px-4 py-2.5 text-xs text-gray-700">
+                                        {record.status === 'absent' ? (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setContactTarget({ student: student ?? null, record });
+                                            }}
+                                            className="font-semibold text-indigo-600 hover:underline"
+                                            title="View contact details"
+                                          >
+                                            {studentName}
+                                          </button>
+                                        ) : (
+                                          studentName
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-2.5 text-xs text-gray-500">{formatTime(record.markedAt)}</td>
                                       <td className="px-4 py-2.5 text-center">
                                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                                           record.status === 'present'
                                             ? 'bg-emerald-100 text-emerald-700'
                                             : 'bg-red-100 text-red-700'
                                         }`}>
-                                          {record.status === 'present' ? 'Present' : 'Absent'}
+                                          {record.status === 'present' ? 'PRESENT' : 'ABSENT'}
                                         </span>
                                       </td>
                                       <td className="px-4 py-2.5">
@@ -497,6 +809,64 @@ export default function AttendancePage() {
       >
         <Plus className="h-5 w-5" />
       </button>
+
+      {/* Absent Student Contact Modal */}
+      {contactTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-red-500">
+                  Absent Student Contact
+                </p>
+                <h2 className="mt-1 text-lg font-bold text-gray-800">
+                  {getStudentName(contactTarget.student ?? undefined, contactTarget.record.studentId)}
+                </h2>
+                <p className="text-xs font-medium text-gray-400">
+                  Student ID: {contactTarget.record.studentId}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setContactTarget(null)}
+                className="rounded-lg px-2 py-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Close contact details"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  WhatsApp Number
+                </p>
+                <p className="mt-1 text-sm font-bold text-gray-800">
+                  {getWhatsAppNumber(contactTarget.student)}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Parent / Guardian Phone
+                </p>
+                <p className="mt-1 text-sm font-bold text-gray-800">
+                  {getParentNumber(contactTarget.student)}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setContactTarget(null)}
+              className="mt-5 w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Delete Modal */}
       <DeleteModal
