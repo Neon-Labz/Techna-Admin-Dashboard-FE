@@ -128,6 +128,8 @@ function extractModuleRef(m: unknown): ModuleRef {
 }
 
 function extractStudentModules(s: Record<string, unknown>): unknown[] {
+  // Collect from ALL relevant fields and merge them to maximize module resolution.
+  // The student record may store module IDs in one field and subject names in another.
   const candidates = [
     s.modules,
     s.enrolledModules,
@@ -142,11 +144,28 @@ function extractStudentModules(s: Record<string, unknown>): unknown[] {
           s.basketSubject,
         ]
       : undefined,
+    Array.isArray((s.subjectSelection as any)?.subjects)
+      ? (s.subjectSelection as any).subjects
+      : undefined,
+    Array.isArray((s.subjectSelection as any)?.enrolledModules)
+      ? (s.subjectSelection as any).enrolledModules
+      : undefined,
   ];
+
+  // Merge all non-empty arrays and deduplicate by stringified value
+  const seen = new Set<string>();
+  const merged: unknown[] = [];
   for (const c of candidates) {
-    if (Array.isArray(c) && c.length > 0) return c;
+    if (!Array.isArray(c) || c.length === 0) continue;
+    for (const item of c) {
+      const key = typeof item === 'string' ? item.toLowerCase().trim() : JSON.stringify(item);
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(item);
+      }
+    }
   }
-  return [];
+  return merged;
 }
 
 function PaymentModal({
@@ -255,12 +274,14 @@ function PaymentModal({
       ? allModules
           .filter(m => s.moduleRefs.some(ref => {
             const label = ref.name ?? ref.id ?? '';
+            // Direct ID match (e.g. ref stores the actual module ObjectId)
             if (ref.id && ref.id === m.id) {
               matchedRefLabels.add(label);
               return true;
             }
+            // Name-based matching (case-insensitive, normalized)
+            const normM = normalizeModuleName(m.name);
             if (ref.name) {
-              const normM = normalizeModuleName(m.name);
               const normR = normalizeModuleName(ref.name);
               const isMatch =
                 normM === normR ||
@@ -273,6 +294,14 @@ function PaymentModal({
                   return wordsR.length > 0 && overlap / wordsR.length >= 0.6;
                 })();
               if (isMatch) {
+                matchedRefLabels.add(label);
+                return true;
+              }
+            }
+            // Also try matching ref.id as a name (student may store subject names in modules array)
+            if (ref.id && ref.id !== m.id) {
+              const normRefId = normalizeModuleName(ref.id);
+              if (normRefId && (normM === normRefId || normM.includes(normRefId) || normRefId.includes(normM))) {
                 matchedRefLabels.add(label);
                 return true;
               }
@@ -495,11 +524,29 @@ function PaymentModal({
 
     setSaving(true);
     try {
-      
-      
-      
+     
+      let existingPayments: PaymentRecord[] = [];
+      if (!isEdit) {
+        try {
+          const [byId, byCode] = await Promise.all([
+            paymentApi.getByStudent(form.studentId).catch(() => [] as PaymentRecord[]),
+            student?.studentId && student.studentId !== form.studentId
+              ? paymentApi.getByStudent(student.studentId).catch(() => [] as PaymentRecord[])
+              : Promise.resolve([] as PaymentRecord[]),
+          ]);
+          const seen = new Set<string>();
+          existingPayments = [...byId, ...byCode].filter(p => {
+            const key = p.id || (p as any)._id;
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        } catch { /* proceed with empty */ }
+      }
+
       let updatedCount = 0;
       let createdCount = 0;
+      let skippedCount = 0;
       for (const item of lineItems) {
         const existing = isEdit ? existingRecordMap[item.key] : undefined;
         if (existing) {
@@ -507,6 +554,17 @@ function PaymentModal({
           onSuccess(result);
           updatedCount++;
         } else {
+          // Duplicate check: same module + same month + paid status
+          const paidMonth = item.payload.paidDate?.slice(0, 7);
+          const isDuplicate = !isEdit && item.payload.moduleId && existingPayments.some(
+            p => (p.moduleId === item.payload.moduleId || p.moduleName === item.payload.moduleName) &&
+                 p.status === 'paid' &&
+                 p.paidDate?.slice(0, 7) === paidMonth,
+          );
+          if (isDuplicate) {
+            skippedCount++;
+            continue;
+          }
           const result = await paymentApi.create(item.payload);
           onSuccess(result);
           createdCount++;
@@ -516,6 +574,14 @@ function PaymentModal({
       const parts: string[] = [];
       if (updatedCount) parts.push(`${updatedCount} updated`);
       if (createdCount) parts.push(`${createdCount} added`);
+      if (skippedCount) parts.push(`${skippedCount} skipped (already paid)`);
+
+      if (skippedCount > 0 && createdCount === 0 && updatedCount === 0) {
+        toast.error('Payment already exists for the selected subject(s) this month.');
+        setSaving(false);
+        return;
+      }
+
       toast.success(
         parts.length > 0
           ? `Payment ${parts.join(', ')} successfully!`
