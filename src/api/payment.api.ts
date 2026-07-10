@@ -5,8 +5,9 @@ export interface PaymentRecord {
   studentId: string;
   studentCode?: string;
   studentName: string;
-  moduleId: string;
+  moduleId?: string;
   moduleName: string;
+  feeType?: 'subject' | 'admission' | 'idcard';
   amount: number;
   paidDate: string;
   method: 'cash' | 'bank' | 'online';
@@ -21,8 +22,9 @@ export interface PaymentRecord {
 export interface CreatePaymentPayload {
   studentId: string;
   studentName?: string;
-  moduleId: string;
+  moduleId?: string;
   moduleName?: string;
+  feeType?: 'subject' | 'admission' | 'idcard';
   amount: number;
   paidDate: string;
   method: 'cash' | 'bank' | 'online';

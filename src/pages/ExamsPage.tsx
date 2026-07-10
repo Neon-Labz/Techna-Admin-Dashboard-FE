@@ -17,7 +17,10 @@ import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 import { examApi } from '@/api/exam.api';
 import api from '@/lib/axios';
+import CompactSelect from '@/components/ui/CompactSelect';
+import CompactDatePicker from '@/components/ui/CompactDatePicker';
 import { useDataStore } from '@/store/dataStore';
+
 
 export default function ExamsPage() {
   
@@ -212,36 +215,42 @@ export default function ExamsPage() {
       pdf.rect(0, 0, w, 8, 'F');
 
       if (img && imgType) {
-        const imgProps = pdf.getImageProperties(img);
-        const logoWidth = 35;
-        const logoHeight = (imgProps.height * logoWidth) / imgProps.width;
-        pdf.addImage(img, imgType, 3, 10, logoWidth, logoHeight);
-      }
+  const imgProps = pdf.getImageProperties(img);
 
-      pdf.setTextColor(technaBlue.r, technaBlue.g, technaBlue.b);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(22);
-      pdf.text('TECHNA', w / 2, 20, { align: 'center' });
+  const logoWidth = 55;
+const logoHeight = (imgProps.height * logoWidth) / imgProps.width;
+
+pdf.addImage(
+  img,
+  imgType,
+  (w - logoWidth) / 2,
+  0, 
+  logoWidth,
+  logoHeight
+);
+}
 
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9);
       pdf.setTextColor(90, 90, 90);
       pdf.text(
-        'Email: sivasakthy22@gmail.com  |  Contact: +94 77 170 3549',
-        w / 2,
-        27,
-        { align: 'center' }
-      );
+  'Email: technatechnicalinstitute@gmail.com | Contact: +94 77 170 3549',
+  w / 2,
+  38, 
+  { align: 'center' }
+);
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(13);
       pdf.setTextColor(technaBlue.r, technaBlue.g, technaBlue.b);
-      pdf.text('Examination Timetable', w / 2, 36, { align: 'center' });
+      pdf.text('Examination Timetable', w / 2, 50, {
+  align: 'center',
+});
 
       pdf.setDrawColor(220, 220, 230);
-      pdf.line(14, 42, w - 14, 42);
+      pdf.line(14, 52, w - 14, 52);
 
-      let y = 54;
+      let y = 70;
 
       const headers = ['Exam', 'Module', 'Batch', 'Date', 'Time', 'Venue'];
       const colW = [25, 65, 28, 28, 28, 30];
@@ -297,17 +306,19 @@ export default function ExamsPage() {
         pdf.line(5, y - 4, w - 5, y - 4);
       });
 
-      pdf.setDrawColor(220, 220, 230);
-      pdf.line(14, h - 18, w - 14, h - 18);
+     // Footer blue background
+pdf.setFillColor(leafBlue.r, leafBlue.g, leafBlue.b);
+pdf.rect(0, h - 18, w, 18, 'F');
 
-      pdf.setFontSize(7.5);
-      pdf.setTextColor(140, 140, 140);
-      pdf.text(
-        `Generated on ${new Date().toLocaleDateString()} · TECHNA`,
-        w / 2,
-        h - 10,
-        { align: 'center' }
-      );
+pdf.setFontSize(7.5);
+pdf.setTextColor(255, 255, 255);
+
+pdf.text(
+  `Generated on ${new Date().toLocaleDateString()} · TECHNA`,
+  w / 2,
+  h - 8,
+  { align: 'center' }
+);
 
       pdf.save('exam-timetable.pdf');
       toast.success('Timetable downloaded!');
@@ -315,14 +326,14 @@ export default function ExamsPage() {
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.src = '/logo.png';
+    img.src = '/new.png';
 
     img.onload = () => generatePdf(img, 'PNG');
 
     img.onerror = () => {
       const fallback = new Image();
       fallback.crossOrigin = 'anonymous';
-      fallback.src = '/logo.jpeg';
+      fallback.src = '/new.jpeg';
 
       fallback.onload = () => generatePdf(fallback, 'JPEG');
       fallback.onerror = () => generatePdf(null, null);
@@ -363,23 +374,22 @@ export default function ExamsPage() {
           />
         </div>
 
-        <select
+        <CompactSelect
           value={filterBatch}
-          onChange={(e) => setFilterBatch(e.target.value)}
-          className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          <option value="">All Batches</option>
-          {BATCHES.map((b) => (
-            <option key={b}>{b}</option>
-          ))}
-        </select>
+          onChange={setFilterBatch}
+          className="w-full sm:w-44"
+          options={[
+            { value: '', label: 'All Batches' },
+            ...BATCHES.map((batch) => ({ value: batch, label: batch })),
+          ]}
+        />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         {filtered.map((e) => (
           <div
             key={e.id}
-            className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5"
+            className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 h-full flex flex-col"
           >
             <div className="flex items-start gap-3 mb-3">
               <div className="w-12 h-12 bg-indigo-600 rounded-xl flex flex-col items-center justify-center text-white">
@@ -399,7 +409,7 @@ export default function ExamsPage() {
               </div>
             </div>
 
-            <div className="space-y-1.5 text-sm text-gray-600 mb-4">
+            <div className="space-y-1.5 text-sm text-gray-600 mb-4 flex-1">
               <p className="flex items-center gap-2">
                 <Calendar className="w-3.5 h-3.5 text-gray-400" />
                 {e.date} · {e.startTime} – {e.endTime}
@@ -411,7 +421,7 @@ export default function ExamsPage() {
               )}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 mt-auto">
               <button
                 onClick={() => openEdit(e)}
                 className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg text-sm font-medium"
@@ -442,6 +452,7 @@ export default function ExamsPage() {
         onClose={() => setModalOpen(false)}
         title={editExam ? 'Edit Exam' : 'Publish New Exam'}
         size="xl"
+        height="content"
       >
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="md:col-span-2">
@@ -461,6 +472,28 @@ export default function ExamsPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Module
             </label>
+            <CompactSelect
+              value={form.moduleId}
+              onChange={(value) => {
+                const selectedModule = modules.find(
+                  (m: any) => (m.id || m._id) === value,
+                );
+
+                setForm((f) => ({
+                  ...f,
+                  moduleId: value,
+                  moduleName:
+                    selectedModule?.name || selectedModule?.moduleName || '',
+                }));
+              }}
+              options={[
+                { value: '', label: 'Select module...' },
+                ...modules.map((m: any) => ({
+                  value: m.id || m._id,
+                  label: m.name || m.moduleName,
+                })),
+              ]}
+            />
             <select
               required
               value={form.moduleId}
@@ -476,7 +509,7 @@ export default function ExamsPage() {
                     selectedModule?.name || selectedModule?.moduleName || '',
                 }));
               }}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              className="hidden"
             >
               <option value="">Select module...</option>
 
@@ -492,10 +525,15 @@ export default function ExamsPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Batch
             </label>
+            <CompactSelect
+              value={form.batch}
+              onChange={(value) => setForm((f) => ({ ...f, batch: value }))}
+              options={BATCHES.map((batch) => ({ value: batch, label: batch }))}
+            />
             <select
               value={form.batch}
               onChange={(e) => setForm((f) => ({ ...f, batch: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              className="hidden"
             >
               {BATCHES.map((b) => (
                 <option key={b}>{b}</option>
@@ -510,12 +548,16 @@ export default function ExamsPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Date
             </label>
+            <CompactDatePicker
+              value={form.date}
+              onChange={(value) => setForm((f) => ({ ...f, date: value }))}
+            />
             <input
               type="date"
               required
               value={form.date}
               onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              className="hidden"
             />
           </div>
 

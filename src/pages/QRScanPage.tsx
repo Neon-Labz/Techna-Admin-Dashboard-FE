@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDataStore } from '../store/dataStore';
 import type { Student, PaymentRecord } from '../types';
+import { formatStudentId } from '../utils/studentId';
 import { QrCode, Search, ScanLine, Camera, CameraOff } from 'lucide-react';
 import jsQR from 'jsqr';
 import StudentScanPopup from '../components/students/StudentScanPopup';
@@ -16,6 +17,8 @@ export default function QRScanPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number>(0);
+  const studentsRef = useRef(students);
+  useEffect(() => { studentsRef.current = students; }, [students]);
 
   const openStudent = (s: Student) => setScannedStudent(s);
 
@@ -25,6 +28,11 @@ export default function QRScanPage() {
 
     let stopped = false;
 
+    const stopLocal = () => {
+      streamRef.current?.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    };
+
     const startCamera = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -33,14 +41,17 @@ export default function QRScanPage() {
           videoRef.current.srcObject = stream;
           videoRef.current.play();
         }
-        scan();
+        rafRef.current = requestAnimationFrame(scan);
       } catch {
         setCameraError('Camera access denied or not available.');
         setCameraActive(false);
       }
     };
 
-    const scan = () => {
+    let lastScan = 0;
+    const SCAN_INTERVAL = 300;
+
+    const scan = (timestamp: number) => {
       if (stopped) return;
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -48,23 +59,39 @@ export default function QRScanPage() {
         rafRef.current = requestAnimationFrame(scan);
         return;
       }
+      if (timestamp - lastScan < SCAN_INTERVAL) {
+        rafRef.current = requestAnimationFrame(scan);
+        return;
+      }
+      lastScan = timestamp;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'dontInvert' });
       if (code?.data) {
+        console.log('QR raw data:', code.data);
         try {
           const parsed = JSON.parse(code.data);
-          const found = students.find(s => s.qrToken === parsed.qrToken);
+          const all = studentsRef.current;
+          // match by qrToken (StudentScanPopup QR) OR by studentId (StudentProfile QR)
+          const found = all.find(s =>
+            (parsed.qrToken && s.qrToken === parsed.qrToken) ||
+            (parsed.studentId && s.studentId === parsed.studentId)
+          );
           if (found) {
-            stopCamera();
+            stopLocal();
             openStudent(found);
             return;
           }
-        } catch { /* not our QR format, keep scanning */ }
+        } catch {
+          // plain text studentId fallback
+          const plain = code.data.trim();
+          const found = studentsRef.current.find(s => s.studentId === plain);
+          if (found) { stopLocal(); openStudent(found); return; }
+        }
       }
       rafRef.current = requestAnimationFrame(scan);
     };
@@ -74,7 +101,7 @@ export default function QRScanPage() {
     return () => {
       stopped = true;
       cancelAnimationFrame(rafRef.current);
-      stopCamera();
+      stopLocal();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameraActive]);
@@ -191,10 +218,10 @@ export default function QRScanPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-800 truncate">{s.name}</p>
-                <p className="text-xs text-gray-500 font-mono">{s.studentId}</p>
+                <p className="text-xs text-gray-500 font-mono">{formatStudentId(s.studentId)}</p>
               </div>
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${s.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : s.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}`}>
-                {s.status}
+                {s.status.toUpperCase()}
               </span>
             </button>
           ))}

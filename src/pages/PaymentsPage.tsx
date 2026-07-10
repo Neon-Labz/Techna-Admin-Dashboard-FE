@@ -10,7 +10,10 @@ import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 import { paymentApi, PaymentRecord, CreatePaymentPayload } from '@/api/payment.api';
 import api from '@/lib/axios';
+import CompactSelect from '@/components/ui/CompactSelect';
+import CompactDatePicker from '@/components/ui/CompactDatePicker';
 import { useDataStore } from '@/store/dataStore';
+import { formatStudentId } from '@/utils/studentId';
 
 const MONTHS = [
   { num: '01', label: 'Jan' }, { num: '02', label: 'Feb' },
@@ -21,12 +24,26 @@ const MONTHS = [
   { num: '11', label: 'Nov' }, { num: '12', label: 'Dec' },
 ];
 
+const FEE_STRUCTURE = {
+  subjectFee: 1200,
+};
+
+const ADDITIONAL_FEES: { id: string; label: string; defaultAmount: number }[] = [
+  { id: 'admission', label: 'Admission Fee', defaultAmount: 500 },
+  { id: 'idcard',    label: 'ID Card Fee',   defaultAmount: 300 },
+];
+
+interface ModuleRef {
+  id?: string;
+  name?: string;
+}
+
 interface StudentOption {
   _id:        string;
   studentId:  string;
   name:       string;
   batch:      string;
-  moduleRefs: string[];
+  moduleRefs: ModuleRef[];
   status:     string;
 }
 interface ModuleOption { id: string; name: string; }
@@ -36,6 +53,19 @@ interface StudentTracking {
   paidMonths: string[];
   pendingMonths: string[];
   payments: PaymentRecord[];
+}
+
+function isApprovedStudent(student: Record<string, unknown>): boolean {
+  const statusCandidates = [
+    student.status,
+    student.studentStatus,
+    student.approvalStatus,
+    student.applicationStatus,
+  ];
+
+  return statusCandidates.some((value) =>
+    String(value ?? '').trim().toLowerCase() === 'approved',
+  );
 }
 
 function extractArrayResponse(value: unknown): any[] {
@@ -79,7 +109,65 @@ const statusColor = (s: string) =>
 const normalizeModuleName = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 
-// ── Payment Modal (Add + Edit) ─────────────────────────────────────────────────
+function extractModuleRef(m: unknown): ModuleRef {
+  if (typeof m === 'string') {
+    return { id: m, name: m };
+  }
+  if (m && typeof m === 'object') {
+    const obj = m as Record<string, unknown>;
+    const id =
+      (obj._id ?? obj.id ?? obj.moduleId ?? obj.module_id) as string | undefined;
+    const name =
+      (obj.name ?? obj.moduleName ?? obj.module_name ?? obj.title) as string | undefined;
+    return {
+      id:   id ? String(id) : undefined,
+      name: name ? String(name) : undefined,
+    };
+  }
+  return {};
+}
+
+function extractStudentModules(s: Record<string, unknown>): unknown[] {
+  // Collect from ALL relevant fields and merge them to maximize module resolution.
+  // The student record may store module IDs in one field and subject names in another.
+  const candidates = [
+    s.modules,
+    s.enrolledModules,
+    s.registeredModules,
+    s.moduleIds,
+    s.subjects,
+    s.courses,
+    s.registeredSubjects,
+    s.mainSubjects && s.basketSubject
+      ? [
+          ...(Array.isArray(s.mainSubjects) ? s.mainSubjects : []),
+          s.basketSubject,
+        ]
+      : undefined,
+    Array.isArray((s.subjectSelection as any)?.subjects)
+      ? (s.subjectSelection as any).subjects
+      : undefined,
+    Array.isArray((s.subjectSelection as any)?.enrolledModules)
+      ? (s.subjectSelection as any).enrolledModules
+      : undefined,
+  ];
+
+  // Merge all non-empty arrays and deduplicate by stringified value
+  const seen = new Set<string>();
+  const merged: unknown[] = [];
+  for (const c of candidates) {
+    if (!Array.isArray(c) || c.length === 0) continue;
+    for (const item of c) {
+      const key = typeof item === 'string' ? item.toLowerCase().trim() : JSON.stringify(item);
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(item);
+      }
+    }
+  }
+  return merged;
+}
+
 function PaymentModal({
   onClose,
   onSuccess,
@@ -95,14 +183,14 @@ function PaymentModal({
   const [students,            setStudents]            = useState<StudentOption[]>([]);
   const [allModules,          setAllModules]          = useState<ModuleOption[]>([]);
   const [registeredModuleIds, setRegisteredModuleIds] = useState<string[]>([]);
+  const [unmatchedNames,      setUnmatchedNames]      = useState<string[]>([]);
   const [fetchingMods,        setFetchingMods]        = useState(false);
   const [saving,              setSaving]              = useState(false);
+  const [isFirstPayment,      setIsFirstPayment]      = useState(false);
   const enrollmentInitedRef = useRef(false);
 
   const [form, setForm] = useState({
     studentId: initialData?.studentId ?? '',
-    moduleId:  initialData?.moduleId  ?? '',
-    amount:    initialData?.amount != null ? String(initialData.amount) : '',
     paidDate:  initialData?.paidDate  ?? new Date().toISOString().split('T')[0],
     method:    (initialData?.method   ?? 'cash') as 'cash' | 'bank' | 'online',
     status:    (initialData?.status   ?? 'paid') as 'paid' | 'pending' | 'overdue',
@@ -110,10 +198,32 @@ function PaymentModal({
     notes:     initialData?.notes     ?? '',
   });
 
+  
+  
+  
+  const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>([]);
+  const [subjectFees,       setSubjectFees]       = useState<Record<string, string>>({});
+
+  
+  
+  
+  const [includedFeeIds, setIncludedFeeIds] = useState<string[]>([]);
+  const [feeAmounts,     setFeeAmounts]     = useState<Record<string, string>>(
+    Object.fromEntries(ADDITIONAL_FEES.map(f => [f.id, String(f.defaultAmount)]))
+  );
+
+  
+  
+  
+  
+  
+  
+  const [existingRecordMap, setExistingRecordMap] = useState<Record<string, PaymentRecord>>({});
+
   useEffect(() => {
     (async () => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        
         const [sRaw, mRaw]: [any, any] = await Promise.all([
           api.get('/students'),
           api.get('/modules'),
@@ -121,13 +231,22 @@ function PaymentModal({
         const sArr = extractArrayResponse(sRaw);
         const mArr = extractArrayResponse(mRaw);
 
+        
+        
+        
+        
+
+        const approvedStudents = sArr.filter((s) =>
+          isApprovedStudent(s as Record<string, unknown>)
+        );
+
         setStudents(
-          sArr.map(s => ({
+          approvedStudents.map(s => ({
             _id:        (s._id ?? s.id ?? s.studentId) as string,
             studentId:  s.studentId as string,
             name:       (s.fullNameEnglish ?? s.name ?? s.studentId) as string,
             batch:      (s.batch ?? '') as string,
-            moduleRefs: Array.isArray(s.modules) ? (s.modules as string[]) : [],
+            moduleRefs: extractStudentModules(s as Record<string, unknown>).map(extractModuleRef),
             status:     (s.status ?? 'pending') as string,
           }))
         );
@@ -146,12 +265,48 @@ function PaymentModal({
   }, []);
 
   const loadEnrollmentForStudent = useCallback(async (s: StudentOption) => {
+    
+    
+    
+    const matchedRefLabels = new Set<string>();
+
     const nameBasedIds = s.moduleRefs.length > 0
       ? allModules
           .filter(m => s.moduleRefs.some(ref => {
+            const label = ref.name ?? ref.id ?? '';
+            // Direct ID match (e.g. ref stores the actual module ObjectId)
+            if (ref.id && ref.id === m.id) {
+              matchedRefLabels.add(label);
+              return true;
+            }
+            // Name-based matching (case-insensitive, normalized)
             const normM = normalizeModuleName(m.name);
-            const normR = normalizeModuleName(ref);
-            return normM === normR || normM.includes(normR) || normR.includes(normM);
+            if (ref.name) {
+              const normR = normalizeModuleName(ref.name);
+              const isMatch =
+                normM === normR ||
+                normM.includes(normR) ||
+                normR.includes(normM) ||
+                (() => {
+                  const wordsM = new Set(normM.split(' ').filter(Boolean));
+                  const wordsR = normR.split(' ').filter(Boolean);
+                  const overlap = wordsR.filter(w => wordsM.has(w)).length;
+                  return wordsR.length > 0 && overlap / wordsR.length >= 0.6;
+                })();
+              if (isMatch) {
+                matchedRefLabels.add(label);
+                return true;
+              }
+            }
+            // Also try matching ref.id as a name (student may store subject names in modules array)
+            if (ref.id && ref.id !== m.id) {
+              const normRefId = normalizeModuleName(ref.id);
+              if (normRefId && (normM === normRefId || normM.includes(normRefId) || normRefId.includes(normM))) {
+                matchedRefLabels.add(label);
+                return true;
+              }
+            }
+            return false;
           }))
           .map(m => m.id)
       : [];
@@ -159,6 +314,12 @@ function PaymentModal({
     if (nameBasedIds.length > 0) {
       setRegisteredModuleIds(nameBasedIds);
     }
+
+    
+    const missing = s.moduleRefs
+      .map(ref => ref.name ?? ref.id ?? '')
+      .filter(label => label && !matchedRefLabels.has(label));
+    setUnmatchedNames([...new Set(missing)]);
 
     setFetchingMods(true);
     try {
@@ -172,18 +333,67 @@ function PaymentModal({
         r.status === 'fulfilled' ? r.value : []
       );
       const paymentIds = [...new Set(merged.map(p => p.moduleId).filter(Boolean))];
-      setRegisteredModuleIds(prev => [...new Set([...prev, ...paymentIds])]);
+      
+      
+      setRegisteredModuleIds(prev => [...new Set([...prev, ...paymentIds])] as string[]);
+
+      if (isEdit && initialData) {
+        
+        
+        
+        
+        const group = merged.filter(p => p.paidDate === initialData.paidDate);
+        if (!group.some(p => p.id === initialData.id)) group.push(initialData);
+
+        const map: Record<string, PaymentRecord> = {};
+        const subjIds: string[] = [];
+        const subjFeesInit: Record<string, string> = {};
+        const feeIdsInit: string[] = [];
+        const feeAmountsInit: Record<string, string> = Object.fromEntries(
+          ADDITIONAL_FEES.map(f => [f.id, String(f.defaultAmount)])
+        );
+
+        group.forEach(p => {
+          if (p.feeType && p.feeType !== 'subject') {
+            map[`fee:${p.feeType}`] = p;
+            feeIdsInit.push(p.feeType);
+            feeAmountsInit[p.feeType] = String(p.amount);
+          } else if (p.moduleId) {
+            map[`subject:${p.moduleId}`] = p;
+            subjIds.push(p.moduleId);
+            subjFeesInit[p.moduleId] = String(p.amount);
+          }
+        });
+
+        setExistingRecordMap(map);
+        setSelectedModuleIds(subjIds);
+        setSubjectFees(subjFeesInit);
+        setIncludedFeeIds(feeIdsInit);
+        setFeeAmounts(feeAmountsInit);
+        setRegisteredModuleIds(prev => [...new Set([...prev, ...subjIds])]);
+      } else {
+        
+        
+        setIsFirstPayment(merged.length === 0);
+        setIncludedFeeIds(merged.length === 0 ? ['admission'] : []);
+      }
     } catch {
-      // retain nameBasedIds already applied
+      
     } finally {
       setFetchingMods(false);
     }
-  }, [allModules]);
+  }, [allModules, isEdit, initialData]);
 
   const handleStudentChange = async (studentId: string) => {
     const s = students.find(x => x._id === studentId);
-    setForm(f => ({ ...f, studentId, moduleId: '', batch: s?.batch ?? f.batch }));
+    setForm(f => ({ ...f, studentId, batch: s?.batch ?? f.batch }));
     setRegisteredModuleIds([]);
+    setUnmatchedNames([]);
+    setSelectedModuleIds([]);
+    setSubjectFees({});
+    setIsFirstPayment(false);
+    setIncludedFeeIds([]);
+    setExistingRecordMap({});
     if (!studentId || !s) return;
     await loadEnrollmentForStudent(s);
   };
@@ -194,7 +404,7 @@ function PaymentModal({
     enrollmentInitedRef.current = true;
     const s = students.find(x => x._id === form.studentId || x.studentId === form.studentId);
     if (s) loadEnrollmentForStudent(s);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  
   }, [isEdit, students, allModules]);
 
   const filteredModules = useMemo(() => {
@@ -214,41 +424,175 @@ function PaymentModal({
     !fetchingMods &&
     registeredModuleIds.length === 0;
 
+  
+  const toggleSubject = (moduleId: string) => {
+    setSelectedModuleIds(prev => {
+      if (prev.includes(moduleId)) {
+        return prev.filter(id => id !== moduleId);
+      }
+      setSubjectFees(f => (
+        f[moduleId] != null ? f : { ...f, [moduleId]: String(FEE_STRUCTURE.subjectFee) }
+      ));
+      return [...prev, moduleId];
+    });
+  };
+
+  
+  const toggleFee = (feeId: string) => {
+    setIncludedFeeIds(prev =>
+      prev.includes(feeId) ? prev.filter(id => id !== feeId) : [...prev, feeId]
+    );
+  };
+
+  const totalAmount = useMemo(() => {
+    const subjectsTotal = selectedModuleIds.reduce(
+      (sum, id) => sum + (Number(subjectFees[id]) || 0),
+      0,
+    );
+    const feesTotal = includedFeeIds.reduce(
+      (sum, id) => sum + (Number(feeAmounts[id]) || 0),
+      0,
+    );
+    return subjectsTotal + feesTotal;
+  }, [selectedModuleIds, subjectFees, includedFeeIds, feeAmounts]);
+
   const handleSubmit = async () => {
-    if (!form.studentId || !form.moduleId || !form.amount || !form.paidDate) {
-      toast.error('Please fill all required fields');
+    
+    
+    
+    
+    
+    
+    if (!form.studentId || !form.paidDate) {
+      toast.error('Please select a student and payment date');
       return;
     }
-    const student   = students.find(s => s._id === form.studentId);
-    const moduleRec = allModules.find(m => m.id === form.moduleId);
-    const payload: CreatePaymentPayload = {
-      studentId:   form.studentId,
-      studentName: student?.name,
-      moduleId:    form.moduleId,
-      moduleName:  moduleRec?.name,
-      amount:      Number(form.amount),
-      paidDate:    form.paidDate,
-      method:      form.method,
-      status:      form.status,
-      batch:       form.batch || student?.batch || 'N/A',
-      notes:       form.notes || undefined,
-    };
+    if (selectedModuleIds.length === 0 && includedFeeIds.length === 0) {
+      toast.error('Select at least one subject or fee');
+      return;
+    }
+
+    const student = students.find(s => s._id === form.studentId);
+
+    
+    const subjectLineItems: { key: string; payload: CreatePaymentPayload }[] = selectedModuleIds.map((id) => {
+      const moduleRec = allModules.find(m => m.id === id);
+      return {
+        key: `subject:${id}`,
+        payload: {
+          studentId:   form.studentId,
+          studentName: student?.name,
+          moduleId:    id,
+          moduleName:  moduleRec?.name,
+          feeType:     'subject',
+          amount:      Number(subjectFees[id]) || 0,
+          paidDate:    form.paidDate,
+          method:      form.method,
+          status:      form.status,
+          batch:       form.batch || student?.batch || 'N/A',
+          notes:       form.notes || undefined,
+        },
+      };
+    });
+
+    
+    
+    
+    
+    
+    
+    const feeLineItems: { key: string; payload: CreatePaymentPayload }[] = includedFeeIds.map(id => {
+      const fee = ADDITIONAL_FEES.find(f => f.id === id)!;
+      return {
+        key: `fee:${id}`,
+        payload: {
+          studentId:   form.studentId,
+          studentName: student?.name,
+          feeType:     id as 'admission' | 'idcard',
+          moduleName:  fee.label,
+          amount:      Number(feeAmounts[id]) || 0,
+          paidDate:    form.paidDate,
+          method:      form.method,
+          status:      form.status,
+          batch:       form.batch || student?.batch || 'N/A',
+          notes:       form.notes || undefined,
+        },
+      };
+    });
+
+    const lineItems = [...subjectLineItems, ...feeLineItems];
+
     setSaving(true);
     try {
-      let result: PaymentRecord;
-      if (isEdit && initialData) {
-        result = await paymentApi.update(initialData.id, payload);
-        toast.success('Payment updated successfully!');
-      } else {
-        result = await paymentApi.create(payload);
-        toast.success('Payment recorded successfully!');
+     
+      let existingPayments: PaymentRecord[] = [];
+      if (!isEdit) {
+        try {
+          const [byId, byCode] = await Promise.all([
+            paymentApi.getByStudent(form.studentId).catch(() => [] as PaymentRecord[]),
+            student?.studentId && student.studentId !== form.studentId
+              ? paymentApi.getByStudent(student.studentId).catch(() => [] as PaymentRecord[])
+              : Promise.resolve([] as PaymentRecord[]),
+          ]);
+          const seen = new Set<string>();
+          existingPayments = [...byId, ...byCode].filter(p => {
+            const key = p.id || (p as any)._id;
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        } catch { /* proceed with empty */ }
       }
-      onSuccess(result);
+
+      let updatedCount = 0;
+      let createdCount = 0;
+      let skippedCount = 0;
+      for (const item of lineItems) {
+        const existing = isEdit ? existingRecordMap[item.key] : undefined;
+        if (existing) {
+          const result = await paymentApi.update(existing.id, item.payload);
+          onSuccess(result);
+          updatedCount++;
+        } else {
+          // Duplicate check: same module + same month + paid status
+          const paidMonth = item.payload.paidDate?.slice(0, 7);
+          const isDuplicate = !isEdit && item.payload.moduleId && existingPayments.some(
+            p => (p.moduleId === item.payload.moduleId || p.moduleName === item.payload.moduleName) &&
+                 p.status === 'paid' &&
+                 p.paidDate?.slice(0, 7) === paidMonth,
+          );
+          if (isDuplicate) {
+            skippedCount++;
+            continue;
+          }
+          const result = await paymentApi.create(item.payload);
+          onSuccess(result);
+          createdCount++;
+        }
+      }
+
+      const parts: string[] = [];
+      if (updatedCount) parts.push(`${updatedCount} updated`);
+      if (createdCount) parts.push(`${createdCount} added`);
+      if (skippedCount) parts.push(`${skippedCount} skipped (already paid)`);
+
+      if (skippedCount > 0 && createdCount === 0 && updatedCount === 0) {
+        toast.error('Payment already exists for the selected subject(s) this month.');
+        setSaving(false);
+        return;
+      }
+
+      toast.success(
+        parts.length > 0
+          ? `Payment ${parts.join(', ')} successfully!`
+          : lineItems.length > 1
+          ? `${lineItems.length} payments recorded successfully!`
+          : 'Payment recorded successfully!'
+      );
       onClose();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string | string[] } } };
-      const msg = axiosErr?.response?.data?.message
-        ?? (isEdit ? 'Failed to update payment' : 'Failed to save payment');
+      const msg = axiosErr?.response?.data?.message ?? 'Failed to save one or more payments';
       toast.error(Array.isArray(msg) ? msg.join(', ') : (msg as string));
     } finally {
       setSaving(false);
@@ -275,61 +619,188 @@ function PaymentModal({
         <div className="px-6 py-5 grid grid-cols-2 gap-4">
           <div className="col-span-2 flex flex-col gap-1">
             <Label text="Student" required />
+            <CompactSelect
+              value={form.studentId}
+              onChange={value => void handleStudentChange(value)}
+              options={[
+                { value: '', label: 'Select student...' },
+                ...students.map(s => ({
+                  value: s._id,
+                  label: `${s.name} (${s.studentId}) - ${s.status.toUpperCase()}`,
+                })),
+              ]}
+            />
             <select value={form.studentId} onChange={e => handleStudentChange(e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="hidden">
               <option value="">Select student…</option>
               {students.map(s => (
                 <option key={s._id} value={s._id}>
-                  {s.name} ({s.studentId}) — {s.status}
+                  {s.name} ({formatStudentId(s.studentId)}) — {s.status}
                 </option>
               ))}
             </select>
           </div>
-          <div className="col-span-2 flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <Label text="Module" required />
-              {fetchingMods && (
-                <span className="text-xs text-gray-400">Loading…</span>
-              )}
-              {isFiltered && (
-                <span className="text-xs text-indigo-500 font-medium">
-                  {filteredModules.length} enrolled module{filteredModules.length !== 1 ? 's' : ''}
-                </span>
-              )}
-              {showingAllModulesFallback && (
-                <span className="text-xs text-amber-500">No enrolment data — showing all</span>
-              )}
-            </div>
-            <select
-              value={form.moduleId}
-              onChange={e => setForm(f => ({ ...f, moduleId: e.target.value }))}
-              disabled={!form.studentId || fetchingMods}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed">
-              <option value="">
-                {fetchingMods ? 'Loading modules…' : form.studentId ? 'Select module…' : 'Select a student first'}
-              </option>
-              {filteredModules.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label text="Amount (LKR)" required />
-            <input type="number" min={0} value={form.amount}
-              onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-              placeholder="e.g. 10000"
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-          </div>
+
+          <>
+              <div className="col-span-2 flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <Label text="Subjects / Modules" required />
+                  {fetchingMods && (
+                    <span className="text-xs text-gray-400">Loading…</span>
+                  )}
+                  {isFiltered && (
+                    <span className="text-xs text-indigo-500 font-medium">
+                      {filteredModules.length} enrolled module{filteredModules.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                  {showingAllModulesFallback && (
+                    <span className="text-xs text-amber-500">No enrolment data — showing all</span>
+                  )}
+                </div>
+
+                {!form.studentId ? (
+                  <p className="px-3 py-2.5 border border-dashed border-gray-200 rounded-xl text-sm text-gray-400">
+                    Select a student first
+                  </p>
+                ) : fetchingMods ? (
+                  <p className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-400 flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading subjects…
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-2 p-3 border border-gray-200 rounded-xl bg-gray-50/50">
+                      {filteredModules.map(m => {
+                        const checked = selectedModuleIds.includes(m.id);
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => toggleSubject(m.id)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                              checked
+                                ? 'bg-indigo-600 border-indigo-600 text-white'
+                                : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-600'
+                            }`}
+                          >
+                            {checked && <CheckCircle className="w-3 h-3 inline-block mr-1 -mt-0.5" />}
+                            {m.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {selectedModuleIds.length > 0 && (
+                      <div className="mt-2 border border-indigo-100 rounded-xl divide-y divide-indigo-50 overflow-hidden">
+                        {selectedModuleIds.map(id => {
+                          const mod = allModules.find(m => m.id === id);
+                          return (
+                            <div key={id} className="flex items-center justify-between gap-3 px-3 py-2 bg-indigo-50/40">
+                              <span className="text-sm text-gray-700 truncate">{mod?.name ?? id}</span>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <span className="text-xs text-gray-400">LKR</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={subjectFees[id] ?? ''}
+                                  onChange={e => setSubjectFees(f => ({ ...f, [id]: e.target.value }))}
+                                  className="w-20 px-2 py-1 border border-gray-200 rounded-lg text-xs text-right focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSubject(id)}
+                                  className="text-gray-400 hover:text-red-500"
+                                  aria-label={`Remove ${mod?.name ?? 'subject'}`}
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                )}
+                {unmatchedNames.length > 0 && (
+                  <p className="mt-1 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5 leading-snug">
+                    Registered but no matching Module record found for:{' '}
+                    <span className="font-medium">{unmatchedNames.join(', ')}</span>.
+                    Add these in Module management, or check the spelling matches
+                    exactly what's in the student's subject list.
+                  </p>
+                )}
+              </div>
+
+              <div className="col-span-2 flex flex-col gap-1">
+                <Label text="Additional Fees" />
+                <div className="border border-gray-200 rounded-xl divide-y divide-gray-100">
+                  {ADDITIONAL_FEES.map(fee => {
+                    const checked = includedFeeIds.includes(fee.id);
+                    return (
+                      <div key={fee.id} className="px-3 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <label className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleFee(fee.id)}
+                              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 flex-shrink-0"
+                            />
+                            <span className="text-sm text-gray-700 truncate">
+                              {fee.label}
+                              {fee.id === 'admission' && isFirstPayment && (
+                                <span className="ml-1.5 text-xs text-indigo-500 font-medium">(first payment)</span>
+                              )}
+                            </span>
+                          </label>
+                          {checked && (
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <span className="text-xs text-gray-400">LKR</span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={feeAmounts[fee.id] ?? ''}
+                                onChange={e => setFeeAmounts(f => ({ ...f, [fee.id]: e.target.value }))}
+                                className="w-20 px-2 py-1 border border-gray-200 rounded-lg text-xs text-right focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="col-span-2 flex items-center justify-between px-4 py-3 rounded-xl bg-indigo-50 border border-indigo-100">
+                <span className="text-sm font-medium text-indigo-600">Total Amount</span>
+                <span className="text-lg font-bold text-indigo-700">LKR {totalAmount.toLocaleString()}</span>
+              </div>
+          </>
+
           <div className="flex flex-col gap-1">
             <Label text="Payment Date" required />
+            <CompactDatePicker
+              value={form.paidDate}
+              onChange={value => setForm(f => ({ ...f, paidDate: value }))}
+            />
             <input type="date" value={form.paidDate}
               onChange={e => setForm(f => ({ ...f, paidDate: e.target.value }))}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="hidden" />
           </div>
           <div className="flex flex-col gap-1">
             <Label text="Method" required />
+            <CompactSelect
+              value={form.method}
+              onChange={value => setForm(f => ({ ...f, method: value as 'cash' | 'bank' | 'online' }))}
+              options={[
+                { value: 'cash', label: 'Cash' },
+                { value: 'bank', label: 'Bank Transfer' },
+                { value: 'online', label: 'Online' },
+              ]}
+            />
             <select value={form.method} onChange={e => setForm(f => ({ ...f, method: e.target.value as 'cash' | 'bank' | 'online' }))}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="hidden">
               <option value="cash">Cash</option>
               <option value="bank">Bank Transfer</option>
               <option value="online">Online</option>
@@ -337,11 +808,20 @@ function PaymentModal({
           </div>
           <div className="flex flex-col gap-1">
             <Label text="Status" required />
+            <CompactSelect
+              value={form.status}
+              onChange={value => setForm(f => ({ ...f, status: value as 'paid' | 'pending' | 'overdue' }))}
+              options={[
+                { value: 'paid', label: 'PAID' },
+                { value: 'pending', label: 'PENDING' },
+                { value: 'overdue', label: 'OVERDUE' },
+              ]}
+            />
             <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as 'paid' | 'pending' | 'overdue' }))}
-              className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              <option value="paid">Paid</option>
-              <option value="pending">Pending</option>
-              <option value="overdue">Overdue</option>
+              className="hidden">
+              <option value="paid">PAID</option>
+              <option value="pending">PENDING</option>
+              <option value="overdue">OVERDUE</option>
             </select>
           </div>
 
@@ -357,7 +837,6 @@ function PaymentModal({
               {batches.map(b => (
                 <option key={b} value={b}>{b}</option>
               ))}
-              {/* keep existing value if it's not in current batch list */}
               {form.batch && !batches.includes(form.batch) && (
                 <option value={form.batch}>{form.batch}</option>
               )}
@@ -393,7 +872,6 @@ function PaymentModal({
   );
 }
 
-
 function StudentTableRow({
   studentId,
   studentName,
@@ -402,6 +880,7 @@ function StudentTableRow({
   year,
   token,
   onDownloadSlip,
+  onDownloadAllSlips,
   onEditPayment,
 }: {
   studentId: string;
@@ -411,6 +890,7 @@ function StudentTableRow({
   year: number;
   token: string | null;
   onDownloadSlip: (p: PaymentRecord) => void;
+  onDownloadAllSlips: (payments: PaymentRecord[], studentName: string, studentCode: string) => void;
   onEditPayment:  (p: PaymentRecord) => void;
 }) {
   const [expanded,     setExpanded]     = useState(false);
@@ -428,8 +908,11 @@ function StudentTableRow({
     return earliest;
   }, [payments, year]);
 
-  const toggleTracking = useCallback(async () => {
-    if (tracking) { setExpanded(e => !e); return; }
+  
+  
+  
+  
+  const fetchTracking = useCallback(async () => {
     setLoadingTrack(true);
     try {
       const res  = await fetch(
@@ -438,13 +921,34 @@ function StudentTableRow({
       );
       const json = await res.json();
       setTracking(json.data ?? json);
-      setExpanded(true);
     } catch {
       toast.error('Failed to load tracking for ' + studentId);
     } finally {
       setLoadingTrack(false);
     }
-  }, [studentId, year, token, tracking, fromMonth]);
+  }, [studentId, year, token, fromMonth]);
+
+  const toggleTracking = useCallback(async () => {
+    if (tracking) { setExpanded(e => !e); return; }
+    setExpanded(true);
+    await fetchTracking();
+  }, [tracking, fetchTracking]);
+
+  
+  
+  
+  
+  const paymentsKey = useMemo(
+    () => payments.map(p => `${p.id}:${p.amount}:${p.status}:${p.paidDate}`).join('|'),
+    [payments]
+  );
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    setTracking(null);
+    if (expanded) fetchTracking();
+    
+  }, [paymentsKey]);
 
   const paidSet    = useMemo(() => new Set(tracking?.paidMonths    ?? []), [tracking]);
   const pendingSet = useMemo(() => new Set(tracking?.pendingMonths ?? []), [tracking]);
@@ -494,7 +998,7 @@ function StudentTableRow({
         <td className="px-4 py-3">
           {firstPayment && (
             <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(firstPayment.status)}`}>
-              {statusIcon(firstPayment.status)} {firstPayment.status}
+              {statusIcon(firstPayment.status)} {firstPayment.status.toUpperCase()}
             </span>
           )}
         </td>
@@ -565,9 +1069,19 @@ function StudentTableRow({
                 )}
               </div>
 
-              <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-2">
-                All Payment Records
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">
+                  All Payment Records
+                </p>
+                {payments.length > 0 && (
+                  <button
+                    onClick={e => { e.stopPropagation(); onDownloadAllSlips(payments, studentName, studentIdCode); }}
+                    className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700 bg-white border border-indigo-200 rounded-lg px-2.5 py-1"
+                  >
+                    <Download className="w-3 h-3" /> Download All
+                  </button>
+                )}
+              </div>
               {payments.length > 0 ? (
                 <div className="rounded-xl overflow-hidden border border-indigo-100">
                   <table className="w-full text-sm bg-white">
@@ -592,7 +1106,7 @@ function StudentTableRow({
                           <td className="px-4 py-2 text-xs text-gray-500">{p.paidDate}</td>
                           <td className="px-4 py-2">
                             <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(p.status)}`}>
-                              {statusIcon(p.status)} {p.status}
+                              {statusIcon(p.status)} {p.status.toUpperCase()}
                             </span>
                           </td>
                           <td className="px-4 py-2">
@@ -634,6 +1148,7 @@ function PaymentMobileCard({
   year,
   token,
   onDownloadSlip,
+  onDownloadAllSlips,
   onEditPayment,
 }: {
   studentId: string;
@@ -642,6 +1157,7 @@ function PaymentMobileCard({
   year: number;
   token: string | null;
   onDownloadSlip: (p: PaymentRecord) => void;
+  onDownloadAllSlips: (payments: PaymentRecord[], studentName: string, studentCode: string) => void;
   onEditPayment: (p: PaymentRecord) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -659,12 +1175,9 @@ function PaymentMobileCard({
     return earliest;
   }, [payments, year]);
 
-  const toggleTracking = useCallback(async () => {
-    if (tracking) {
-      setExpanded(e => !e);
-      return;
-    }
-
+  
+  
+  const fetchTracking = useCallback(async () => {
     setLoadingTrack(true);
     try {
       const res = await fetch(
@@ -673,13 +1186,37 @@ function PaymentMobileCard({
       );
       const json = await res.json();
       setTracking(json.data ?? json);
-      setExpanded(true);
     } catch {
       toast.error('Failed to load tracking for ' + studentId);
     } finally {
       setLoadingTrack(false);
     }
-  }, [fromMonth, studentId, token, tracking, year]);
+  }, [fromMonth, studentId, token, year]);
+
+  const toggleTracking = useCallback(async () => {
+    if (tracking) {
+      setExpanded(e => !e);
+      return;
+    }
+    setExpanded(true);
+    await fetchTracking();
+  }, [tracking, fetchTracking]);
+
+  
+  
+  
+  
+  const paymentsKey = useMemo(
+    () => payments.map(p => `${p.id}:${p.amount}:${p.status}:${p.paidDate}`).join('|'),
+    [payments]
+  );
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    setTracking(null);
+    if (expanded) fetchTracking();
+    
+  }, [paymentsKey]);
 
   const paidSet = useMemo(() => new Set(tracking?.paidMonths ?? []), [tracking]);
   const pendingSet = useMemo(() => new Set(tracking?.pendingMonths ?? []), [tracking]);
@@ -705,7 +1242,7 @@ function PaymentMobileCard({
           </div>
           <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ${statusColor(firstPayment.status)}`}>
             {statusIcon(firstPayment.status)}
-            {firstPayment.status}
+            {firstPayment.status.toUpperCase()}
           </span>
         </div>
 
@@ -787,9 +1324,18 @@ function PaymentMobileCard({
             })}
           </div>
 
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-indigo-600">
-            History
-          </p>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-indigo-600">
+              History
+            </p>
+            <button
+              type="button"
+              onClick={() => onDownloadAllSlips(payments, studentName, studentId)}
+              className="flex items-center gap-1 text-[10px] font-semibold text-indigo-600 bg-white border border-indigo-200 rounded-lg px-2 py-1"
+            >
+              <Download className="h-3 w-3" /> Download All
+            </button>
+          </div>
           <div className="space-y-2">
             {payments.map(p => (
               <div key={p.id} className="rounded-md border border-indigo-50 bg-white px-3 py-2">
@@ -801,7 +1347,7 @@ function PaymentMobileCard({
                   <div className="text-right">
                     <p className="text-xs font-bold text-gray-800">LKR {p.amount.toLocaleString()}</p>
                     <p className={`text-[9px] font-bold uppercase ${p.status === 'paid' ? 'text-emerald-500' : 'text-amber-500'}`}>
-                      {p.status}
+                      {p.status.toUpperCase()}
                     </p>
                   </div>
                 </div>
@@ -813,7 +1359,6 @@ function PaymentMobileCard({
     </article>
   );
 }
-
 
 export default function PaymentsPage() {
   
@@ -859,10 +1404,14 @@ export default function PaymentsPage() {
   useEffect(() => {
     fetchPayments();
     fetchStudents(); 
-  }, [fetchPayments]);
+  }, [fetchPayments, fetchStudents]);
 
   const allModules = Array.from(
-    new Map(payments.map(p => [p.moduleId, { id: p.moduleId, name: p.moduleName }])).values()
+    new Map(
+      payments
+        .filter(p => !!p.moduleId)
+        .map(p => [p.moduleId as string, { id: p.moduleId as string, name: p.moduleName }])
+    ).values()
   );
 
   const filtered = payments.filter(p => {
@@ -909,33 +1458,27 @@ export default function PaymentsPage() {
       pdf.rect(0, 8, W, 54, 'F');
 
       if (logoDataUrl) {
-        try {
-          const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
-          const imgType   = mimeMatch ? mimeMatch[1].toUpperCase() : 'PNG';
-          const imgProps  = pdf.getImageProperties(logoDataUrl);
-          const boxSize   = 40;
-          const ratio     = imgProps.width / imgProps.height;
-          const logoW     = ratio >= 1 ? boxSize : boxSize * ratio;
-          const logoH     = ratio >= 1 ? boxSize / ratio : boxSize;
-          const headerTop    = 8;
-          const headerHeight = 54;
-          const logoX        = 10;
-          const logoY        = headerTop + (headerHeight - logoH) / 2;
-          pdf.addImage(logoDataUrl, imgType, logoX, logoY, logoW, logoH);
-        } catch (err) {
-          console.warn('Logo could not be added to PDF:', err);
-        }
-      }
+  try {
+    const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
+    const imgType = mimeMatch ? mimeMatch[1].toUpperCase() : 'PNG';
+    const imgProps = pdf.getImageProperties(logoDataUrl);
 
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(30);
-      pdf.setTextColor(0, 174, 219);
-      pdf.text('TECHNA', W / 2, 32, { align: 'center' });
+    const logoH = 70;
+    const logoW = logoH * (imgProps.width / imgProps.height);
+    const logoX = W / 2 - logoW / 2;
+    const logoY =-5;
+
+    pdf.addImage(logoDataUrl, imgType, logoX, logoY, logoW, logoH);
+  } catch (err) {
+    console.warn('Logo could not be added to PDF:', err);
+  }
+}
+      
 
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9.5);
       pdf.setTextColor(80, 80, 80);
-      pdf.text('Email: sivasakthy22@gmail.com  |  Contact: +94 77 170 3549', W / 2, 43, { align: 'center' });
+      pdf.text('Email:technatechnicalinstitute@gmail.com |  Contact: +94 77 170 3549', W / 2, 43, { align: 'center' });
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(14);
@@ -1030,7 +1573,6 @@ export default function PaymentsPage() {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
       pdf.setTextColor(255, 255, 255);
-      pdf.text('Techna', W / 2, H - 7, { align: 'center' });
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(7);
       pdf.setTextColor(210, 240, 255);
@@ -1040,7 +1582,7 @@ export default function PaymentsPage() {
       toast.success('Receipt downloaded!');
     };
 
-    fetch('/logo.png')
+    fetch('/new.png')
       .then(res => {
         if (!res.ok) throw new Error(`Logo fetch failed: ${res.status}`);
         return res.blob();
@@ -1054,6 +1596,193 @@ export default function PaymentsPage() {
       .then(dataUrl => drawPDF(dataUrl))
       .catch(() => {
         console.warn('Logo not found or failed to load — generating receipt without logo.');
+        drawPDF();
+      });
+  };
+
+  
+  const generateStudentAllSlip = (
+    studentPayments: PaymentRecord[],
+    studentName: string,
+    studentCode: string,
+  ) => {
+    if (studentPayments.length === 0) { toast.error('No records to export'); return; }
+
+    const drawPDF = (logoDataUrl?: string) => {
+      const pdf     = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const W       = pdf.internal.pageSize.getWidth();
+      const H       = pdf.internal.pageSize.getHeight();
+      const margin  = 12;
+      const usableW = W - margin * 2;
+      const dateStr = new Date().toISOString().split('T')[0];
+      const total   = studentPayments.reduce((s, p) => s + p.amount, 0);
+
+      pdf.setFillColor(0, 174, 219);
+      pdf.rect(0, 0, W, 8, 'F');
+      pdf.setFillColor(255, 255, 255);
+      pdf.rect(0, 8, W, 52, 'F');
+
+      if (logoDataUrl) {
+  try {
+    const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
+    const imgType = mimeMatch ? mimeMatch[1].toUpperCase() : 'PNG';
+    const imgProps = pdf.getImageProperties(logoDataUrl);
+
+    const logoH = 70;
+    const logoW = logoH * (imgProps.width / imgProps.height);
+    const logoX = W / 2 - logoW / 2;
+    const logoY =-10;
+
+    pdf.addImage(logoDataUrl, imgType, logoX, logoY, logoW, logoH);
+  } catch (err) {
+    console.warn('Logo could not be added to PDF:', err);
+  }
+}
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(26);
+      pdf.setTextColor(0, 174, 219);
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(80, 80, 80);
+      pdf.text('Email: technatechnicalinstitute@gmail.com  |  Contact: +94 77 170 3549', W / 2, 38, { align: 'center' });
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(13);
+      pdf.setTextColor(0, 174, 219);
+      pdf.text('COMBINED PAYMENT RECEIPT', W / 2, 49, { align: 'center' });
+
+      pdf.setDrawColor(0, 174, 219);
+      pdf.setLineWidth(0.6);
+      pdf.line(margin, 58, W - margin, 58);
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.setTextColor(50, 50, 50);
+      pdf.text(`Student: ${studentName}`, margin, 66);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(120, 120, 120);
+      pdf.text(`Generated: ${dateStr}  |  Total Records: ${studentPayments.length}`, W - margin, 66, { align: 'right' });
+
+      const tableY  = 72;
+      const rowH    = 8;
+      const headerH = 10;
+
+      const cols: { header: string; w: number }[] = [
+        { header: 'Receipt No',   w: 55 },
+        { header: 'Module / Fee', w: 70 },
+        { header: 'Amount',       w: 32 },
+        { header: 'Method',       w: 25 },
+        { header: 'Date',         w: 30 },
+        { header: 'Status',       w: 26 },
+      ];
+
+      const fitText = (text: string, maxMm: number): string => {
+        if (!text) return '';
+        const maxChars = Math.floor(maxMm / 1.45);
+        return text.length <= maxChars ? text : text.slice(0, maxChars - 1) + '…';
+      };
+
+      const drawTableHeader = (startY: number) => {
+        pdf.setFillColor(0, 174, 219);
+        pdf.rect(margin, startY, usableW, headerH, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.setTextColor(255, 255, 255);
+        let hx = margin;
+        cols.forEach(col => { pdf.text(col.header, hx + 2, startY + 7); hx += col.w; });
+      };
+
+      drawTableHeader(tableY);
+
+      const rows = studentPayments.map(p => [
+        p.receiptNo  ?? '',
+        p.moduleName ?? '',
+        `LKR ${p.amount.toLocaleString()}`,
+        p.method ? p.method.charAt(0).toUpperCase() + p.method.slice(1) : '',
+        p.paidDate ?? '',
+        p.status ? p.status.charAt(0).toUpperCase() + p.status.slice(1) : '',
+      ]);
+
+      let y = tableY + headerH;
+
+      rows.forEach((row, rowIdx) => {
+        if (y + rowH > H - 30) {
+          pdf.addPage();
+          y = 16;
+          drawTableHeader(y);
+          y += headerH;
+        }
+
+        pdf.setFillColor(rowIdx % 2 === 0 ? 255 : 240, rowIdx % 2 === 0 ? 255 : 250, rowIdx % 2 === 0 ? 255 : 254);
+        pdf.rect(margin, y, usableW, rowH, 'F');
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+
+        const rawStatus = studentPayments[rowIdx]?.status ?? '';
+        let cx = margin;
+        row.forEach((cell, colIdx) => {
+          const colW = cols[colIdx].w;
+          if (colIdx === 5) {
+            if      (rawStatus === 'paid')    pdf.setTextColor(22, 163, 74);
+            else if (rawStatus === 'pending') pdf.setTextColor(217, 119, 6);
+            else if (rawStatus === 'overdue') pdf.setTextColor(220, 38, 38);
+            else                              pdf.setTextColor(50, 50, 50);
+          } else {
+            pdf.setTextColor(50, 50, 50);
+          }
+          pdf.text(fitText(cell, colW), cx + 2, y + 5.5);
+          cx += colW;
+        });
+
+        pdf.setDrawColor(224, 224, 224);
+        pdf.setLineWidth(0.2);
+        pdf.line(margin, y + rowH, margin + usableW, y + rowH);
+        y += rowH;
+      });
+
+      const totalBoxY = y + 6;
+      pdf.setFillColor(0, 174, 219);
+      pdf.roundedRect(margin, totalBoxY, usableW, 18, 4, 4, 'F');
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.setTextColor(210, 240, 255);
+      pdf.text('GRAND TOTAL', margin + 8, totalBoxY + 7);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(14);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text(`LKR ${total.toLocaleString()}`, W - margin - 8, totalBoxY + 12, { align: 'right' });
+
+      pdf.setFillColor(0, 174, 219);
+      pdf.rect(0, H - 12, W, 12, 'F');
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(6.5);
+      pdf.setTextColor(210, 240, 255);
+      pdf.text('Generated by Techna · Thank you for your payment!', W / 2, H - 1.5, { align: 'center' });
+
+      pdf.save(`receipts-${studentCode}-${dateStr}.pdf`);
+      toast.success('Combined receipt downloaded!');
+    };
+
+    fetch('/new.png')
+      .then(res => {
+        if (!res.ok) throw new Error(`Logo fetch failed: ${res.status}`);
+        return res.blob();
+      })
+      .then(blob => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror  = reject;
+        reader.readAsDataURL(blob);
+      }))
+      .then(dataUrl => drawPDF(dataUrl))
+      .catch(() => {
+        console.warn('Logo not found — generating combined receipt without logo.');
         drawPDF();
       });
   };
@@ -1076,30 +1805,30 @@ export default function PaymentsPage() {
       pdf.rect(0, 8, W, 52, 'F');
 
       if (logoDataUrl) {
-        try {
-          const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
-          const imgType   = mimeMatch ? mimeMatch[1].toUpperCase() : 'PNG';
-          const imgProps  = pdf.getImageProperties(logoDataUrl);
-          const boxH      = 36;
-          const ratio     = imgProps.width / imgProps.height;
-          const logoW     = boxH * ratio;
-          const logoH     = boxH;
-          const logoY     = 8 + (52 - logoH) / 2;
-          pdf.addImage(logoDataUrl, imgType, margin, logoY, logoW, logoH);
-        } catch (err) {
-          console.warn('Logo could not be added to PDF:', err);
-        }
-      }
+  try {
+    const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
+    const imgType = mimeMatch ? mimeMatch[1].toUpperCase() : 'PNG';
+    const imgProps = pdf.getImageProperties(logoDataUrl);
+
+    const logoH = 70;
+    const logoW = logoH * (imgProps.width / imgProps.height);
+    const logoX = W / 2 - logoW / 2;
+    const logoY = -10;
+
+    pdf.addImage(logoDataUrl, imgType, logoX, logoY, logoW, logoH);
+  } catch (err) {
+    console.warn('Logo could not be added to PDF:', err);
+  }
+}
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(28);
       pdf.setTextColor(0, 174, 219);
-      pdf.text('TECHNA', W / 2, 30, { align: 'center' });
 
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(8.5);
       pdf.setTextColor(80, 80, 80);
-      pdf.text('Email: sivasakthy22@gmail.com  |  Contact: +94 77 170 3549', W / 2, 40, { align: 'center' });
+      pdf.text('Email: technatechnicalinstitute@gmail.com |  Contact: +94 77 170 3549', W / 2, 40, { align: 'center' });
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(13);
@@ -1227,7 +1956,6 @@ export default function PaymentsPage() {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setTextColor(255, 255, 255);
-      pdf.text('Techna', W / 2, H - 6, { align: 'center' });
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(6.5);
       pdf.setTextColor(210, 240, 255);
@@ -1237,7 +1965,7 @@ export default function PaymentsPage() {
       toast.success('Report exported!');
     };
 
-    fetch('/logo.png')
+    fetch('/new.png')
       .then(res => {
         if (!res.ok) throw new Error(`Logo fetch failed: ${res.status}`);
         return res.blob();
@@ -1266,6 +1994,9 @@ export default function PaymentsPage() {
       return [updated, ...prev];
     });
   };
+  const currentYear = new Date().getFullYear();
+
+const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 
   return (
     <div className="p-3 pb-20 sm:p-6 sm:pb-6">
@@ -1301,7 +2032,7 @@ export default function PaymentsPage() {
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{error}</div>
       )}
 
-      {/* ── Summary cards ── */}
+      {}
       <div className="mb-4 grid grid-cols-1 gap-2 md:mb-6 md:grid-cols-3 md:gap-4">
         <div className="rounded-lg border border-gray-100 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-4">
           <div className="flex items-center gap-3">
@@ -1338,74 +2069,121 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* ── Filters ── */}
-      <div className="mb-4 flex flex-row gap-2 sm:mb-5 sm:flex-row sm:gap-3">
-        <div className="relative flex-1">
+      {}
+      <div className="mb-4 flex flex-wrap items-start gap-2 sm:mb-5 sm:gap-3 xl:flex-nowrap">
+        <div className="relative w-full flex-none xl:flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search student name or receipt no…"
             className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:rounded-xl sm:text-sm" />
         </div>
-        {/* ── Mobile filter dropdown ── */}
-        <details className="relative sm:hidden">
-          <summary className="flex h-full w-11 cursor-pointer list-none items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500">
+        <details className="w-full sm:hidden">
+          <summary className="flex h-10 w-11 cursor-pointer list-none items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500">
             <Filter className="h-4 w-4" />
           </summary>
-          <div className="absolute right-0 z-20 mt-2 grid w-52 gap-2 rounded-lg border border-gray-100 bg-white p-3 shadow-lg">
-           
-            <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              <option value="">All Batches</option>
-              {BATCHES.map(b => <option key={b} value={b}>{b}</option>)}
-            </select>
-            <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              <option value="">All Modules</option>
-              {allModules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              <option value="">All Status</option>
-              <option value="paid">Paid</option>
-              <option value="pending">Pending</option>
-              <option value="overdue">Overdue</option>
-            </select>
-            <select value={trackingYear} onChange={e => setTrackingYear(Number(e.target.value))}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              {[2024, 2025, 2026, 2027].map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
+          <div className="mt-2 grid w-full min-w-0 gap-2 rounded-lg border border-gray-100 bg-white p-3 shadow-sm">
+            <CompactSelect
+                value={filterBatch}
+                onChange={setFilterBatch}
+                className="w-full sm:w-40"
+                options={[
+                  { value: '', label: 'All Batches' },
+                  ...BATCHES.map(b => ({
+                    value: b,
+                    label: b,
+                  })),
+                ]}
+              />
+            <CompactSelect
+              value={filterModule}
+              onChange={setFilterModule}
+              options={[
+                { value: '', label: 'All Modules' },
+                ...allModules.map(m => ({ value: m.id, label: m.name })),
+              ]}
+            />
+            <CompactSelect
+              value={filterStatus}
+              onChange={setFilterStatus}
+              options={[
+                { value: '', label: 'All Status' },
+                { value: 'paid', label: 'PAID' },
+                { value: 'pending', label: 'PENDING' },
+                { value: 'overdue', label: 'OVERDUE' },
+              ]}
+            />
+            <CompactSelect
+                value={String(trackingYear)}
+                onChange={value => setTrackingYear(Number(value))}
+                className="w-full sm:w-28"
+                options={[
+                  { value: String(trackingYear), label: 'Year' },
+                  ...yearOptions
+                    .filter(y => y !== trackingYear)
+                    .map(y => ({
+                      value: String(y),
+                      label: String(y),
+                    })),
+                ]}
+              />
           </div>
         </details>
-        {/* ── Desktop filters ── */}
-        <div className="hidden items-center gap-2 flex-wrap sm:flex">
-          <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          
-          <select value={filterBatch} onChange={e => setFilterBatch(e.target.value)}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">All Batches</option>
-            {BATCHES.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-          <select value={filterModule} onChange={e => setFilterModule(e.target.value)}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">All Modules</option>
-            {allModules.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">All Status</option>
-            <option value="paid">Paid</option>
-            <option value="pending">Pending</option>
-            <option value="overdue">Overdue</option>
-          </select>
-          <select value={trackingYear} onChange={e => setTrackingYear(Number(e.target.value))}
-            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            {[2024, 2025, 2026, 2027].map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-        </div>
+        <div className="hidden w-full flex-wrap items-center gap-2 sm:flex xl:w-auto xl:flex-nowrap">
+              <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
+
+              <CompactSelect
+                value={filterBatch}
+                onChange={setFilterBatch}
+                className="w-full sm:w-40"
+                options={[
+                  { value: '', label: 'All Batches' },
+                  ...BATCHES.map(b => ({
+                    value: b,
+                    label: b,
+                  })),
+                ]}
+              />
+
+              <CompactSelect
+                value={filterModule}
+                onChange={setFilterModule}
+                className="w-full sm:w-48 xl:w-56"
+                options={[
+                  { value: '', label: 'All Modules' },
+                  ...allModules.map(m => ({
+                    value: m.id,
+                    label: m.name,
+                  })),
+                ]}
+              />
+
+              <CompactSelect
+                value={filterStatus}
+                onChange={setFilterStatus}
+                className="w-full sm:w-36"
+                options={[
+                  { value: '', label: 'All Status' },
+                  { value: 'paid', label: 'PAID' },
+                  { value: 'pending', label: 'PENDING' },
+                  { value: 'overdue', label: 'OVERDUE' },
+                ]}
+              />
+
+              <CompactSelect
+                value={String(trackingYear)}
+                onChange={value => setTrackingYear(Number(value))}
+                className="w-full sm:w-28"
+                options={[
+                  { value: String(trackingYear), label: 'Year' },
+                  ...yearOptions
+                    .filter(y => y !== trackingYear)
+                    .map(y => ({
+                      value: String(y),
+                      label: String(y),
+                    })),
+                ]}
+              />
+            </div>
       </div>
 
      
@@ -1419,6 +2197,7 @@ export default function PaymentsPage() {
             year={trackingYear}
             token={token}
             onDownloadSlip={generatePaymentSlip}
+            onDownloadAllSlips={generateStudentAllSlip}
             onEditPayment={setEditPayment}
           />
         ))}
@@ -1462,6 +2241,7 @@ export default function PaymentsPage() {
                   year={trackingYear}
                   token={token}
                   onDownloadSlip={generatePaymentSlip}
+                  onDownloadAllSlips={generateStudentAllSlip}
                   onEditPayment={setEditPayment}
                 />
               ))}

@@ -22,6 +22,7 @@ import Modal from '@/components/ui/Modal';
 
 
 
+
 interface FormState {
   name: string;
   description: string;
@@ -324,8 +325,11 @@ export default function ModulesPage() {
           </>
         ) : (
           filtered.map((mod) => (
-            <div key={mod._id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-              <div className="flex items-start justify-between mb-3">
+              <div
+                key={mod._id}
+                className="flex h-full flex-col bg-white rounded-2xl shadow-sm border border-gray-100 p-5"
+              >
+                <div className="flex items-start justify-between mb-3">
                 <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
                   <BookOpen className="w-5 h-5 text-indigo-600" />
                 </div>
@@ -336,7 +340,7 @@ export default function ModulesPage() {
                       : 'bg-gray-100 text-gray-500'
                   }`}
                 >
-                  {mod.status}
+                  {mod.status.toUpperCase()}
                 </span>
               </div>
 
@@ -353,7 +357,7 @@ export default function ModulesPage() {
                 {mod.unit != null && mod.unit > 0 && <p>📚 {mod.unit} Units</p>}
               </div>
 
-              <div className="flex gap-2 mt-4">
+              <div className="mt-auto flex gap-2 mt-4">
                 <button
                   onClick={() => openEdit(mod._id)}
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg text-sm font-medium transition-colors"
@@ -393,14 +397,17 @@ export default function ModulesPage() {
         isOpen={modalOpen}
         onClose={closeModal}
         title={editId ? 'Edit Module' : 'Create New Module'}
-        size="xl"
+        size="lg"
       >
         {formLoading ? (
           <div className="flex items-center justify-center py-10">
             <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <form
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 lg:grid-cols-2 gap-3 max-h-[70vh] overflow-y-auto pr-1"
+        >        
             {/* 1. Module Name — full width */}
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Module Name</label>
@@ -528,8 +535,8 @@ export default function ModulesPage() {
                 }
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
               >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
+                <option value="active">ACTIVE</option>
+                <option value="inactive">INACTIVE</option>
               </select>
             </div>
 

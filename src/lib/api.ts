@@ -310,6 +310,12 @@ export const addResourceUrl = (
   api.post(`/api/modules/${moduleId}/add-resource-url`, data)
     .then(r => r.data);
 
+export const syncResourcesWithR2 = (): Promise<{
+  checked: number;
+  removed: number;
+  message: string;
+}> => api.post('/api/modules/sync-r2').then((r) => r.data);
+
 export const toggleResourcePublish = (
   moduleId: string,
   resourceId: string

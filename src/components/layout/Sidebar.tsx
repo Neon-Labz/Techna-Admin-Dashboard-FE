@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -11,7 +12,6 @@ import {
   ClipboardList,
   Calendar,
   LogOut,
-  GraduationCap as Logo,
   UserCircle,
   X,
   Menu,
@@ -37,13 +37,14 @@ const navItems = [
   { path: '/dashboard/qr-scan', icon: QrCode, label: 'QR Scanner' },
   { path: '/dashboard/profile', icon: UserCircle, label: 'Profile' },
 ];
+
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (v: boolean) => void;
 }
 
 export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
-  const { user, logout } = useAuthStore();
+  const { logout } = useAuthStore();
   const pathname = usePathname() || '/dashboard';
   const router = useRouter();
 
@@ -57,53 +58,41 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-20 lg:hidden"
+          className="fixed inset-0 z-[60] bg-black/50 lg:hidden"
           onClick={() => setIsOpen(false)}
         />
       )}
 
       <aside
-        className={`fixed top-0 left-0 h-full w-64 bg-gradient-to-b from-indigo-950 to-indigo-900 z-30 flex flex-col transform transition-transform duration-300 ${
+        className={`fixed top-0 left-0 z-[70] h-full w-64 bg-gradient-to-b from-indigo-950 to-indigo-900 flex flex-col transform transition-transform duration-300 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0 lg:static lg:z-auto`}
       >
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center">
-              <Logo className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <p className="text-white font-bold text-sm">Techna</p>
-              <p className="text-indigo-300 text-xs">Management System</p>
-            </div>
+        <div className="relative border-b border-white/10 pt-6 pb-5">
+          <div className="flex flex-col items-start pl-6">
+            <Image
+              src="/new1.png"
+              alt="Techna Logo"
+              width={140}
+              height={60}
+              className="block w-[150px] h-auto object-contain"
+              priority
+            />
+
+            <p className="mt-6 text-white font-bold text-lg tracking-wide">
+              ADMIN PANEL
+            </p>
           </div>
 
           <button
             onClick={() => setIsOpen(false)}
-            className="lg:hidden text-white/60 hover:text-white"
+            className="absolute right-4 top-4 lg:hidden text-white/60 hover:text-white"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-4 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white font-bold text-sm">
-              {user?.name?.charAt(0).toUpperCase() || 'U'}
-            </div>
-
-            <div className="min-w-0">
-              <p className="text-white text-sm font-medium truncate">
-                {user?.name || 'User'}
-              </p>
-              <p className="text-indigo-300 text-xs truncate">
-                {user?.email || ''}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+        <nav className="flex-1 overflow-y-auto px-3 pt-4 pb-3 space-y-2">
           {navItems.map(({ path, icon: Icon, label }) => {
             const isActive =
               path === '/dashboard'

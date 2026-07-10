@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Student, PaymentRecord } from '../../types';
 import { useDataStore } from '../../store/dataStore';
+import { formatStudentId } from '../../utils/studentId';
 import { X, Mail, Phone, CreditCard, Calendar, CheckCircle, XCircle, Plus, Edit2, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -42,7 +43,10 @@ export default function StudentScanPopup({ student, onClose, onPaymentAdd, onPay
   };
 
   const openEdit = (p: PaymentRecord) => {
-    setPayForm({ moduleId: p.moduleId, amount: String(p.amount), method: p.method, paidDate: p.paidDate, status: p.status });
+    // p.moduleId can be undefined for one-time fees (Admission Fee / ID Card
+    // Fee) that carry a feeType instead of a real module — fall back to ''
+    // so it still satisfies PayForm's required `string` moduleId.
+    setPayForm({ moduleId: p.moduleId ?? '', amount: String(p.amount), method: p.method, paidDate: p.paidDate, status: p.status });
     setPayModal({ mode: 'edit', payment: p });
   };
 
@@ -101,14 +105,14 @@ export default function StudentScanPopup({ student, onClose, onPaymentAdd, onPay
             {/* Info */}
             <div className="flex-1 min-w-0">
               <h2 className="text-xl font-bold truncate">{student.name}</h2>
-              <p className="text-indigo-200 font-mono text-sm mt-0.5">{student.studentId}</p>
+              <p className="text-indigo-200 font-mono text-sm mt-0.5">{formatStudentId(student.studentId)}</p>
               <p className="text-indigo-200 text-xs mt-0.5">{student.batch}</p>
               <div className="flex flex-wrap gap-3 mt-2 text-xs text-indigo-100">
                 <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{student.email}</span>
                 <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{student.phone}</span>
               </div>
               <span className={`inline-block mt-2 text-xs px-2.5 py-0.5 rounded-full font-semibold ${student.status === 'approved' ? 'bg-emerald-400/30 text-emerald-100' : student.status === 'pending' ? 'bg-amber-400/30 text-amber-100' : 'bg-red-400/30 text-red-100'}`}>
-                {student.status}
+                {student.status.toUpperCase()}
               </span>
             </div>
             {/* QR Code */}
@@ -192,7 +196,7 @@ export default function StudentScanPopup({ student, onClose, onPaymentAdd, onPay
                           <p className={`text-xs font-semibold ${latest.status === 'paid' ? 'text-emerald-600' : 'text-amber-600'}`}>
                             LKR {latest.amount.toLocaleString()}
                           </p>
-                          <p className="text-xs text-gray-400 capitalize">{latest.status} · {latest.method}</p>
+                          <p className="text-xs text-gray-400 capitalize">{latest.status.toUpperCase()} · {latest.method}</p>
                         </div>
                         <button onClick={() => openEdit(latest)} className="p-1.5 rounded-lg bg-white border border-gray-200 hover:bg-gray-50">
                           <Edit2 className="w-3 h-3 text-gray-500" />
@@ -220,7 +224,7 @@ export default function StudentScanPopup({ student, onClose, onPaymentAdd, onPay
                       <span className="font-medium text-gray-700">{p.moduleName}</span>
                       <span className="text-gray-500">{p.paidDate}</span>
                       <span className="font-semibold text-amber-700">LKR {p.amount.toLocaleString()}</span>
-                      <span className={`capitalize px-2 py-0.5 rounded-full font-medium ${p.status === 'overdue' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'}`}>{p.status}</span>
+                      <span className={`capitalize px-2 py-0.5 rounded-full font-medium ${p.status === 'overdue' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'}`}>{p.status.toUpperCase()}</span>
                       <button onClick={() => openEdit(p)} className="p-1 rounded hover:bg-amber-100">
                         <Edit2 className="w-3 h-3 text-gray-500" />
                       </button>
@@ -271,9 +275,9 @@ export default function StudentScanPopup({ student, onClose, onPaymentAdd, onPay
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <select value={payForm.status} onChange={e => setPayForm(f => ({ ...f, status: e.target.value as PayForm['status'] }))}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
-                    <option value="paid">Paid</option>
-                    <option value="pending">Pending</option>
-                    <option value="overdue">Overdue</option>
+                    <option value="paid">PAID</option>
+                    <option value="pending">PENDING</option>
+                    <option value="overdue">OVERDUE</option>
                   </select>
                 </div>
               </div>
