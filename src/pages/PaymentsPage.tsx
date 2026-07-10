@@ -494,11 +494,29 @@ function PaymentModal({
 
     setSaving(true);
     try {
-      
-      
-      
+     
+      let existingPayments: PaymentRecord[] = [];
+      if (!isEdit) {
+        try {
+          const [byId, byCode] = await Promise.all([
+            paymentApi.getByStudent(form.studentId).catch(() => [] as PaymentRecord[]),
+            student?.studentId && student.studentId !== form.studentId
+              ? paymentApi.getByStudent(student.studentId).catch(() => [] as PaymentRecord[])
+              : Promise.resolve([] as PaymentRecord[]),
+          ]);
+          const seen = new Set<string>();
+          existingPayments = [...byId, ...byCode].filter(p => {
+            const key = p.id || (p as any)._id;
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        } catch { /* proceed with empty */ }
+      }
+
       let updatedCount = 0;
       let createdCount = 0;
+      let skippedCount = 0;
       for (const item of lineItems) {
         const existing = isEdit ? existingRecordMap[item.key] : undefined;
         if (existing) {
@@ -506,6 +524,17 @@ function PaymentModal({
           onSuccess(result);
           updatedCount++;
         } else {
+          // Duplicate check: same module + same month + paid status
+          const paidMonth = item.payload.paidDate?.slice(0, 7);
+          const isDuplicate = !isEdit && item.payload.moduleId && existingPayments.some(
+            p => (p.moduleId === item.payload.moduleId || p.moduleName === item.payload.moduleName) &&
+                 p.status === 'paid' &&
+                 p.paidDate?.slice(0, 7) === paidMonth,
+          );
+          if (isDuplicate) {
+            skippedCount++;
+            continue;
+          }
           const result = await paymentApi.create(item.payload);
           onSuccess(result);
           createdCount++;
@@ -515,6 +544,14 @@ function PaymentModal({
       const parts: string[] = [];
       if (updatedCount) parts.push(`${updatedCount} updated`);
       if (createdCount) parts.push(`${createdCount} added`);
+      if (skippedCount) parts.push(`${skippedCount} skipped (already paid)`);
+
+      if (skippedCount > 0 && createdCount === 0 && updatedCount === 0) {
+        toast.error('Payment already exists for the selected subject(s) this month.');
+        setSaving(false);
+        return;
+      }
+
       toast.success(
         parts.length > 0
           ? `Payment ${parts.join(', ')} successfully!`
