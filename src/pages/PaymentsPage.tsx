@@ -1391,33 +1391,27 @@ export default function PaymentsPage() {
       pdf.rect(0, 8, W, 54, 'F');
 
       if (logoDataUrl) {
-        try {
-          const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
-          const imgType   = mimeMatch ? mimeMatch[1].toUpperCase() : 'PNG';
-          const imgProps  = pdf.getImageProperties(logoDataUrl);
-          const boxSize   = 40;
-          const ratio     = imgProps.width / imgProps.height;
-          const logoW     = ratio >= 1 ? boxSize : boxSize * ratio;
-          const logoH     = ratio >= 1 ? boxSize / ratio : boxSize;
-          const headerTop    = 8;
-          const headerHeight = 54;
-          const logoX        = 10;
-          const logoY        = headerTop + (headerHeight - logoH) / 2;
-          pdf.addImage(logoDataUrl, imgType, logoX, logoY, logoW, logoH);
-        } catch (err) {
-          console.warn('Logo could not be added to PDF:', err);
-        }
-      }
+  try {
+    const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
+    const imgType = mimeMatch ? mimeMatch[1].toUpperCase() : 'PNG';
+    const imgProps = pdf.getImageProperties(logoDataUrl);
 
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(30);
-      pdf.setTextColor(0, 174, 219);
-      pdf.text('TECHNA', W / 2, 32, { align: 'center' });
+    const logoH = 70;
+    const logoW = logoH * (imgProps.width / imgProps.height);
+    const logoX = W / 2 - logoW / 2;
+    const logoY =-5;
+
+    pdf.addImage(logoDataUrl, imgType, logoX, logoY, logoW, logoH);
+  } catch (err) {
+    console.warn('Logo could not be added to PDF:', err);
+  }
+}
+      
 
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9.5);
       pdf.setTextColor(80, 80, 80);
-      pdf.text('Email: sivasakthy22@gmail.com  |  Contact: +94 77 170 3549', W / 2, 43, { align: 'center' });
+      pdf.text('Email:technatechnicalinstitute@gmail.com |  Contact: +94 77 170 3549', W / 2, 43, { align: 'center' });
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(14);
@@ -1512,7 +1506,6 @@ export default function PaymentsPage() {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
       pdf.setTextColor(255, 255, 255);
-      pdf.text('Techna', W / 2, H - 7, { align: 'center' });
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(7);
       pdf.setTextColor(210, 240, 255);
@@ -1522,7 +1515,7 @@ export default function PaymentsPage() {
       toast.success('Receipt downloaded!');
     };
 
-    fetch('/logo.png')
+    fetch('/new.png')
       .then(res => {
         if (!res.ok) throw new Error(`Logo fetch failed: ${res.status}`);
         return res.blob();
@@ -1563,29 +1556,30 @@ export default function PaymentsPage() {
       pdf.rect(0, 8, W, 52, 'F');
 
       if (logoDataUrl) {
-        try {
-          const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
-          const imgType   = mimeMatch ? mimeMatch[1].toUpperCase() : 'PNG';
-          const imgProps  = pdf.getImageProperties(logoDataUrl);
-          const boxH      = 36;
-          const ratio     = imgProps.width / imgProps.height;
-          const logoW     = boxH * ratio;
-          const logoY     = 8 + (52 - boxH) / 2;
-          pdf.addImage(logoDataUrl, imgType, margin, logoY, logoW, boxH);
-        } catch (err) {
-          console.warn('Logo could not be added to PDF:', err);
-        }
-      }
+  try {
+    const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
+    const imgType = mimeMatch ? mimeMatch[1].toUpperCase() : 'PNG';
+    const imgProps = pdf.getImageProperties(logoDataUrl);
+
+    const logoH = 70;
+    const logoW = logoH * (imgProps.width / imgProps.height);
+    const logoX = W / 2 - logoW / 2;
+    const logoY =-10;
+
+    pdf.addImage(logoDataUrl, imgType, logoX, logoY, logoW, logoH);
+  } catch (err) {
+    console.warn('Logo could not be added to PDF:', err);
+  }
+}
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(26);
       pdf.setTextColor(0, 174, 219);
-      pdf.text('TECHNA', W / 2, 28, { align: 'center' });
 
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(8.5);
       pdf.setTextColor(80, 80, 80);
-      pdf.text('Email: sivasakthy22@gmail.com  |  Contact: +94 77 170 3549', W / 2, 38, { align: 'center' });
+      pdf.text('Email: technatechnicalinstitute@gmail.com  |  Contact: +94 77 170 3549', W / 2, 38, { align: 'center' });
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(13);
@@ -1599,7 +1593,7 @@ export default function PaymentsPage() {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(9);
       pdf.setTextColor(50, 50, 50);
-      pdf.text(`Student: ${studentName}  (${studentCode})`, margin, 66);
+      pdf.text(`Student: ${studentName}`, margin, 66);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(120, 120, 120);
       pdf.text(`Generated: ${dateStr}  |  Total Records: ${studentPayments.length}`, W - margin, 66, { align: 'right' });
@@ -1699,7 +1693,6 @@ export default function PaymentsPage() {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setTextColor(255, 255, 255);
-      pdf.text('Techna', W / 2, H - 6, { align: 'center' });
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(6.5);
       pdf.setTextColor(210, 240, 255);
@@ -1709,7 +1702,7 @@ export default function PaymentsPage() {
       toast.success('Combined receipt downloaded!');
     };
 
-    fetch('/logo.png')
+    fetch('/new.png')
       .then(res => {
         if (!res.ok) throw new Error(`Logo fetch failed: ${res.status}`);
         return res.blob();
@@ -1745,30 +1738,30 @@ export default function PaymentsPage() {
       pdf.rect(0, 8, W, 52, 'F');
 
       if (logoDataUrl) {
-        try {
-          const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
-          const imgType   = mimeMatch ? mimeMatch[1].toUpperCase() : 'PNG';
-          const imgProps  = pdf.getImageProperties(logoDataUrl);
-          const boxH      = 36;
-          const ratio     = imgProps.width / imgProps.height;
-          const logoW     = boxH * ratio;
-          const logoH     = boxH;
-          const logoY     = 8 + (52 - logoH) / 2;
-          pdf.addImage(logoDataUrl, imgType, margin, logoY, logoW, logoH);
-        } catch (err) {
-          console.warn('Logo could not be added to PDF:', err);
-        }
-      }
+  try {
+    const mimeMatch = logoDataUrl.match(/^data:image\/(\w+);base64,/);
+    const imgType = mimeMatch ? mimeMatch[1].toUpperCase() : 'PNG';
+    const imgProps = pdf.getImageProperties(logoDataUrl);
+
+    const logoH = 70;
+    const logoW = logoH * (imgProps.width / imgProps.height);
+    const logoX = W / 2 - logoW / 2;
+    const logoY = -10;
+
+    pdf.addImage(logoDataUrl, imgType, logoX, logoY, logoW, logoH);
+  } catch (err) {
+    console.warn('Logo could not be added to PDF:', err);
+  }
+}
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(28);
       pdf.setTextColor(0, 174, 219);
-      pdf.text('TECHNA', W / 2, 30, { align: 'center' });
 
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(8.5);
       pdf.setTextColor(80, 80, 80);
-      pdf.text('Email: sivasakthy22@gmail.com  |  Contact: +94 77 170 3549', W / 2, 40, { align: 'center' });
+      pdf.text('Email: technatechnicalinstitute@gmail.com |  Contact: +94 77 170 3549', W / 2, 40, { align: 'center' });
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(13);
@@ -1896,7 +1889,6 @@ export default function PaymentsPage() {
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(8);
       pdf.setTextColor(255, 255, 255);
-      pdf.text('Techna', W / 2, H - 6, { align: 'center' });
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(6.5);
       pdf.setTextColor(210, 240, 255);
@@ -1906,7 +1898,7 @@ export default function PaymentsPage() {
       toast.success('Report exported!');
     };
 
-    fetch('/logo.png')
+    fetch('/new.png')
       .then(res => {
         if (!res.ok) throw new Error(`Logo fetch failed: ${res.status}`);
         return res.blob();
