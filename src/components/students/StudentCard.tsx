@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Student } from '../../types';
+import { isPendingStudentId, formatStudentId } from '../../utils/studentId';
 import {
   Eye,
   Edit2,
@@ -120,8 +121,14 @@ export default function StudentCard({
               {student.name}
             </h3>
 
-            <p className="break-words text-xs font-medium text-indigo-600">
-              {student.studentId}
+            <p
+              className={
+                isPendingStudentId(student.studentId)
+                  ? 'break-words text-xs font-medium italic text-amber-500'
+                  : 'break-words text-xs font-medium text-indigo-600'
+              }
+            >
+              {formatStudentId(student.studentId)}
             </p>
 
             <p className="break-words text-xs text-gray-500">{student.batch}</p>

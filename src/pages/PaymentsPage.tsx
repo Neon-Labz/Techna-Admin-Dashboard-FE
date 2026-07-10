@@ -13,6 +13,7 @@ import api from '@/lib/axios';
 import CompactSelect from '@/components/ui/CompactSelect';
 import CompactDatePicker from '@/components/ui/CompactDatePicker';
 import { useDataStore } from '@/store/dataStore';
+import { formatStudentId } from '@/utils/studentId';
 
 const MONTHS = [
   { num: '01', label: 'Jan' }, { num: '02', label: 'Feb' },
@@ -568,7 +569,7 @@ function PaymentModal({
               <option value="">Select student…</option>
               {students.map(s => (
                 <option key={s._id} value={s._id}>
-                  {s.name} ({s.studentId})
+                  {s.name} ({formatStudentId(s.studentId)}) — {s.status}
                 </option>
               ))}
             </select>
