@@ -13,6 +13,7 @@ import api from '@/lib/axios';
 import CompactSelect from '@/components/ui/CompactSelect';
 import CompactDatePicker from '@/components/ui/CompactDatePicker';
 import { useDataStore } from '@/store/dataStore';
+import { formatStudentId } from '@/utils/studentId';
 
 const MONTHS = [
   { num: '01', label: 'Jan' }, { num: '02', label: 'Feb' },
@@ -568,7 +569,7 @@ function PaymentModal({
               <option value="">Select student…</option>
               {students.map(s => (
                 <option key={s._id} value={s._id}>
-                  {s.name} ({s.studentId})
+                  {s.name} ({formatStudentId(s.studentId)}) — {s.status}
                 </option>
               ))}
             </select>
@@ -2016,10 +2017,17 @@ const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
           </summary>
           <div className="mt-2 grid w-full min-w-0 gap-2 rounded-lg border border-gray-100 bg-white p-3 shadow-sm">
             <CompactSelect
-              value={filterBatch}
-              onChange={setFilterBatch}
-              options={BATCHES.map(b => ({ value: b, label: b || 'All Batches' }))}
-            />
+                value={filterBatch}
+                onChange={setFilterBatch}
+                className="w-full sm:w-40"
+                options={[
+                  { value: '', label: 'All Batches' },
+                  ...BATCHES.map(b => ({
+                    value: b,
+                    label: b,
+                  })),
+                ]}
+              />
             <CompactSelect
               value={filterModule}
               onChange={setFilterModule}
@@ -2039,14 +2047,19 @@ const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
               ]}
             />
             <CompactSelect
-              value={String(trackingYear)}
-              onChange={value => setTrackingYear(Number(value))}
-              options={yearOptions.map(y => ({
-                value: String(y),
-                label: String(y),
-              }))}
-            
-            />
+                value={String(trackingYear)}
+                onChange={value => setTrackingYear(Number(value))}
+                className="w-full sm:w-28"
+                options={[
+                  { value: String(trackingYear), label: 'Year' },
+                  ...yearOptions
+                    .filter(y => y !== trackingYear)
+                    .map(y => ({
+                      value: String(y),
+                      label: String(y),
+                    })),
+                ]}
+              />
           </div>
         </details>
         <div className="hidden w-full flex-wrap items-center gap-2 sm:flex xl:w-auto xl:flex-nowrap">

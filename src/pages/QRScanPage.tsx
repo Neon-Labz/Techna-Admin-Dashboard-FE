@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDataStore } from '../store/dataStore';
 import type { Student, PaymentRecord } from '../types';
+import { formatStudentId } from '../utils/studentId';
 import { QrCode, Search, ScanLine, Camera, CameraOff } from 'lucide-react';
 import jsQR from 'jsqr';
 import StudentScanPopup from '../components/students/StudentScanPopup';
@@ -217,7 +218,7 @@ export default function QRScanPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-800 truncate">{s.name}</p>
-                <p className="text-xs text-gray-500 font-mono">{s.studentId}</p>
+                <p className="text-xs text-gray-500 font-mono">{formatStudentId(s.studentId)}</p>
               </div>
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${s.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : s.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'}`}>
                 {s.status.toUpperCase()}
