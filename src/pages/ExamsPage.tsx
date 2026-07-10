@@ -215,36 +215,42 @@ export default function ExamsPage() {
       pdf.rect(0, 0, w, 8, 'F');
 
       if (img && imgType) {
-        const imgProps = pdf.getImageProperties(img);
-        const logoWidth = 35;
-        const logoHeight = (imgProps.height * logoWidth) / imgProps.width;
-        pdf.addImage(img, imgType, 3, 10, logoWidth, logoHeight);
-      }
+  const imgProps = pdf.getImageProperties(img);
 
-      pdf.setTextColor(technaBlue.r, technaBlue.g, technaBlue.b);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(22);
-      pdf.text('TECHNA', w / 2, 20, { align: 'center' });
+  const logoWidth = 55;
+const logoHeight = (imgProps.height * logoWidth) / imgProps.width;
+
+pdf.addImage(
+  img,
+  imgType,
+  (w - logoWidth) / 2,
+  0, 
+  logoWidth,
+  logoHeight
+);
+}
 
       pdf.setFont('helvetica', 'normal');
       pdf.setFontSize(9);
       pdf.setTextColor(90, 90, 90);
       pdf.text(
-        'Email: sivasakthy22@gmail.com  |  Contact: +94 77 170 3549',
-        w / 2,
-        27,
-        { align: 'center' }
-      );
+  'Email: technatechnicalinstitute@gmail.com | Contact: +94 77 170 3549',
+  w / 2,
+  38, 
+  { align: 'center' }
+);
 
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(13);
       pdf.setTextColor(technaBlue.r, technaBlue.g, technaBlue.b);
-      pdf.text('Examination Timetable', w / 2, 36, { align: 'center' });
+      pdf.text('Examination Timetable', w / 2, 50, {
+  align: 'center',
+});
 
       pdf.setDrawColor(220, 220, 230);
-      pdf.line(14, 42, w - 14, 42);
+      pdf.line(14, 52, w - 14, 52);
 
-      let y = 54;
+      let y = 70;
 
       const headers = ['Exam', 'Module', 'Batch', 'Date', 'Time', 'Venue'];
       const colW = [25, 65, 28, 28, 28, 30];
@@ -300,17 +306,19 @@ export default function ExamsPage() {
         pdf.line(5, y - 4, w - 5, y - 4);
       });
 
-      pdf.setDrawColor(220, 220, 230);
-      pdf.line(14, h - 18, w - 14, h - 18);
+     // Footer blue background
+pdf.setFillColor(leafBlue.r, leafBlue.g, leafBlue.b);
+pdf.rect(0, h - 18, w, 18, 'F');
 
-      pdf.setFontSize(7.5);
-      pdf.setTextColor(140, 140, 140);
-      pdf.text(
-        `Generated on ${new Date().toLocaleDateString()} · TECHNA`,
-        w / 2,
-        h - 10,
-        { align: 'center' }
-      );
+pdf.setFontSize(7.5);
+pdf.setTextColor(255, 255, 255);
+
+pdf.text(
+  `Generated on ${new Date().toLocaleDateString()} · TECHNA`,
+  w / 2,
+  h - 8,
+  { align: 'center' }
+);
 
       pdf.save('exam-timetable.pdf');
       toast.success('Timetable downloaded!');
@@ -318,14 +326,14 @@ export default function ExamsPage() {
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.src = '/logo.png';
+    img.src = '/new.png';
 
     img.onload = () => generatePdf(img, 'PNG');
 
     img.onerror = () => {
       const fallback = new Image();
       fallback.crossOrigin = 'anonymous';
-      fallback.src = '/logo.jpeg';
+      fallback.src = '/new.jpeg';
 
       fallback.onload = () => generatePdf(fallback, 'JPEG');
       fallback.onerror = () => generatePdf(null, null);

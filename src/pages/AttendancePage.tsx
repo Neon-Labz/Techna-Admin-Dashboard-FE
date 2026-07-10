@@ -251,6 +251,10 @@ export default function AttendancePage() {
 
   const [deleteTarget, setDeleteTarget] = useState<ApiAttendance | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [contactTarget, setContactTarget] = useState<{
+    student: ApiStudent | null;
+    record: ApiAttendance;
+  } | null>(null);
 
   // ✅ Derive BATCHES dynamically from loaded students — no hardcode
   const BATCHES = Array.from(
@@ -351,6 +355,55 @@ export default function AttendancePage() {
   };
 
   const today = new Date().toISOString().split('T')[0];
+
+  const getStudentName = (student: ApiStudent | undefined, fallback: string) =>
+    student?.fullNameEnglish ?? student?.fullNameTamil ?? fallback;
+
+  const getContactValue = (student: ApiStudent | null | undefined, keys: string[]) => {
+    if (!student) return 'N/A';
+
+    const source = student as unknown as Record<string, unknown>;
+
+    for (const key of keys) {
+      const value = source[key];
+
+      if (typeof value === 'string' && value.trim()) return value.trim();
+      if (typeof value === 'number') return String(value);
+    }
+
+    return 'N/A';
+  };
+
+  const getWhatsAppNumber = (student: ApiStudent | null | undefined) =>
+    getContactValue(student, [
+      'whatsappNo',
+      'whatsAppNo',
+      'whatsappNumber',
+      'whatsAppNumber',
+      'phone',
+      'phoneNumber',
+      'contactNo',
+      'contactNumber',
+      'mobile',
+      'mobileNumber',
+    ]);
+
+  const getParentNumber = (student: ApiStudent | null | undefined) =>
+    getContactValue(student, [
+      'parentPhone',
+      'parentContact',
+      'parentContactNo',
+      'guardianPhone',
+      'guardianContact',
+      'guardianContactNo',
+      'fatherContact',
+      'fatherContactNo',
+      'fatherPhone',
+      'motherContact',
+      'motherContactNo',
+      'motherPhone',
+      'fixedTelephone',
+    ]);
 
   if (loading) return (
     <div className="flex h-64 items-center justify-center p-3 sm:p-6">
@@ -486,7 +539,18 @@ export default function AttendancePage() {
                         <div className="mb-2 flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Student Name</p>
-                            <p className="truncate text-xs font-bold text-gray-800">{studentName}</p>
+                            {record.status === 'absent' ? (
+                              <button
+                                type="button"
+                                onClick={() => setContactTarget({ student: student ?? null, record })}
+                                className="block max-w-full truncate text-left text-xs font-bold text-indigo-600 hover:underline"
+                                title="View contact details"
+                              >
+                                {studentName}
+                              </button>
+                            ) : (
+                              <p className="truncate text-xs font-bold text-gray-800">{studentName}</p>
+                            )}
                             <p className="mt-0.5 text-[10px] font-medium text-gray-500">{record.studentId}</p>
                           </div>
                           <span className={`shrink-0 rounded px-2 py-1 text-[9px] font-bold uppercase ${
@@ -638,7 +702,23 @@ export default function AttendancePage() {
                                     <tr key={record._id} className="hover:bg-white transition-colors">
                                       <td className="pl-12 pr-4 py-2.5 text-xs text-gray-600">{displayDate}</td>
                                       <td className="px-4 py-2.5 text-xs font-mono text-gray-500">{record.studentId}</td>
-                                      <td className="px-4 py-2.5 text-xs text-gray-700">{studentName}</td>
+                                      <td className="px-4 py-2.5 text-xs text-gray-700">
+                                        {record.status === 'absent' ? (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setContactTarget({ student: student ?? null, record });
+                                            }}
+                                            className="font-semibold text-indigo-600 hover:underline"
+                                            title="View contact details"
+                                          >
+                                            {studentName}
+                                          </button>
+                                        ) : (
+                                          studentName
+                                        )}
+                                      </td>
                                       <td className="px-4 py-2.5 text-xs text-gray-500">{formatTime(record.markedAt)}</td>
                                       <td className="px-4 py-2.5 text-center">
                                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -729,6 +809,64 @@ export default function AttendancePage() {
       >
         <Plus className="h-5 w-5" />
       </button>
+
+      {/* Absent Student Contact Modal */}
+      {contactTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-red-500">
+                  Absent Student Contact
+                </p>
+                <h2 className="mt-1 text-lg font-bold text-gray-800">
+                  {getStudentName(contactTarget.student ?? undefined, contactTarget.record.studentId)}
+                </h2>
+                <p className="text-xs font-medium text-gray-400">
+                  Student ID: {contactTarget.record.studentId}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setContactTarget(null)}
+                className="rounded-lg px-2 py-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Close contact details"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  WhatsApp Number
+                </p>
+                <p className="mt-1 text-sm font-bold text-gray-800">
+                  {getWhatsAppNumber(contactTarget.student)}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Parent / Guardian Phone
+                </p>
+                <p className="mt-1 text-sm font-bold text-gray-800">
+                  {getParentNumber(contactTarget.student)}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setContactTarget(null)}
+              className="mt-5 w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Delete Modal */}
       <DeleteModal
