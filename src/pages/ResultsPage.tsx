@@ -20,6 +20,8 @@ import {
   ExamType,
   getExamTypeDescription,
 } from '@/constants/examTypes';
+import { formatStudentId } from '@/utils/studentId';
+import Modal from '@/components/ui/Modal';
 
 type Student = {
   _id?: string;
@@ -170,6 +172,7 @@ export default function ResultsPage() {
   const [studentDropdown, setStudentDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const resultFormRef = useRef<HTMLDivElement>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const [selectedStudent, setSelectedStudent] = useState<{
     studentId: string;
@@ -503,7 +506,7 @@ export default function ResultsPage() {
                     >
                       <span className="truncate">
                         <span className="font-semibold text-blue-600">
-                          {student.studentId}
+                          {formatStudentId(student.studentId)}
                         </span>{' '}
                         - {student.fullNameEnglish || student.name || 'Student'}
                       </span>
@@ -531,7 +534,7 @@ export default function ResultsPage() {
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold text-slate-900">
-                    {selectedStudent.studentId} - {selectedStudent.studentName}
+                    {formatStudentId(selectedStudent.studentId)} - {selectedStudent.studentName}
                   </p>
                   <p className="text-xs text-slate-500">
                     Batch:{' '}
@@ -971,7 +974,7 @@ export default function ResultsPage() {
 
                                 <button
                                   type="button"
-                                  onClick={() => deleteResult(item.resultId)}
+                                  onClick={() => setDeleteId(item.resultId)}
                                   className="rounded-lg p-2 text-red-500 hover:bg-red-50"
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -1142,6 +1145,50 @@ export default function ResultsPage() {
   )}
 </div>
       </div>
+     <Modal
+  isOpen={!!deleteId}
+  onClose={() => setDeleteId(null)}
+  title="Delete Result"
+  size="md"
+  closeOnBackdrop={false}
+>
+  <div className="px-2 py-2 text-center">
+    <div className="mx-auto mb-6 flex h-10 w-10 items-center justify-center rounded-full bg-red-50">
+      <Trash2 className="h-8 w-8 text-red-600" />
+    </div>
+
+    <h3 className="mb-4 text-lg font-bold text-slate-900">
+      Remove this result?
+    </h3>
+
+    <p className="mx-auto mb-8 max-w-xs text-sm leading-6 text-slate-500">
+      This will permanently delete the result record.
+    </p>
+
+    <div className="grid grid-cols-2 gap-3">
+      <button
+        type="button"
+        onClick={() => setDeleteId(null)}
+        className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+      >
+        Cancel
+      </button>
+
+      <button
+        type="button"
+        onClick={async () => {
+          if (deleteId) {
+            await deleteResult(deleteId);
+            setDeleteId(null);
+          }
+        }}
+        className="rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white hover:bg-red-700"
+      >
+        Delete
+      </button>
+    </div>
+  </div>
+</Modal>
     </div>
   );
 }

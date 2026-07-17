@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Student, PaymentRecord } from '../../types';
 import { useDataStore } from '../../store/dataStore';
+import { formatStudentId } from '../../utils/studentId';
 import { X, Mail, Phone, CreditCard, Calendar, CheckCircle, XCircle, Plus, Edit2, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -104,7 +105,7 @@ export default function StudentScanPopup({ student, onClose, onPaymentAdd, onPay
             {/* Info */}
             <div className="flex-1 min-w-0">
               <h2 className="text-xl font-bold truncate">{student.name}</h2>
-              <p className="text-indigo-200 font-mono text-sm mt-0.5">{student.studentId}</p>
+              <p className="text-indigo-200 font-mono text-sm mt-0.5">{formatStudentId(student.studentId)}</p>
               <p className="text-indigo-200 text-xs mt-0.5">{student.batch}</p>
               <div className="flex flex-wrap gap-3 mt-2 text-xs text-indigo-100">
                 <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{student.email}</span>

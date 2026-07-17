@@ -13,6 +13,7 @@ import api from '@/lib/axios';
 import CompactSelect from '@/components/ui/CompactSelect';
 import CompactDatePicker from '@/components/ui/CompactDatePicker';
 import { useDataStore } from '@/store/dataStore';
+import { formatStudentId } from '@/utils/studentId';
 
 const MONTHS = [
   { num: '01', label: 'Jan' }, { num: '02', label: 'Feb' },
@@ -30,6 +31,8 @@ const FEE_STRUCTURE = {
 const ADDITIONAL_FEES: { id: string; label: string; defaultAmount: number }[] = [
   { id: 'admission', label: 'Admission Fee', defaultAmount: 500 },
   { id: 'idcard',    label: 'ID Card Fee',   defaultAmount: 300 },
+   { id: 'handout', label: 'Handout Fee', defaultAmount: 0 },
+  { id: 'other', label: 'Other Fee', defaultAmount: 0 },
 ];
 
 interface ModuleRef {
@@ -127,6 +130,8 @@ function extractModuleRef(m: unknown): ModuleRef {
 }
 
 function extractStudentModules(s: Record<string, unknown>): unknown[] {
+  // Collect from ALL relevant fields and merge them to maximize module resolution.
+  // The student record may store module IDs in one field and subject names in another.
   const candidates = [
     s.modules,
     s.enrolledModules,
@@ -141,11 +146,28 @@ function extractStudentModules(s: Record<string, unknown>): unknown[] {
           s.basketSubject,
         ]
       : undefined,
+    Array.isArray((s.subjectSelection as any)?.subjects)
+      ? (s.subjectSelection as any).subjects
+      : undefined,
+    Array.isArray((s.subjectSelection as any)?.enrolledModules)
+      ? (s.subjectSelection as any).enrolledModules
+      : undefined,
   ];
+
+  // Merge all non-empty arrays and deduplicate by stringified value
+  const seen = new Set<string>();
+  const merged: unknown[] = [];
   for (const c of candidates) {
-    if (Array.isArray(c) && c.length > 0) return c;
+    if (!Array.isArray(c) || c.length === 0) continue;
+    for (const item of c) {
+      const key = typeof item === 'string' ? item.toLowerCase().trim() : JSON.stringify(item);
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(item);
+      }
+    }
   }
-  return [];
+  return merged;
 }
 
 function PaymentModal({
@@ -254,12 +276,14 @@ function PaymentModal({
       ? allModules
           .filter(m => s.moduleRefs.some(ref => {
             const label = ref.name ?? ref.id ?? '';
+            // Direct ID match (e.g. ref stores the actual module ObjectId)
             if (ref.id && ref.id === m.id) {
               matchedRefLabels.add(label);
               return true;
             }
+            // Name-based matching (case-insensitive, normalized)
+            const normM = normalizeModuleName(m.name);
             if (ref.name) {
-              const normM = normalizeModuleName(m.name);
               const normR = normalizeModuleName(ref.name);
               const isMatch =
                 normM === normR ||
@@ -272,6 +296,14 @@ function PaymentModal({
                   return wordsR.length > 0 && overlap / wordsR.length >= 0.6;
                 })();
               if (isMatch) {
+                matchedRefLabels.add(label);
+                return true;
+              }
+            }
+            // Also try matching ref.id as a name (student may store subject names in modules array)
+            if (ref.id && ref.id !== m.id) {
+              const normRefId = normalizeModuleName(ref.id);
+              if (normRefId && (normM === normRefId || normM.includes(normRefId) || normRefId.includes(normM))) {
                 matchedRefLabels.add(label);
                 return true;
               }
@@ -478,7 +510,7 @@ function PaymentModal({
         payload: {
           studentId:   form.studentId,
           studentName: student?.name,
-          feeType:     id as 'admission' | 'idcard',
+          feeType:     id as 'admission' | 'idcard'| 'handout' | 'other',
           moduleName:  fee.label,
           amount:      Number(feeAmounts[id]) || 0,
           paidDate:    form.paidDate,
@@ -494,11 +526,29 @@ function PaymentModal({
 
     setSaving(true);
     try {
-      
-      
-      
+     
+      let existingPayments: PaymentRecord[] = [];
+      if (!isEdit) {
+        try {
+          const [byId, byCode] = await Promise.all([
+            paymentApi.getByStudent(form.studentId).catch(() => [] as PaymentRecord[]),
+            student?.studentId && student.studentId !== form.studentId
+              ? paymentApi.getByStudent(student.studentId).catch(() => [] as PaymentRecord[])
+              : Promise.resolve([] as PaymentRecord[]),
+          ]);
+          const seen = new Set<string>();
+          existingPayments = [...byId, ...byCode].filter(p => {
+            const key = p.id || (p as any)._id;
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        } catch { /* proceed with empty */ }
+      }
+
       let updatedCount = 0;
       let createdCount = 0;
+      let skippedCount = 0;
       for (const item of lineItems) {
         const existing = isEdit ? existingRecordMap[item.key] : undefined;
         if (existing) {
@@ -506,6 +556,17 @@ function PaymentModal({
           onSuccess(result);
           updatedCount++;
         } else {
+          // Duplicate check: same module + same month + paid status
+          const paidMonth = item.payload.paidDate?.slice(0, 7);
+          const isDuplicate = !isEdit && item.payload.moduleId && existingPayments.some(
+            p => (p.moduleId === item.payload.moduleId || p.moduleName === item.payload.moduleName) &&
+                 p.status === 'paid' &&
+                 p.paidDate?.slice(0, 7) === paidMonth,
+          );
+          if (isDuplicate) {
+            skippedCount++;
+            continue;
+          }
           const result = await paymentApi.create(item.payload);
           onSuccess(result);
           createdCount++;
@@ -515,6 +576,14 @@ function PaymentModal({
       const parts: string[] = [];
       if (updatedCount) parts.push(`${updatedCount} updated`);
       if (createdCount) parts.push(`${createdCount} added`);
+      if (skippedCount) parts.push(`${skippedCount} skipped (already paid)`);
+
+      if (skippedCount > 0 && createdCount === 0 && updatedCount === 0) {
+        toast.error('Payment already exists for the selected subject(s) this month.');
+        setSaving(false);
+        return;
+      }
+
       toast.success(
         parts.length > 0
           ? `Payment ${parts.join(', ')} successfully!`
@@ -568,7 +637,7 @@ function PaymentModal({
               <option value="">Select student…</option>
               {students.map(s => (
                 <option key={s._id} value={s._id}>
-                  {s.name} ({s.studentId})
+                  {s.name} ({formatStudentId(s.studentId)}) — {s.status}
                 </option>
               ))}
             </select>
@@ -1358,22 +1427,36 @@ export default function PaymentsPage() {
   });
 
   const studentGroups = useMemo(() => {
-    const map = new Map<string, {
-      studentId: string; studentName: string;
-      batch: string;     payments: PaymentRecord[];
-    }>();
-    filtered.forEach(p => {
-      if (!map.has(p.studentId))
-        map.set(p.studentId, {
-          studentId:   p.studentId,
-          studentName: p.studentName,
-          batch:       p.batch,
-          payments:    [],
-        });
-      map.get(p.studentId)!.payments.push(p);
-    });
-    return Array.from(map.values());
-  }, [filtered]);
+  const map = new Map<
+    string,
+    {
+      studentId: string;
+      studentCode: string;
+      studentName: string;
+      batch: string;
+      payments: PaymentRecord[];
+    }
+  >();
+
+  filtered.forEach((p) => {
+    const groupKey = p.studentId;
+    const studentCode = p.studentCode || p.studentId;
+
+    if (!map.has(groupKey)) {
+      map.set(groupKey, {
+        studentId: p.studentId,
+        studentCode,
+        studentName: p.studentName,
+        batch: p.batch,
+        payments: [],
+      });
+    }
+
+    map.get(groupKey)!.payments.push(p);
+  });
+
+  return Array.from(map.values());
+}, [filtered]);
 
   const totalPaid    = filtered.filter(p => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
   const totalPending = filtered.filter(p => p.status !== 'paid').reduce((s, p) => s + p.amount, 0);
@@ -1927,6 +2010,9 @@ export default function PaymentsPage() {
       return [updated, ...prev];
     });
   };
+  const currentYear = new Date().getFullYear();
+
+const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 
   return (
     <div className="p-3 pb-20 sm:p-6 sm:pb-6">
@@ -2013,10 +2099,17 @@ export default function PaymentsPage() {
           </summary>
           <div className="mt-2 grid w-full min-w-0 gap-2 rounded-lg border border-gray-100 bg-white p-3 shadow-sm">
             <CompactSelect
-              value={filterBatch}
-              onChange={setFilterBatch}
-              options={BATCHES.map(b => ({ value: b, label: b || 'All Batches' }))}
-            />
+                value={filterBatch}
+                onChange={setFilterBatch}
+                className="w-full sm:w-40"
+                options={[
+                  { value: '', label: 'All Batches' },
+                  ...BATCHES.map(b => ({
+                    value: b,
+                    label: b,
+                  })),
+                ]}
+              />
             <CompactSelect
               value={filterModule}
               onChange={setFilterModule}
@@ -2036,53 +2129,77 @@ export default function PaymentsPage() {
               ]}
             />
             <CompactSelect
-              value={String(trackingYear)}
-              onChange={value => setTrackingYear(Number(value))}
-              options={[2024, 2025, 2026, 2027].map(y => ({
-                value: String(y),
-                label: String(y),
-              }))}
-            />
+                value={String(trackingYear)}
+                onChange={value => setTrackingYear(Number(value))}
+                className="w-full sm:w-28"
+                options={[
+                  { value: String(trackingYear), label: 'Year' },
+                  ...yearOptions
+                    .filter(y => y !== trackingYear)
+                    .map(y => ({
+                      value: String(y),
+                      label: String(y),
+                    })),
+                ]}
+              />
           </div>
         </details>
         <div className="hidden w-full flex-wrap items-center gap-2 sm:flex xl:w-auto xl:flex-nowrap">
-          <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          <CompactSelect
-            value={filterBatch}
-            onChange={setFilterBatch}
-            className="w-full sm:w-40"
-            options={BATCHES.map(b => ({ value: b, label: b || 'All Batches' }))}
-          />
-          <CompactSelect
-            value={filterModule}
-            onChange={setFilterModule}
-            className="w-full sm:w-48 xl:w-56"
-            options={[
-              { value: '', label: 'All Modules' },
-              ...allModules.map(m => ({ value: m.id, label: m.name })),
-            ]}
-          />
-          <CompactSelect
-            value={filterStatus}
-            onChange={setFilterStatus}
-            className="w-full sm:w-36"
-            options={[
-              { value: '', label: 'All Status' },
-              { value: 'paid', label: 'PAID' },
-              { value: 'pending', label: 'PENDING' },
-              { value: 'overdue', label: 'OVERDUE' },
-            ]}
-          />
-          <CompactSelect
-            value={String(trackingYear)}
-            onChange={value => setTrackingYear(Number(value))}
-            className="w-full sm:w-24"
-            options={[2024, 2025, 2026, 2027].map(y => ({
-              value: String(y),
-              label: String(y),
-            }))}
-          />
-        </div>
+              <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
+
+              <CompactSelect
+                value={filterBatch}
+                onChange={setFilterBatch}
+                className="w-full sm:w-40"
+                options={[
+                  { value: '', label: 'All Batches' },
+                  ...BATCHES.map(b => ({
+                    value: b,
+                    label: b,
+                  })),
+                ]}
+              />
+
+              <CompactSelect
+                value={filterModule}
+                onChange={setFilterModule}
+                className="w-full sm:w-48 xl:w-56"
+                options={[
+                  { value: '', label: 'All Modules' },
+                  ...allModules.map(m => ({
+                    value: m.id,
+                    label: m.name,
+                  })),
+                ]}
+              />
+
+              <CompactSelect
+                value={filterStatus}
+                onChange={setFilterStatus}
+                className="w-full sm:w-36"
+                options={[
+                  { value: '', label: 'All Status' },
+                  { value: 'paid', label: 'PAID' },
+                  { value: 'pending', label: 'PENDING' },
+                  { value: 'overdue', label: 'OVERDUE' },
+                ]}
+              />
+
+              <CompactSelect
+                value={String(trackingYear)}
+                onChange={value => setTrackingYear(Number(value))}
+                className="w-full sm:w-28"
+                options={[
+                  { value: String(trackingYear), label: 'Year' },
+                  ...yearOptions
+                    .filter(y => y !== trackingYear)
+                    .map(y => ({
+                      value: String(y),
+                      label: String(y),
+                    })),
+                ]}
+              />
+            </div>
       </div>
 
      
@@ -2132,17 +2249,17 @@ export default function PaymentsPage() {
             <tbody>
               {studentGroups.map(s => (
                 <StudentTableRow
-                  key={s.studentId}
-                  studentId={s.studentId}
-                  studentName={s.studentName}
-                  studentIdCode={s.studentId}
-                  payments={s.payments}
-                  year={trackingYear}
-                  token={token}
-                  onDownloadSlip={generatePaymentSlip}
-                  onDownloadAllSlips={generateStudentAllSlip}
-                  onEditPayment={setEditPayment}
-                />
+  key={s.studentId}
+  studentId={s.studentId}
+  studentName={s.studentName}
+  studentIdCode={s.studentCode}
+  payments={s.payments}
+  year={trackingYear}
+  token={token}
+  onDownloadSlip={generatePaymentSlip}
+  onDownloadAllSlips={generateStudentAllSlip}
+  onEditPayment={setEditPayment}
+/>
               ))}
             </tbody>
           </table>

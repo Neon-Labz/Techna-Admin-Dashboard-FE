@@ -70,16 +70,18 @@ export default function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
       >
         <div className="relative border-b border-white/10 pt-6 pb-5">
           <div className="flex flex-col items-start pl-6">
+           <div className="relative h-[85px] w-full max-w-[220px]">
             <Image
-              src="/new1.png"
-              alt="Techna Logo"
-              width={140}
-              height={60}
-              className="block w-[150px] h-auto object-contain"
+              src="/ad_Logo.png"
+              alt="Techna Technical Institute Logo"
+              fill
+              sizes="210px"
+              className="object-contain object-left"
               priority
             />
+          </div>
 
-            <p className="mt-6 text-white font-bold text-lg tracking-wide">
+            <p className="mt-2 pl-2 text-white font-bold text-lg tracking-wide">
               ADMIN PANEL
             </p>
           </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Student, PaymentRecord } from '../../types';
 import { useDataStore } from '../../store/dataStore';
+import { isPendingStudentId, formatStudentId } from '../../utils/studentId';
 import { attendanceApi } from '@/api/attendance.api';
 import { paymentApi } from '@/api/payment.api';
 import {
@@ -377,7 +378,9 @@ export default function StudentProfile({
   const [showPayModal, setShowPayModal] = useState(false);
   const [qrImageFailed, setQrImageFailed] = useState(false);
   const [localAttendance, setLocalAttendance] = useState<any[]>(s.attendance || []);
-  const [localPayments, setLocalPayments] = useState<any[]>(s.payments || []);
+  const [localPayments, setLocalPayments] = useState<any[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(true);
+  const [paySubmitting, setPaySubmitting] = useState(false);
   const [payForm, setPayForm] = useState<{
     moduleId: string;
     amount: string;
@@ -405,9 +408,18 @@ export default function StudentProfile({
           ? s.subjectSelection.subjects
           : [];
 
+  // Normalize a module/subject name for comparison: lowercase, strip special chars, collapse whitespace
+  const normalizeForMatch = (name: string) =>
+    name.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+
   const studentModules = studentModuleValues.map((item: string) => {
+    const normItem = normalizeForMatch(item);
     const found = modules.find(
-      (m: any) => m.id === item || m._id === item || m.name === item,
+      (m: any) =>
+        m.id === item ||
+        m._id === item ||
+        m.name === item ||
+        normalizeForMatch(m.name || '') === normItem,
     );
 
     return (
@@ -436,10 +448,37 @@ export default function StudentProfile({
   }, [s.id, s._id, s.qrCodeUrl]);
 
   useEffect(() => {
-    if (!s.studentId) return;
+    if (!s.studentId && !s.id && !s._id) return;
     attendanceApi.getByStudent(s.studentId).then(setLocalAttendance).catch(() => {});
-    paymentApi.getByStudent(s.studentId || s.id).then(setLocalPayments).catch(() => {});
-  }, [s.studentId, s.id]);
+    setPaymentsLoading(true);
+
+   
+    const mongoId = s.id || s._id;
+    const readableId = s.studentId;
+
+    const fetchByReadable = readableId
+      ? paymentApi.getByStudent(readableId).catch(() => [] as any[])
+      : Promise.resolve([] as any[]);
+    const fetchByMongo = mongoId && mongoId !== readableId
+      ? paymentApi.getByStudent(mongoId).catch(() => [] as any[])
+      : Promise.resolve([] as any[]);
+
+    Promise.all([fetchByReadable, fetchByMongo])
+      .then(([byReadable, byMongo]) => {
+        // Merge and deduplicate by payment id
+        const merged = [...byReadable, ...byMongo];
+        const seen = new Set<string>();
+        const unique = merged.filter((p: any) => {
+          const key = p.id || p._id || `${p.moduleId}-${p.paidDate}-${p.amount}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setLocalPayments(unique);
+      })
+      .catch(() => {})
+      .finally(() => setPaymentsLoading(false));
+  }, [s.studentId, s.id, s._id]);
 
   const getAttendanceRecord = (moduleId: string) => {
     return localAttendance.find(
@@ -448,8 +487,33 @@ export default function StudentProfile({
   };
 
   const getModulePayment = (moduleId: string) => {
+    const currentMonth = new Date().toISOString().slice(0, 7); // e.g. "2025-07"
+    // Match by moduleId or moduleName since the payment might store either
+    const mod = studentModules.find((m: any) => m.id === moduleId);
+    const moduleName = normalizeForMatch(mod?.name || moduleId);
+    const moduleIdLower = moduleId.toLowerCase().trim();
+
+    // Also get the real module ID from the store if available (the MongoDB ObjectId)
+    const realModuleId = (mod?.id || (mod as any)?._id || '').toLowerCase().trim();
+
     return localPayments.find(
-      (p: any) => p.moduleId === moduleId && p.status === 'paid',
+      (p: any) => {
+        const pModuleId = (p.moduleId || '').toLowerCase().trim();
+        const pModuleName = normalizeForMatch(p.moduleName || '');
+
+        // Exact matches on ID or normalized name
+        const exactMatch =
+          pModuleId === moduleIdLower ||
+          pModuleName === moduleName ||
+          pModuleId === moduleName;
+
+        // Also match if payment's moduleId matches the store's real module ID
+        const realIdMatch = realModuleId && realModuleId !== moduleName && (
+          pModuleId === realModuleId
+        );
+
+        return (exactMatch || realIdMatch) && p.status === 'paid' && p.paidDate?.slice(0, 7) === currentMonth;
+      },
     );
   };
 
@@ -727,31 +791,70 @@ export default function StudentProfile({
 
   const handlePaySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (paySubmitting) return;
 
     const mod: any = studentModules.find((m: any) => m.id === payForm.moduleId);
     if (!mod) return;
 
+    setPaySubmitting(true);
+
+    // Fetch fresh payment data from the API to catch payments made elsewhere (e.g. Payments page)
+    let freshPayments = localPayments;
+    try {
+      const mongoId = s.id || s._id;
+      const readableId = s.studentId;
+      const [byReadable, byMongo] = await Promise.all([
+        readableId ? paymentApi.getByStudent(readableId).catch(() => [] as any[]) : Promise.resolve([] as any[]),
+        mongoId && mongoId !== readableId ? paymentApi.getByStudent(mongoId).catch(() => [] as any[]) : Promise.resolve([] as any[]),
+      ]);
+      const merged = [...byReadable, ...byMongo];
+      const seen = new Set<string>();
+      freshPayments = merged.filter((p: any) => {
+        const key = p.id || p._id || `${p.moduleId}-${p.paidDate}-${p.amount}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setLocalPayments(freshPayments);
+    } catch {
+      // If fetch fails, fall back to existing localPayments for validation
+    }
+
+    // Duplicate payment validation: check student + module + month
+    const paidMonth = payForm.paidDate.slice(0, 7); // e.g. "2025-07"
+    const moduleName = normalizeForMatch(mod.name || '');
+    const formModuleIdLower = (payForm.moduleId || '').toLowerCase().trim();
+    const isDuplicate = freshPayments.some(
+      (p: any) => {
+        const pModuleId = (p.moduleId || '').toLowerCase().trim();
+        const pModuleName = normalizeForMatch(p.moduleName || '');
+        const moduleMatch =
+          pModuleId === formModuleIdLower ||
+          pModuleName === moduleName ||
+          pModuleId === moduleName ||
+          pModuleName === formModuleIdLower;
+        return moduleMatch && p.status === 'paid' && p.paidDate?.slice(0, 7) === paidMonth;
+      },
+    );
+
+    if (isDuplicate) {
+      toast.error(
+        `Payment already exists for ${mod.name} in ${paidMonth}. Only one payment is allowed per student, subject, and month.`,
+      );
+      setPaySubmitting(false);
+      return;
+    }
+
     const receiptNo = `REC-${Date.now()}`;
 
-    onPaymentAdd({
-      studentId: s.id || s._id,
-      studentName: studentName,
-      moduleId: payForm.moduleId,
-      moduleName: mod.name,
-      amount: Number(payForm.amount),
-      paidDate: payForm.paidDate,
-      method: payForm.method,
-      status: 'paid',
-      receiptNo,
-      batch: s.batch,
-    });
-
+    // Save payment to the backend API first so it's visible on the Payments page
     try {
       const saved = await paymentApi.create({
-        studentId: s.studentId || s.id || s._id,
+        studentId: s.id || s._id,
         studentName: studentName,
         moduleId: payForm.moduleId,
         moduleName: mod.name,
+        feeType: 'subject',
         amount: Number(payForm.amount),
         paidDate: payForm.paidDate,
         method: payForm.method,
@@ -760,11 +863,15 @@ export default function StudentProfile({
         batch: s.batch,
       });
       setLocalPayments(prev => [...prev, saved]);
+      toast.success('Payment recorded successfully!');
     } catch (err) {
       console.error('Payment API failed:', err);
-      toast.error('Payment saved locally but failed to sync to server');
+      toast.error('Failed to save payment. Please try again.');
+      setPaySubmitting(false);
+      return; // Don't close modal if API failed
     }
 
+    setPaySubmitting(false);
     setShowPayModal(false);
     setPayForm({
       moduleId: '',
@@ -849,7 +956,7 @@ export default function StudentProfile({
                         {studentName}
                       </h2>
                       <p className="mt-0.5 text-[12px] text-indigo-100">
-                        {getValue(s.studentId)}
+                        {formatStudentId(s.studentId)}
                       </p>
                       <p className="text-[12px] text-indigo-100">
                         {getValue(s.batch)}
@@ -1047,13 +1154,20 @@ export default function StudentProfile({
               <div className="-mt-1 mb-3 flex justify-end">
                 <button
                   onClick={() => setShowPayModal(true)}
-                  className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+                  disabled={paymentsLoading}
+                  className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Add Payment
                 </button>
               </div>
 
+              {paymentsLoading ? (
+                <p className="rounded-xl bg-slate-50 p-4 text-center text-[13px] text-slate-400">
+                  Loading payments...
+                </p>
+              ) : (
+              <>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 {studentModules.length > 0 ? (
                   studentModules.map((m: any) => {
@@ -1062,25 +1176,25 @@ export default function StudentProfile({
                     return (
                       <div
                         key={m.id || m.name}
-                        className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
+                        className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 min-h-[40px] ${
                           paid
                             ? 'border-emerald-200 bg-emerald-50'
                             : 'border-slate-100 bg-white'
                         }`}
                       >
-                        <span className="text-[13px] font-bold text-slate-800">
+                        <span className="text-[13px] font-bold text-slate-800 truncate min-w-0">
                           {m.name}
                         </span>
 
                         {paid ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-emerald-600">
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-xs font-bold text-emerald-600 whitespace-nowrap">
                               LKR {paid.amount?.toLocaleString()}
                             </span>
                             <CheckCircle className="h-4 w-4 text-emerald-600" />
                           </div>
                         ) : (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-shrink-0">
                             <span className="text-xs font-bold text-slate-400">
                               Unpaid
                             </span>
@@ -1102,16 +1216,16 @@ export default function StudentProfile({
                   Payment History
                 </h4>
 
-                {(s.payments || []).length === 0 ? (
+                {localPayments.length === 0 ? (
                   <p className="text-[13px] text-slate-400">
                     No payment records
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {(s.payments || []).map((p: any) => (
+                    {localPayments.map((p: any) => (
                       <div
                         key={
-                          p.id || p.receiptNo || `${p.moduleId}-${p.paidDate}`
+                          p.id || p._id || p.receiptNo || `${p.moduleId}-${p.paidDate}`
                         }
                         className="grid grid-cols-[1fr_auto_auto] items-center gap-4 text-[13px]"
                       >
@@ -1133,6 +1247,8 @@ export default function StudentProfile({
                   </div>
                 )}
               </div>
+              </>
+              )}
             </ProfileSection>
 
             <ProfileSection title="Personal Details">
@@ -1265,23 +1381,62 @@ export default function StudentProfile({
               <form onSubmit={handlePaySubmit} className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Payment Date
+                  </label>
+
+                  <input
+                    type="date"
+                    required
+                    value={payForm.paidDate}
+                    onChange={(e) =>
+                      setPayForm((f) => ({ ...f, paidDate: e.target.value, moduleId: '' }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                  />
+                  <p className="mt-1 text-xs text-gray-400">
+                    Select the month you are paying for
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Module
                   </label>
 
                   <select
                     required
                     value={payForm.moduleId}
-                    onChange={(e) =>
-                      setPayForm((f) => ({ ...f, moduleId: e.target.value }))
-                    }
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      const selectedMod: any = studentModules.find((m: any) => m.id === selectedId);
+                      const fee = selectedMod?.fee || 1200; // default 1200 if no fee set
+                      setPayForm((f) => ({ ...f, moduleId: selectedId, amount: selectedId ? String(fee) : '' }));
+                    }}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                   >
                     <option value="">Select module...</option>
-                    {studentModules.map((m: any) => (
-                      <option key={m.id || m.name} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
+                    {studentModules.map((m: any) => {
+                      // Check if already paid for the SELECTED month (not just current month)
+                      const selectedMonth = payForm.paidDate?.slice(0, 7) || new Date().toISOString().slice(0, 7);
+                      const moduleNameNorm = normalizeForMatch(m.name || '');
+                      const moduleIdLower = (m.id || '').toLowerCase().trim();
+                      const alreadyPaidForMonth = localPayments.find((p: any) => {
+                        const pModuleId = (p.moduleId || '').toLowerCase().trim();
+                        const pModuleName = normalizeForMatch(p.moduleName || '');
+                        const moduleMatch =
+                          pModuleId === moduleIdLower ||
+                          pModuleName === moduleNameNorm ||
+                          pModuleId === moduleNameNorm ||
+                          pModuleName === moduleIdLower;
+                        return moduleMatch && p.status === 'paid' && p.paidDate?.slice(0, 7) === selectedMonth;
+                      });
+                      const fee = m.fee || 1200;
+                      return (
+                        <option key={m.id || m.name} value={m.id} disabled={!!alreadyPaidForMonth}>
+                          {m.name} - LKR {fee.toLocaleString()}{alreadyPaidForMonth ? ` (Paid for ${selectedMonth})` : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -1322,22 +1477,6 @@ export default function StudentProfile({
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Paid Date
-                  </label>
-
-                  <input
-                    type="date"
-                    required
-                    value={payForm.paidDate}
-                    onChange={(e) =>
-                      setPayForm((f) => ({ ...f, paidDate: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                  />
-                </div>
-
                 <div className="flex gap-3 pt-2">
                   <button
                     type="button"
@@ -1349,9 +1488,10 @@ export default function StudentProfile({
 
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700"
+                    disabled={paySubmitting}
+                    className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Save
+                    {paySubmitting ? 'Saving...' : 'Save'}
                   </button>
                 </div>
               </form>
