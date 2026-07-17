@@ -138,73 +138,7 @@ const getImageFormat = (dataUrl: string) => {
 
 
 const findStudentPhotoUrl = (student: any): string => {
-  const directCandidates = [
-    student?.profilePhoto,
-    student?.profilePhotoUrl,
-    student?.profileImage,
-    student?.profileImageUrl,
-    student?.avatar,
-    student?.photo,
-    student?.photoUrl,
-    student?.image,
-    student?.imageUrl,
-    student?.studentPhoto,
-    student?.studentPhotoUrl,
-    student?.profile?.photo,
-    student?.profile?.photoUrl,
-    student?.profile?.image,
-    student?.profile?.imageUrl,
-    student?.documents?.profilePhoto,
-    student?.documents?.profilePhotoUrl,
-  ];
-
-  const directMatch = directCandidates.find(
-    (value) => typeof value === 'string' && value.trim().length > 0,
-  );
-
-  if (directMatch) return directMatch.trim();
-
-  const visited = new WeakSet<object>();
-
-  const searchNested = (value: unknown, depth = 0): string => {
-    if (depth > 4 || value === null || value === undefined) return '';
-
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      const looksLikeImage =
-        /^https?:\/\//i.test(trimmed) &&
-        (
-          /\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(trimmed) ||
-          /cloudinary|r2|amazonaws|storage|image|photo|avatar|profile/i.test(trimmed)
-        );
-
-      return looksLikeImage ? trimmed : '';
-    }
-
-    if (typeof value !== 'object') return '';
-
-    if (visited.has(value as object)) return '';
-    visited.add(value as object);
-
-    for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
-      const keyLooksRelevant =
-        /photo|image|avatar|profile.*(url|path|key)|url/i.test(key);
-
-      if (keyLooksRelevant && typeof nestedValue === 'string') {
-        const trimmed = nestedValue.trim();
-        if (/^https?:\/\//i.test(trimmed)) return trimmed;
-      }
-    }
-
-    for (const nestedValue of Object.values(value as Record<string, unknown>)) {
-      const found = searchNested(nestedValue, depth + 1);
-      if (found) return found;
-    }
-
-    return '';
-  };
-
-  return searchNested(student);
+  return student?.profilePhoto || student?.avatar || '';
 };
 
 const loadImageThroughCanvas = async (src: string): Promise<string | null> => {
