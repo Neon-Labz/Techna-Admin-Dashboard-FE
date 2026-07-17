@@ -31,6 +31,8 @@ const FEE_STRUCTURE = {
 const ADDITIONAL_FEES: { id: string; label: string; defaultAmount: number }[] = [
   { id: 'admission', label: 'Admission Fee', defaultAmount: 500 },
   { id: 'idcard',    label: 'ID Card Fee',   defaultAmount: 300 },
+   { id: 'handout', label: 'Handout Fee', defaultAmount: 0 },
+  { id: 'other', label: 'Other Fee', defaultAmount: 0 },
 ];
 
 interface ModuleRef {
@@ -479,7 +481,7 @@ function PaymentModal({
         payload: {
           studentId:   form.studentId,
           studentName: student?.name,
-          feeType:     id as 'admission' | 'idcard',
+          feeType:     id as 'admission' | 'idcard'| 'handout' | 'other',
           moduleName:  fee.label,
           amount:      Number(feeAmounts[id]) || 0,
           paidDate:    form.paidDate,
