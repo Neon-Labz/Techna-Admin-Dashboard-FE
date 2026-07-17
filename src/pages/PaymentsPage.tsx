@@ -31,6 +31,8 @@ const FEE_STRUCTURE = {
 const ADDITIONAL_FEES: { id: string; label: string; defaultAmount: number }[] = [
   { id: 'admission', label: 'Admission Fee', defaultAmount: 500 },
   { id: 'idcard',    label: 'ID Card Fee',   defaultAmount: 300 },
+   { id: 'handout', label: 'Handout Fee', defaultAmount: 0 },
+  { id: 'other', label: 'Other Fee', defaultAmount: 0 },
 ];
 
 interface ModuleRef {
@@ -508,7 +510,7 @@ function PaymentModal({
         payload: {
           studentId:   form.studentId,
           studentName: student?.name,
-          feeType:     id as 'admission' | 'idcard',
+          feeType:     id as 'admission' | 'idcard'| 'handout' | 'other',
           moduleName:  fee.label,
           amount:      Number(feeAmounts[id]) || 0,
           paidDate:    form.paidDate,
@@ -1425,22 +1427,36 @@ export default function PaymentsPage() {
   });
 
   const studentGroups = useMemo(() => {
-    const map = new Map<string, {
-      studentId: string; studentName: string;
-      batch: string;     payments: PaymentRecord[];
-    }>();
-    filtered.forEach(p => {
-      if (!map.has(p.studentId))
-        map.set(p.studentId, {
-          studentId:   p.studentId,
-          studentName: p.studentName,
-          batch:       p.batch,
-          payments:    [],
-        });
-      map.get(p.studentId)!.payments.push(p);
-    });
-    return Array.from(map.values());
-  }, [filtered]);
+  const map = new Map<
+    string,
+    {
+      studentId: string;
+      studentCode: string;
+      studentName: string;
+      batch: string;
+      payments: PaymentRecord[];
+    }
+  >();
+
+  filtered.forEach((p) => {
+    const groupKey = p.studentId;
+    const studentCode = p.studentCode || p.studentId;
+
+    if (!map.has(groupKey)) {
+      map.set(groupKey, {
+        studentId: p.studentId,
+        studentCode,
+        studentName: p.studentName,
+        batch: p.batch,
+        payments: [],
+      });
+    }
+
+    map.get(groupKey)!.payments.push(p);
+  });
+
+  return Array.from(map.values());
+}, [filtered]);
 
   const totalPaid    = filtered.filter(p => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
   const totalPending = filtered.filter(p => p.status !== 'paid').reduce((s, p) => s + p.amount, 0);
@@ -2233,17 +2249,17 @@ const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
             <tbody>
               {studentGroups.map(s => (
                 <StudentTableRow
-                  key={s.studentId}
-                  studentId={s.studentId}
-                  studentName={s.studentName}
-                  studentIdCode={s.studentId}
-                  payments={s.payments}
-                  year={trackingYear}
-                  token={token}
-                  onDownloadSlip={generatePaymentSlip}
-                  onDownloadAllSlips={generateStudentAllSlip}
-                  onEditPayment={setEditPayment}
-                />
+  key={s.studentId}
+  studentId={s.studentId}
+  studentName={s.studentName}
+  studentIdCode={s.studentCode}
+  payments={s.payments}
+  year={trackingYear}
+  token={token}
+  onDownloadSlip={generatePaymentSlip}
+  onDownloadAllSlips={generateStudentAllSlip}
+  onEditPayment={setEditPayment}
+/>
               ))}
             </tbody>
           </table>
