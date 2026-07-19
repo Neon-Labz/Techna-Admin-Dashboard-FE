@@ -149,7 +149,7 @@ export interface PaymentRecord {
   moduleName: string;
   // 'subject'   -> recurring fee tied to a real Module (has moduleId)
   // 'admission' | 'idcard' -> one-time fee, no moduleId
-  feeType?: 'subject' | 'admission' | 'idcard';
+  feeType?: 'subject' | 'admission' | 'idcard' | 'handout' | 'other';
   amount: number;
   paidDate: string;
   method: 'cash' | 'bank' | 'online';
