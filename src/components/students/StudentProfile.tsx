@@ -111,6 +111,195 @@ const ProfileSection = ({
   </section>
 );
 
+
+const imageToDataUrl = async (src: string): Promise<string | null> => {
+  if (!src) return null;
+  try {
+    const response = await fetch(src, { cache: 'no-cache' });
+    if (!response.ok) throw new Error(`Failed to load image: ${response.status}`);
+    const blob = await response.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Image conversion failed'));
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.warn('Unable to load image:', src, error);
+    return null;
+  }
+};
+
+const getImageFormat = (dataUrl: string) => {
+  if (dataUrl.startsWith('data:image/jpeg')) return 'JPEG';
+  if (dataUrl.startsWith('data:image/webp')) return 'WEBP';
+  return 'PNG';
+};
+
+
+const findStudentPhotoUrl = (student: any): string => {
+  return student?.profilePhoto || student?.avatar || '';
+};
+
+const loadImageThroughCanvas = async (src: string): Promise<string | null> => {
+  if (!src) return null;
+
+  return await new Promise((resolve) => {
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.referrerPolicy = 'no-referrer';
+
+    image.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth || image.width;
+        canvas.height = image.naturalHeight || image.height;
+
+        const context = canvas.getContext('2d');
+        if (!context) {
+          resolve(null);
+          return;
+        }
+
+        context.drawImage(image, 0, 0);
+        resolve(canvas.toDataURL('image/jpeg', 0.92));
+      } catch (error) {
+        console.warn('Canvas image conversion failed:', error);
+        resolve(null);
+      }
+    };
+
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+};
+
+const loadStudentPhotoForPdf = async (
+  photoUrl: string,
+): Promise<string | null> => {
+  if (!photoUrl) return null;
+
+  const candidates = [
+    photoUrl,
+    `/_next/image?url=${encodeURIComponent(photoUrl)}&w=640&q=90`,
+  ];
+
+  for (const candidate of candidates) {
+    const fetched = await imageToDataUrl(candidate);
+    if (fetched) return fetched;
+
+    const canvasImage = await loadImageThroughCanvas(candidate);
+    if (canvasImage) return canvasImage;
+  }
+
+  return null;
+};
+
+
+const cropLogoContent = async (dataUrl: string): Promise<string> => {
+  return await new Promise((resolve, reject) => {
+    const image = new Image();
+
+    image.onload = () => {
+      try {
+        const sourceCanvas = document.createElement('canvas');
+        sourceCanvas.width = image.naturalWidth || image.width;
+        sourceCanvas.height = image.naturalHeight || image.height;
+
+        const sourceContext = sourceCanvas.getContext('2d');
+        if (!sourceContext) {
+          resolve(dataUrl);
+          return;
+        }
+
+        sourceContext.drawImage(image, 0, 0);
+
+        const pixels = sourceContext.getImageData(
+          0,
+          0,
+          sourceCanvas.width,
+          sourceCanvas.height,
+        );
+
+        let left = sourceCanvas.width;
+        let top = sourceCanvas.height;
+        let right = 0;
+        let bottom = 0;
+        let found = false;
+
+        for (let y = 0; y < sourceCanvas.height; y += 1) {
+          for (let x = 0; x < sourceCanvas.width; x += 1) {
+            const index = (y * sourceCanvas.width + x) * 4;
+            const red = pixels.data[index];
+            const green = pixels.data[index + 1];
+            const blue = pixels.data[index + 2];
+            const alpha = pixels.data[index + 3];
+
+            const isVisibleContent =
+              alpha > 20 && (red < 235 || green < 235 || blue < 235);
+
+            if (isVisibleContent) {
+              found = true;
+              left = Math.min(left, x);
+              top = Math.min(top, y);
+              right = Math.max(right, x);
+              bottom = Math.max(bottom, y);
+            }
+          }
+        }
+
+        if (!found) {
+          resolve(dataUrl);
+          return;
+        }
+
+        const padding = Math.max(
+          4,
+          Math.round(Math.min(sourceCanvas.width, sourceCanvas.height) * 0.02),
+        );
+
+        left = Math.max(0, left - padding);
+        top = Math.max(0, top - padding);
+        right = Math.min(sourceCanvas.width - 1, right + padding);
+        bottom = Math.min(sourceCanvas.height - 1, bottom + padding);
+
+        const width = right - left + 1;
+        const height = bottom - top + 1;
+
+        const outputCanvas = document.createElement('canvas');
+        outputCanvas.width = width;
+        outputCanvas.height = height;
+
+        const outputContext = outputCanvas.getContext('2d');
+        if (!outputContext) {
+          resolve(dataUrl);
+          return;
+        }
+
+        outputContext.drawImage(
+          sourceCanvas,
+          left,
+          top,
+          width,
+          height,
+          0,
+          0,
+          width,
+          height,
+        );
+
+        resolve(outputCanvas.toDataURL('image/png'));
+      } catch (error) {
+        console.warn('Logo crop failed:', error);
+        resolve(dataUrl);
+      }
+    };
+
+    image.onerror = () => reject(new Error('Logo image could not be processed'));
+    image.src = dataUrl;
+  });
+};
+
 export default function StudentProfile({
   student,
   onClose,
@@ -263,67 +452,245 @@ export default function StudentProfile({
   };
 
   const handleDownloadPDF = async () => {
-    const toastId = toast.loading('Generating PDF...');
+    const toastId = toast.loading('Generating student ID card...');
 
     try {
+      const cardWidth = 86;
+      const cardHeight = 54;
+
       const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: 'landscape',
         unit: 'mm',
-        format: 'a5',
+        format: [cardWidth, cardHeight],
+        compress: true,
       });
 
-      const pageWidth = pdf.internal.pageSize.getWidth();
+      const rawLogoDataUrl = await imageToDataUrl('/new.png');
+      const logoDataUrl = rawLogoDataUrl
+        ? await cropLogoContent(rawLogoDataUrl)
+        : null;
+      const studentPhotoUrl = findStudentPhotoUrl(s);
+      const studentPhotoDataUrl = await loadStudentPhotoForPdf(studentPhotoUrl);
+
+      if (!studentPhotoUrl) {
+        console.warn('No student profile photo URL found in student data:', s);
+      } else if (!studentPhotoDataUrl) {
+        console.warn('Student photo found but could not be loaded for PDF:', studentPhotoUrl);
+      }
 
       const qrImage = await QRCode.toDataURL(qrData, {
-        errorCorrectionLevel: 'M',
+        errorCorrectionLevel: 'H',
         margin: 1,
-        width: 240,
+        width: 500,
+        color: {
+          dark: '#082B67',
+          light: '#FFFFFF',
+        },
       });
 
-      pdf.setFillColor(79, 70, 229);
-      pdf.rect(0, 0, pageWidth, 28, 'F');
+      const admissionNumber = String(
+        s.admissionNumber ||
+          s.studentId ||
+          s.applicationReference ||
+          'N/A',
+      );
+
+      const issuedDateValue =
+        s.approvedAt || s.enrolledAt || s.createdAt || new Date();
+
+      const issuedDateObject = new Date(issuedDateValue);
+      const issuedDate = Number.isNaN(issuedDateObject.getTime())
+        ? String(issuedDateValue)
+        : issuedDateObject.toLocaleDateString('en-GB').replaceAll('/', '.');
+
+      const nicNumber = String(s.nicNo || s.nic || 'N/A');
+
+      const subjects =
+        studentModules.length > 0
+          ? studentModules.map((module: any) => module.name).join(' • ')
+          : 'N/A';
+
+      const blue = [17, 151, 239] as const;
+      const darkBlue = [6, 48, 111] as const;
+
+      // White card base
+      pdf.setFillColor(255, 255, 255);
+      pdf.roundedRect(0.5, 0.5, cardWidth - 1, cardHeight - 1, 2.5, 2.5, 'F');
+
+      // Header
+      pdf.setFillColor(...blue);
+      pdf.rect(0.5, 0.5, cardWidth - 1, 15, 'F');
+
+      // Logo only - white rounded background removed
+      if (logoDataUrl) {
+        const logoProps = pdf.getImageProperties(logoDataUrl);
+        const logoRatio = logoProps.width / logoProps.height;
+
+        const maxLogoWidth = 31;
+        const maxLogoHeight = 9.5;
+
+        let logoWidth = maxLogoWidth;
+        let logoHeight = logoWidth / logoRatio;
+
+        if (logoHeight > maxLogoHeight) {
+          logoHeight = maxLogoHeight;
+          logoWidth = logoHeight * logoRatio;
+        }
+
+        const logoX = 4;
+        const logoY = 1.7;
+
+        pdf.addImage(
+          logoDataUrl,
+          'PNG',
+          logoX,
+          logoY,
+          logoWidth,
+          logoHeight,
+          undefined,
+          'FAST',
+        );
+      } else {
+        pdf.setTextColor(...darkBlue);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8);
+        pdf.text('TECHNA', 16.75, 7.6, { align: 'center' });
+      }
 
       pdf.setTextColor(255, 255, 255);
       pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(16);
-      pdf.text('Student ID Card', pageWidth / 2, 12, { align: 'center' });
+      pdf.setFontSize(5.6);
+      pdf.text('A/L TECHNOLOGY STREAM', 4, 13.4);
 
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text('Techna - School Management System', pageWidth / 2, 20, {
-        align: 'center',
+      // QR box
+      pdf.setFillColor(255, 255, 255);
+      pdf.setDrawColor(...darkBlue);
+      pdf.setLineWidth(0.25);
+      pdf.roundedRect(72, 2, 10.5, 10.5, 0.8, 0.8, 'FD');
+      pdf.addImage(qrImage, 'PNG', 72.8, 2.8, 8.9, 8.9, undefined, 'FAST');
+
+      // Student photo box
+      const photoX = 5;
+      const photoY = 18.5;
+      const photoWidth = 20;
+      const photoHeight = 24;
+
+      pdf.setFillColor(255, 255, 255);
+      pdf.setDrawColor(...darkBlue);
+      pdf.setLineWidth(0.35);
+      pdf.roundedRect(
+        photoX,
+        photoY,
+        photoWidth,
+        photoHeight,
+        1.3,
+        1.3,
+        'FD',
+      );
+
+      if (studentPhotoDataUrl) {
+        pdf.addImage(
+          studentPhotoDataUrl,
+          getImageFormat(studentPhotoDataUrl),
+          photoX + 0.7,
+          photoY + 0.7,
+          photoWidth - 1.4,
+          photoHeight - 1.4,
+          undefined,
+          'FAST',
+        );
+      }
+
+      // Name
+      const detailsX = 30.5;
+      const name = studentName.toUpperCase();
+
+      pdf.setTextColor(...darkBlue);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8.2);
+
+      let nameSize = 8.2;
+      while (pdf.getTextWidth(name) > 49 && nameSize > 5.8) {
+        nameSize -= 0.25;
+        pdf.setFontSize(nameSize);
+      }
+
+      pdf.text(name, detailsX, 20.8);
+
+      pdf.setDrawColor(...blue);
+      pdf.setLineWidth(0.35);
+      pdf.line(detailsX, 22.4, 80.8, 22.4);
+
+      const labelX = detailsX;
+      const colonX = 48.5;
+      const valueX = 52.5;
+
+      const drawRow = (
+        label: string,
+        value: string,
+        y: number,
+        maxWidth = 28,
+      ) => {
+        pdf.setTextColor(...darkBlue);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(5.4);
+        pdf.text(label, labelX, y);
+        pdf.text(':', colonX, y);
+
+        let valueSize = 5.4;
+        pdf.setFontSize(valueSize);
+
+        while (pdf.getTextWidth(value) > maxWidth && valueSize > 4.2) {
+          valueSize -= 0.2;
+          pdf.setFontSize(valueSize);
+        }
+
+        pdf.text(value, valueX, y);
+      };
+
+      drawRow('Admission No.', admissionNumber, 26.8);
+      drawRow('Batch', String(s.batch || 'N/A'), 31);
+      drawRow('Issued', issuedDate, 35.2);
+      drawRow('NIC', nicNumber, 39.4);
+
+      pdf.setTextColor(...darkBlue);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(5.4);
+      pdf.text('Subjects', labelX, 43.6);
+      pdf.text(':', colonX, 43.6);
+
+      pdf.setFontSize(4.8);
+      const subjectLines = pdf.splitTextToSize(subjects, 28.5);
+      pdf.text(subjectLines.slice(0, 2), valueX, 43.6);
+
+      // Footer
+      pdf.setFillColor(...blue);
+      pdf.rect(0.5, 47.5, cardWidth - 1, 6, 'F');
+
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(6.3);
+      pdf.text('www.techna.lk', 4.5, 51.4);
+
+      pdf.setFontSize(6);
+      pdf.text('TECHNA STUDENT ID', 80.5, 51.4, {
+        align: 'right',
       });
 
-      pdf.setTextColor(31, 41, 55);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(13);
-      pdf.text(studentName, 14, 42);
+      const safeStudentId = admissionNumber
+        .replace(/[^\w-]/g, '-')
+        .replace(/-+/g, '-');
 
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9);
-      pdf.text(`Student ID: ${formatStudentId(s.studentId)}`, 14, 50);
-      pdf.text(`Batch: ${getValue(s.batch)}`, 14, 56);
-      pdf.text(`Phone: ${getValue(s.phone || s.whatsappNo)}`, 14, 68);
-      pdf.text(`Email: ${getValue(s.email)}`, 14, 74);
-      pdf.text(`Status: ${getValue(s.status).toUpperCase()}`, 14, 80);
+      pdf.save(`${safeStudentId}-techna-student-id.pdf`);
 
-      const modulesText = `Modules: ${
-        studentModules.map((m: any) => m.name).join(', ') || 'N/A'
-      }`;
-
-const moduleLines = pdf.splitTextToSize(modulesText, pageWidth - 90);
-
-      pdf.text(moduleLines, 14, 86);
-
-      pdf.addImage(qrImage, 'PNG', pageWidth - 50, 38, 32, 32);
-
-      pdf.save(
-        `${isPendingStudentId(s.studentId) ? 'pending' : s.studentId}-card.pdf`,
-      );
-      toast.success('PDF downloaded!', { id: toastId });
+      toast.success('Student ID card downloaded!', {
+        id: toastId,
+      });
     } catch (error) {
-      console.error(error);
-      toast.error('QR Download Failed', { id: toastId });
+      console.error('QR card generation failed:', error);
+      toast.error('QR Card Download Failed', {
+        id: toastId,
+      });
     }
   };
 
