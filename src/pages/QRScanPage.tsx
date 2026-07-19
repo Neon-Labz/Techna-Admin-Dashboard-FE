@@ -8,7 +8,7 @@ import jsQR from 'jsqr';
 import StudentScanPopup from '../components/students/StudentScanPopup';
 
 export default function QRScanPage() {
-  const { students } = useDataStore();
+  const { students, fetchStudents } = useDataStore();
   const [query, setQuery] = useState('');
   const [scannedStudent, setScannedStudent] = useState<Student | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
@@ -20,6 +20,7 @@ export default function QRScanPage() {
   const studentsRef = useRef(students);
   const pausedRef = useRef(false);
   useEffect(() => { studentsRef.current = students; }, [students]);
+  useEffect(() => { fetchStudents(); }, []);
 
   const openStudent = (s: Student) => {
     pausedRef.current = true;
