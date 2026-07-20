@@ -5,8 +5,6 @@ import { setAuthToken } from '../api/axiosClient';
 import { authApi } from '../api';
 import type { User } from '../types';
 
-// "Remember me" checked → localStorage (survives browser restart).
-// Unchecked → sessionStorage (survives page refresh, cleared when the tab closes).
 const dualStorage: StateStorage = {
   getItem: (name) => {
     if (typeof window === 'undefined') return null;
@@ -18,7 +16,6 @@ const dualStorage: StateStorage = {
     try {
       remember = Boolean(JSON.parse(value)?.state?.rememberSession);
     } catch {
-      // fall through with remember = false
     }
     if (remember) {
       localStorage.setItem(name, value);
@@ -129,7 +126,6 @@ export const useAuthStore = create<AuthStore>()(
           try {
             await authApi.logout();
           } catch {
-            // Proceed with local logout even if API call fails
           }
         }
 

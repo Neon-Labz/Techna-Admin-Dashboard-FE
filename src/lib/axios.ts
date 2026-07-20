@@ -18,7 +18,6 @@ api.interceptors.request.use(
           }
         }
       } catch {
-        // Ignore malformed auth data
       }
     }
     return config;
@@ -26,9 +25,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
-// Unwrap the NestJS global response envelope:
-//   HTTP body: { success, message, data: <controller_return>, timestamp, path }
-// After this interceptor, api.get/post/patch calls resolve with <controller_return> directly.
 api.interceptors.response.use(
   (response) => response.data?.data ?? response.data,
   (error) => Promise.reject(error),
