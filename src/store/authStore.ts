@@ -1,9 +1,39 @@
 import { jwtDecode } from 'jwt-decode';
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { setAuthToken } from '../api/axiosClient';
 import { authApi } from '../api';
 import type { User } from '../types';
+
+// "Remember me" checked → localStorage (survives browser restart).
+// Unchecked → sessionStorage (survives page refresh, cleared when the tab closes).
+const dualStorage: StateStorage = {
+  getItem: (name) => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(name) ?? sessionStorage.getItem(name);
+  },
+  setItem: (name, value) => {
+    if (typeof window === 'undefined') return;
+    let remember = false;
+    try {
+      remember = Boolean(JSON.parse(value)?.state?.rememberSession);
+    } catch {
+      // fall through with remember = false
+    }
+    if (remember) {
+      localStorage.setItem(name, value);
+      sessionStorage.removeItem(name);
+    } else {
+      sessionStorage.setItem(name, value);
+      localStorage.removeItem(name);
+    }
+  },
+  removeItem: (name) => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(name);
+    sessionStorage.removeItem(name);
+  },
+};
 
 interface JwtPayload {
   sub: string;
@@ -198,35 +228,13 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: 'edu-auth',
+      storage: createJSONStorage(() => dualStorage),
       partialize: (state) => ({
         user: state.user,
         token: state.token,
         isAuthenticated: state.isAuthenticated,
         rememberSession: state.rememberSession,
       }),
-      merge: (persistedState, currentState) => {
-        const persisted = persistedState as Partial<AuthStore> | undefined;
-
-        if (persisted && !persisted.rememberSession) {
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('techna-auth');
-            localStorage.removeItem('edu-auth');
-          }
-
-          return {
-            ...currentState,
-            user: null,
-            token: null,
-            isAuthenticated: false,
-            rememberSession: false,
-          };
-        }
-
-        return {
-          ...currentState,
-          ...persisted,
-        };
-      },
       onRehydrateStorage: () => (state) => {
         setAuthToken(state?.token || null);
         state?.setHasHydrated(true);

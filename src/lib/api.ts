@@ -175,7 +175,8 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (typeof window !== 'undefined') {
     // Read token from the Zustand persisted auth store ('edu-auth' key)
     try {
-      const stored = localStorage.getItem('edu-auth');
+      const stored =
+        localStorage.getItem('edu-auth') || sessionStorage.getItem('edu-auth');
       if (stored) {
         const parsed = JSON.parse(stored);
         const token = parsed?.state?.token;
@@ -211,6 +212,7 @@ api.interceptors.response.use(
       typeof window !== 'undefined'
     ) {
       localStorage.removeItem('edu-auth');
+      sessionStorage.removeItem('edu-auth');
       window.location.href = '/login';
     }
     return Promise.reject(error);

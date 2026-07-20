@@ -28,7 +28,9 @@ export function getStoredToken(): string | null {
 
   try {
     const stored =
-      localStorage.getItem('techna-auth') || localStorage.getItem('edu-auth');
+      localStorage.getItem('techna-auth') ||
+      localStorage.getItem('edu-auth') ||
+      sessionStorage.getItem('edu-auth');
 
     if (!stored) return null;
 
@@ -74,6 +76,7 @@ export async function apiClient<T = unknown>(
       setAuthToken(null);
       localStorage.removeItem('techna-auth');
       localStorage.removeItem('edu-auth');
+      sessionStorage.removeItem('edu-auth');
       window.location.href = '/login';
     }
 

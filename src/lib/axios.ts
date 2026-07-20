@@ -8,7 +8,8 @@ api.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
       try {
-        const authData = localStorage.getItem('edu-auth');
+        const authData =
+          localStorage.getItem('edu-auth') || sessionStorage.getItem('edu-auth');
         if (authData) {
           const parsed = JSON.parse(authData);
           const token = parsed?.state?.token;
