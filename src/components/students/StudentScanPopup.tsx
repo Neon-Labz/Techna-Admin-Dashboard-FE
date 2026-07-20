@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect,useRef  } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Student, PaymentRecord } from "../../types";
 import { useDataStore } from "../../store/dataStore";
@@ -58,8 +58,14 @@ export default function StudentScanPopup({
   const { modules } = useDataStore();
   const today = new Date().toISOString().split("T")[0];
 
-  const normalizeForMatch = (s: string) =>
-    s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const normalizeForMatch = (value: string = "") =>
+  value
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/\band\b/g, "")
+    .replace(/technology/g, "technology")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
 
   const studentModules = (() => {
     const s = student as any;
@@ -109,10 +115,74 @@ export default function StudentScanPopup({
     localAttendance.find((a: any) => a.moduleId === moduleId && (a.date === today || String(a.date).startsWith(today)))
       ?.status ?? null;
 
-  const getLatestPayment = (moduleId: string) =>
-    [...localPayments]
-      .filter((p: any) => p.moduleId === moduleId)
-      .sort((a: any, b: any) => b.paidDate.localeCompare(a.paidDate))[0];
+  const getLatestPayment = (moduleId: string, moduleName: string) => {
+  const normalizedModuleName = normalizeForMatch(moduleName);
+
+  return [...localPayments]
+    .filter((payment: any) => {
+      const paymentModuleName = normalizeForMatch(
+        payment.moduleName || payment.subjectName || "",
+      );
+
+      return (
+        payment.moduleId === moduleId ||
+        payment.module === moduleId ||
+        paymentModuleName === normalizedModuleName ||
+        paymentModuleName.includes(normalizedModuleName) ||
+        normalizedModuleName.includes(paymentModuleName)
+      );
+    })
+    .sort((a: any, b: any) => {
+      const dateA = new Date(a.paidDate || a.date || a.createdAt).getTime();
+      const dateB = new Date(b.paidDate || b.date || b.createdAt).getTime();
+
+      return dateB - dateA;
+    })[0];
+};
+const isModulePaidForMonth = (
+  moduleId: string,
+  moduleName: string,
+  selectedDate: string,
+) => {
+  if (!selectedDate) return false;
+
+  const selected = new Date(`${selectedDate}T00:00:00`);
+  const selectedMonth = selected.getMonth();
+  const selectedYear = selected.getFullYear();
+  const normalizedModuleName = normalizeForMatch(moduleName);
+
+  return localPayments.some((payment: any) => {
+    if (payment.status?.toLowerCase() !== "paid") {
+      return false;
+    }
+
+    const paymentDateValue =
+      payment.paidDate || payment.date || payment.createdAt;
+
+    if (!paymentDateValue) return false;
+
+    const paymentDate = new Date(paymentDateValue);
+
+    if (Number.isNaN(paymentDate.getTime())) {
+      return false;
+    }
+
+    const paymentModuleName = normalizeForMatch(
+      payment.moduleName || payment.subjectName || "",
+    );
+
+    const sameModule =
+      payment.moduleId === moduleId ||
+      payment.module === moduleId ||
+      paymentModuleName === normalizedModuleName;
+
+    const sameMonth =
+      paymentDate.getMonth() === selectedMonth &&
+      paymentDate.getFullYear() === selectedYear;
+
+    return sameModule && sameMonth;
+  });
+};
 
   const pendingPayments = localPayments.filter((p: any) => p.status !== "paid");
 
@@ -122,9 +192,7 @@ export default function StudentScanPopup({
   };
 
   const openEdit = (p: PaymentRecord) => {
-    // p.moduleId can be undefined for one-time fees (Admission Fee / ID Card
-    // Fee) that carry a feeType instead of a real module — fall back to ''
-    // so it still satisfies PayForm's required `string` moduleId.
+    
     setPayForm({
       moduleId: p.moduleId ?? "",
       amount: String(p.amount),
@@ -135,11 +203,37 @@ export default function StudentScanPopup({
     setPayModal({ mode: "edit", payment: p });
   };
 
-  const handlePaySubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const mod = modules.find((m) => m.id === payForm.moduleId);
-    if (!mod) return;
+const [isSaving, setIsSaving] = useState(false);
+const submitLockRef = useRef(false);
 
+const handlePaySubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (isSaving) return;
+
+  const mod = studentModules.find(
+    (m) => m.id === payForm.moduleId
+  );
+
+  if (!mod) {
+    toast.error("Please select a valid module");
+    return;
+  }
+
+  const alreadyPaid = isModulePaidForMonth(
+    mod.id,
+    mod.name,
+    payForm.paidDate,
+  );
+
+  if (alreadyPaid && payModal?.mode !== "edit") {
+    toast.error("This module is already paid for this month.");
+    return;
+  }
+
+  setIsSaving(true);
+
+  try {
     if (payModal?.mode === "edit" && payModal.payment) {
       onPaymentUpdate(payModal.payment.id, {
         moduleId: payForm.moduleId,
@@ -149,22 +243,12 @@ export default function StudentScanPopup({
         paidDate: payForm.paidDate,
         status: payForm.status,
       });
+
       toast.success("Payment updated!");
     } else {
-      onPaymentAdd({
-        studentId: student.id,
-        studentName: student.name,
-        moduleId: payForm.moduleId,
-        moduleName: mod.name,
-        amount: Number(payForm.amount),
-        paidDate: payForm.paidDate,
-        method: payForm.method,
-        status: payForm.status,
-        receiptNo: `REC-${Date.now()}`,
-        batch: student.batch,
-      });
-      // also save to API and update local state
-      paymentApi.create({
+      const receiptNo = `REC-${Date.now()}`;
+
+      const saved = await paymentApi.create({
         studentId: student.studentId || student.id,
         studentName: student.name,
         moduleId: payForm.moduleId,
@@ -173,14 +257,32 @@ export default function StudentScanPopup({
         paidDate: payForm.paidDate,
         method: payForm.method,
         status: payForm.status,
-        receiptNo: `REC-${Date.now()}`,
+        receiptNo,
         batch: student.batch,
-      }).then(saved => setLocalPayments(prev => [...prev, saved])).catch(() => {});
+      });
+
+      setLocalPayments((prev) => {
+        const savedId = saved.id ;
+
+        const alreadyExists = prev.some(
+          (payment: any) =>
+            (payment.id || payment._id) === savedId
+        );
+
+        return alreadyExists ? prev : [...prev, saved];
+      });
+
       toast.success("Payment recorded!");
     }
-    setPayModal(null);
-  };
 
+    setPayModal(null);
+  } catch (error) {
+    console.error("Payment save failed:", error);
+    toast.error("Payment save failed");
+  } finally {
+    setIsSaving(false);
+  }
+};
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
@@ -329,7 +431,7 @@ export default function StudentScanPopup({
             {/* Per-module payment status */}
             <div className="space-y-2 mb-4">
               {studentModules.map((m) => {
-                const latest = getLatestPayment(m.id);
+                const latest = getLatestPayment(m.id, m.name);
                 return (
                   <div
                     key={m.id}
@@ -339,9 +441,7 @@ export default function StudentScanPopup({
                       <p className="text-sm font-medium text-gray-800">
                         {m.name}
                       </p>
-                      <p className="text-xs text-gray-400">
-                        Fee: LKR {m.fee.toLocaleString()}
-                      </p>
+                      
                     </div>
                     {latest ? (
                       <div className="flex items-center gap-2">
@@ -355,12 +455,7 @@ export default function StudentScanPopup({
                             {latest.status.toUpperCase()} · {latest.method}
                           </p>
                         </div>
-                        <button
-                          onClick={() => openEdit(latest)}
-                          className="p-1.5 rounded-lg bg-white border border-gray-200 hover:bg-gray-50"
-                        >
-                          <Edit2 className="w-3 h-3 text-gray-500" />
-                        </button>
+                        
                       </div>
                     ) : (
                       <span className="text-xs text-amber-600 font-medium flex items-center gap-1">
@@ -369,6 +464,7 @@ export default function StudentScanPopup({
                     )}
                   </div>
                 );
+
               })}
             </div>
 
@@ -442,11 +538,24 @@ export default function StudentScanPopup({
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                 >
                   <option value="">Select module…</option>
-                  {studentModules.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} — LKR {m.fee.toLocaleString()}
-                    </option>
-                  ))}
+                  {studentModules.map((m) => {
+                    const alreadyPaid = isModulePaidForMonth(
+                      m.id,
+                      m.name,
+                      payForm.paidDate,
+                    );
+
+                    return (
+                      <option
+                        key={m.id}
+                        value={m.id}
+                        disabled={alreadyPaid}
+                      >
+                        {m.name} — LKR {m.fee.toLocaleString()}
+                        {alreadyPaid ? " (Already Paid)" : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <div>
@@ -525,11 +634,16 @@ export default function StudentScanPopup({
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700"
-                >
-                  {payModal.mode === "edit" ? "Update" : "Record"} Payment
-                </button>
+  type="submit"
+  disabled={isSaving}
+  className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+>
+  {isSaving
+    ? "Saving..."
+    : payModal.mode === "edit"
+      ? "Update Payment"
+      : "Record Payment"}
+</button>
               </div>
             </form>
           </div>
