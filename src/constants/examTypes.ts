@@ -18,6 +18,12 @@ export const EXAM_TYPES = [
       "Assessments used to evaluate the student's practical skills and hands-on knowledge.",
   },
   {
+    value: 'Pilot Examinations',
+    label: 'PILOT EXAMINATIONS',
+    description:
+      'Trial assessments conducted before formal examinations to evaluate readiness and identify areas for improvement.',
+  },
+  {
     value: 'Mid Examinations',
     label: 'MID EXAMINATIONS',
     description:
