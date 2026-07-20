@@ -210,8 +210,10 @@ export default function QRScanPage() {
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Quick Access</p>
         <div className="space-y-2">
-          {students.slice(0, 6).map(s => (
-            <button key={s.id} onClick={() => openStudent(s)}
+        {students
+          .filter((s) => s.status?.toLowerCase() === 'approved')          .slice(0, 6)
+          .map((s) => (     
+                   <button key={s.id} onClick={() => openStudent(s)}
               className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-indigo-50 transition-colors text-left">
               <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                 {s.name.charAt(0)}

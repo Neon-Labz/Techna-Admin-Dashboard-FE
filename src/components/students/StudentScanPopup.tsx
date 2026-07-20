@@ -22,7 +22,30 @@ const emptyForm: PayForm = { moduleId: '', amount: '', method: 'cash', paidDate:
 export default function StudentScanPopup({ student, onClose, onPaymentAdd, onPaymentUpdate, onAttendanceUpdate }: Props) {
   const { modules } = useDataStore();
   const today = new Date().toISOString().split('T')[0];
-  const studentModules = modules.filter(m => student.modules.includes(m.id));
+
+  const getModuleId = (module: any) =>
+  String(module?.id ?? module?._id ?? '');
+
+const studentModuleIds = (student.modules ?? [])
+  .map((item: any) => {
+    if (typeof item === 'string') {
+      return String(item);
+    }
+
+    return String(
+      item?.id ??
+      item?._id ??
+      item?.moduleId ??
+      '',
+    );
+  })
+  .filter(Boolean);
+
+const studentModules = modules.filter((module: any) => {
+  const moduleId = getModuleId(module);
+
+  return studentModuleIds.includes(moduleId);
+});
 
   const [payModal, setPayModal] = useState<{ mode: 'add' | 'edit'; payment?: PaymentRecord } | null>(null);
   const [payForm, setPayForm] = useState<PayForm>(emptyForm);
@@ -38,51 +61,56 @@ export default function StudentScanPopup({ student, onClose, onPaymentAdd, onPay
   const pendingPayments = student.payments.filter(p => p.status !== 'paid');
 
   const openAdd = () => {
-    setPayForm(emptyForm);
-    setPayModal({ mode: 'add' });
-  };
+  if (studentModules.length === 0) {
+    toast.error('Student module details not found');
+    return;
+  }
 
-  const openEdit = (p: PaymentRecord) => {
-    // p.moduleId can be undefined for one-time fees (Admission Fee / ID Card
-    // Fee) that carry a feeType instead of a real module — fall back to ''
-    // so it still satisfies PayForm's required `string` moduleId.
-    setPayForm({ moduleId: p.moduleId ?? '', amount: String(p.amount), method: p.method, paidDate: p.paidDate, status: p.status });
-    setPayModal({ mode: 'edit', payment: p });
-  };
+  const firstModule = studentModules[0];
 
-  const handlePaySubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const mod = modules.find(m => m.id === payForm.moduleId);
-    if (!mod) return;
+  setPayForm({
+    ...emptyForm,
+    moduleId: getModuleId(firstModule),
+    amount: String(Number(firstModule.fee ?? 0)),
+  });
 
-    if (payModal?.mode === 'edit' && payModal.payment) {
-      onPaymentUpdate(payModal.payment.id, {
-        moduleId: payForm.moduleId,
-        moduleName: mod.name,
-        amount: Number(payForm.amount),
-        method: payForm.method,
-        paidDate: payForm.paidDate,
-        status: payForm.status,
-      });
-      toast.success('Payment updated!');
-    } else {
-      onPaymentAdd({
-        studentId: student.id,
-        studentName: student.name,
-        moduleId: payForm.moduleId,
-        moduleName: mod.name,
-        amount: Number(payForm.amount),
-        paidDate: payForm.paidDate,
-        method: payForm.method,
-        status: payForm.status,
-        receiptNo: `REC-${Date.now()}`,
-        batch: student.batch,
-      });
-      toast.success('Payment recorded!');
-    }
-    setPayModal(null);
-  };
+  setPayModal({ mode: 'add' });
+};
 
+const openEdit = (p: PaymentRecord) => {
+  setPayForm({
+    moduleId: p.moduleId ?? '',
+    amount: String(p.amount),
+    method: p.method,
+    paidDate: p.paidDate,
+    status: p.status,
+  });
+
+  setPayModal({
+    mode: 'edit',
+    payment: p,
+  });
+};
+
+const handleModuleChange = (
+  e: React.ChangeEvent<HTMLSelectElement>,
+) => {
+  const moduleId = e.target.value;
+
+  const selectedModule = studentModules.find(
+    (module: any) =>
+      getModuleId(module) === moduleId,
+  );
+
+  setPayForm((current) => ({
+    ...current,
+    moduleId,
+    amount: selectedModule
+      ? String(Number(selectedModule.fee ?? 0))
+      : '',
+  }));
+};
+  
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -136,21 +164,23 @@ export default function StudentScanPopup({ student, onClose, onPaymentAdd, onPay
             ) : (
               <div className="space-y-2">
                 {studentModules.map(m => {
-                  const status = getAttStatus(m.id);
+              const moduleId = getModuleId(m);
+              const status = getAttStatus(moduleId);
+
                   return (
-                    <div key={m.id} className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-gray-100">
+                    <div key={moduleId} className="flex items-center justify-between bg-white rounded-xl px-4 py-3 border border-gray-100">
                       <div>
                         <p className="text-sm font-medium text-gray-800">{m.name}</p>
                         <p className="text-xs text-gray-400">{m.teacherName}</p>
                       </div>
                       <div className="flex gap-2">
                         <button
-                          onClick={() => { onAttendanceUpdate(m.id, today, 'present'); toast.success(`${m.name}: Present`); }}
+                          onClick={() => { onAttendanceUpdate(moduleId, today, 'present'); toast.success(`${m.name}: Present`); }}
                           className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${status === 'present' ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-emerald-100 hover:text-emerald-700'}`}>
                           <CheckCircle className="w-3.5 h-3.5" /> Present
                         </button>
                         <button
-                          onClick={() => { onAttendanceUpdate(m.id, today, 'absent'); toast.success(`${m.name}: Absent`); }}
+                          onClick={() => { onAttendanceUpdate(moduleId, today, 'absent'); toast.success(`${m.name}: Absent`); }}
                           className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${status === 'absent' ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-red-100 hover:text-red-600'}`}>
                           <XCircle className="w-3.5 h-3.5" /> Absent
                         </button>
@@ -182,10 +212,12 @@ export default function StudentScanPopup({ student, onClose, onPaymentAdd, onPay
 
             {/* Per-module payment status */}
             <div className="space-y-2 mb-4">
-              {studentModules.map(m => {
-                const latest = getLatestPayment(m.id);
+              {studentModules.map((m: any) => {
+            const moduleId = getModuleId(m);
+            const latest = getLatestPayment(moduleId);
+
                 return (
-                  <div key={m.id} className={`flex items-center justify-between px-4 py-3 rounded-xl border ${latest?.status === 'paid' ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
+                  <div key={moduleId} className={`flex items-center justify-between px-4 py-3 rounded-xl border ${latest?.status === 'paid' ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
                     <div>
                       <p className="text-sm font-medium text-gray-800">{m.name}</p>
                       <p className="text-xs text-gray-400">Fee: LKR {m.fee.toLocaleString()}</p>
@@ -193,8 +225,8 @@ export default function StudentScanPopup({ student, onClose, onPaymentAdd, onPay
                     {latest ? (
                       <div className="flex items-center gap-2">
                         <div className="text-right">
-                          <p className={`text-xs font-semibold ${latest.status === 'paid' ? 'text-emerald-600' : 'text-amber-600'}`}>
-                            LKR {latest.amount.toLocaleString()}
+                          <p className="text-xs text-gray-400">
+                            Fee: LKR {Number(m.fee ?? 0).toLocaleString()}
                           </p>
                           <p className="text-xs text-gray-400 capitalize">{latest.status.toUpperCase()} · {latest.method}</p>
                         </div>
@@ -250,11 +282,25 @@ export default function StudentScanPopup({ student, onClose, onPaymentAdd, onPay
             <form onSubmit={handlePaySubmit} className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Module</label>
-                <select required value={payForm.moduleId} onChange={e => setPayForm(f => ({ ...f, moduleId: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
-                  <option value="">Select module…</option>
-                  {studentModules.map(m => <option key={m.id} value={m.id}>{m.name} — LKR {m.fee.toLocaleString()}</option>)}
-                </select>
+                <select
+  required
+  value={payForm.moduleId}
+  onChange={handleModuleChange}
+  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+>
+  <option value="">Select module…</option>
+
+  {studentModules.map((module: any) => {
+    const moduleId = getModuleId(module);
+    const fee = Number(module.fee ?? 0);
+
+    return (
+      <option key={moduleId} value={moduleId}>
+        {module.name} — LKR {fee.toLocaleString()}
+      </option>
+    );
+  })}
+</select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Amount (LKR)</label>
