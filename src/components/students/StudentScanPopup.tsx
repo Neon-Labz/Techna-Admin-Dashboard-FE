@@ -192,9 +192,7 @@ const isModulePaidForMonth = (
   };
 
   const openEdit = (p: PaymentRecord) => {
-    // p.moduleId can be undefined for one-time fees (Admission Fee / ID Card
-    // Fee) that carry a feeType instead of a real module — fall back to ''
-    // so it still satisfies PayForm's required `string` moduleId.
+    
     setPayForm({
       moduleId: p.moduleId ?? "",
       amount: String(p.amount),
@@ -250,7 +248,6 @@ const handlePaySubmit = async (e: React.FormEvent) => {
     } else {
       const receiptNo = `REC-${Date.now()}`;
 
-      // Backend API ஒரே ஒரு தடவை மட்டும் call ஆகும்
       const saved = await paymentApi.create({
         studentId: student.studentId || student.id,
         studentName: student.name,
