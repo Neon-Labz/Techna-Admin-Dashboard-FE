@@ -8,7 +8,7 @@ import jsQR from 'jsqr';
 import StudentScanPopup from '../components/students/StudentScanPopup';
 
 export default function QRScanPage() {
-  const { students } = useDataStore();
+  const { students, fetchStudents } = useDataStore();
   const [query, setQuery] = useState('');
   const [scannedStudent, setScannedStudent] = useState<Student | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
@@ -18,9 +18,19 @@ export default function QRScanPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number>(0);
   const studentsRef = useRef(students);
+  const pausedRef = useRef(false);
   useEffect(() => { studentsRef.current = students; }, [students]);
+  useEffect(() => { fetchStudents(); }, []);
 
-  const openStudent = (s: Student) => setScannedStudent(s);
+  const openStudent = (s: Student) => {
+    pausedRef.current = true;
+    setScannedStudent(s);
+  };
+
+  const closeStudent = () => {
+    setScannedStudent(null);
+    pausedRef.current = false;
+  };
 
   // Camera scanning loop
   useEffect(() => {
@@ -59,7 +69,7 @@ export default function QRScanPage() {
         rafRef.current = requestAnimationFrame(scan);
         return;
       }
-      if (timestamp - lastScan < SCAN_INTERVAL) {
+      if (timestamp - lastScan < SCAN_INTERVAL || pausedRef.current) {
         rafRef.current = requestAnimationFrame(scan);
         return;
       }
@@ -82,15 +92,15 @@ export default function QRScanPage() {
             (parsed.studentId && s.studentId === parsed.studentId)
           );
           if (found) {
-            stopLocal();
             openStudent(found);
+            rafRef.current = requestAnimationFrame(scan);
             return;
           }
         } catch {
           // plain text studentId fallback
           const plain = code.data.trim();
           const found = studentsRef.current.find(s => s.studentId === plain);
-          if (found) { stopLocal(); openStudent(found); return; }
+          if (found) { openStudent(found); rafRef.current = requestAnimationFrame(scan); return; }
         }
       }
       rafRef.current = requestAnimationFrame(scan);
@@ -231,7 +241,7 @@ export default function QRScanPage() {
       {currentStudent && (
         <StudentScanPopup
           student={currentStudent}
-          onClose={() => setScannedStudent(null)}
+          onClose={closeStudent}
           onPaymentAdd={handlePaymentAdd}
           onPaymentUpdate={handlePaymentUpdate}
           onAttendanceUpdate={handleAttendanceUpdate}
