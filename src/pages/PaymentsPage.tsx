@@ -1427,36 +1427,47 @@ export default function PaymentsPage() {
   });
 
   const studentGroups = useMemo(() => {
-  const map = new Map<
-    string,
-    {
-      studentId: string;
-      studentCode: string;
-      studentName: string;
-      batch: string;
-      payments: PaymentRecord[];
-    }
-  >();
+    const map = new Map<
+      string,
+      {
+        studentId: string;
+        studentCode: string;
+        studentName: string;
+        batch: string;
+        payments: PaymentRecord[];
+      }
+    >();
 
-  filtered.forEach((p) => {
-    const groupKey = p.studentId;
-    const studentCode = p.studentCode || p.studentId;
+    const studentByIdentifier = new Map<string, (typeof students)[number]>();
+    students.forEach((student) => {
+      studentByIdentifier.set(student.id.trim().toLowerCase(), student);
+      studentByIdentifier.set(student.studentId.trim().toLowerCase(), student);
+    });
 
-    if (!map.has(groupKey)) {
-      map.set(groupKey, {
-        studentId: p.studentId,
-        studentCode,
-        studentName: p.studentName,
-        batch: p.batch,
-        payments: [],
-      });
-    }
+    filtered.forEach((p) => {
+      const paymentStudentId = p.studentId.trim().toLowerCase();
+      const paymentStudentCode = p.studentCode?.trim().toLowerCase();
+      const student =
+        studentByIdentifier.get(paymentStudentId) ??
+        (paymentStudentCode ? studentByIdentifier.get(paymentStudentCode) : undefined);
+      const studentCode = student?.studentId || p.studentCode || p.studentId;
+      const groupKey = studentCode.trim().toLowerCase();
 
-    map.get(groupKey)!.payments.push(p);
-  });
+      if (!map.has(groupKey)) {
+        map.set(groupKey, {
+          studentId: student?.id || p.studentId,
+          studentCode,
+          studentName: student?.name || p.studentName,
+          batch: student?.batch || p.batch,
+          payments: [],
+        });
+      }
 
-  return Array.from(map.values());
-}, [filtered]);
+      map.get(groupKey)!.payments.push(p);
+    });
+
+    return Array.from(map.values());
+  }, [filtered, students]);
 
   const totalPaid    = filtered.filter(p => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
   const totalPending = filtered.filter(p => p.status !== 'paid').reduce((s, p) => s + p.amount, 0);

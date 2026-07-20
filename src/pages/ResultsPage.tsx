@@ -14,6 +14,12 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { resultsApi } from '@/api/results.api';
+import {
+  DEFAULT_EXAM_TYPE,
+  EXAM_TYPE_OPTIONS,
+  ExamType,
+  getExamTypeDescription,
+} from '@/constants/examTypes';
 import { formatStudentId } from '@/utils/studentId';
 import Modal from '@/components/ui/Modal';
 
@@ -28,7 +34,8 @@ type Student = {
 
 type ResultRow = {
   moduleName: string;
-  examType: 'Mid exam' | 'Final exam';
+  examType: ExamType;
+  examTypeDescription?: string | null;
   marks: number;
   grade?: 'A' | 'B' | 'C' | 'F';
 };
@@ -45,13 +52,13 @@ type ResultItem = {
 
 type FormRow = {
   moduleName: string;
-  examType: 'Mid exam' | 'Final exam';
+  examType: ExamType;
   marks: string;
 };
 
 const emptyRow: FormRow = {
   moduleName: '',
-  examType: 'Mid exam',
+  examType: DEFAULT_EXAM_TYPE,
   marks: '',
 };
 
@@ -323,7 +330,7 @@ export default function ResultsPage() {
       setRows([
         {
           moduleName: data.modules?.[0] || '',
-          examType: 'Mid exam',
+          examType: DEFAULT_EXAM_TYPE,
           marks: '',
         },
       ]);
@@ -339,7 +346,7 @@ export default function ResultsPage() {
       ...prev,
       {
         moduleName: selectedStudent?.modules?.[0] || '',
-        examType: 'Mid exam',
+        examType: DEFAULT_EXAM_TYPE,
         marks: '',
       },
     ]);
@@ -593,15 +600,17 @@ export default function ResultsPage() {
                           updateRow(
                             index,
                             'examType',
-                            nextValue as 'Mid exam' | 'Final exam',
+                            nextValue as ExamType,
                           )
                         }
                         className="w-full"
-                        options={[
-                          { value: 'Mid exam', label: 'MID EXAM' },
-                          { value: 'Final exam', label: 'FINAL EXAM' },
-                        ]}
+                        options={EXAM_TYPE_OPTIONS}
                       />
+                      {row.examType && (
+                        <p className="mt-1 text-xs leading-5 text-slate-500">
+                          {getExamTypeDescription(row.examType)}
+                        </p>
+                      )}
                     </td>
 
                     <td className="px-4 py-2">
@@ -704,14 +713,16 @@ export default function ResultsPage() {
                         updateRow(
                           index,
                           'examType',
-                          nextValue as 'Mid exam' | 'Final exam',
+                          nextValue as ExamType,
                         )
                       }
-                      options={[
-                        { value: 'Mid exam', label: 'MID EXAM' },
-                        { value: 'Final exam', label: 'FINAL EXAM' },
-                      ]}
+                      options={EXAM_TYPE_OPTIONS}
                     />
+                    {row.examType && (
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        {getExamTypeDescription(row.examType)}
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -831,8 +842,7 @@ export default function ResultsPage() {
               className="w-full md:w-40"
               options={[
                 { value: 'all', label: 'ALL EXAM TYPES' },
-                { value: 'Mid exam', label: 'MID EXAM' },
-                { value: 'Final exam', label: 'FINAL EXAM' },
+                ...EXAM_TYPE_OPTIONS,
               ]}
             />
 
