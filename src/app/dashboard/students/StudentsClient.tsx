@@ -1,14 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useDataStore } from '@/store/dataStore';
 import type { Student, PaymentRecord } from '@/types';
 import Modal from '@/components/ui/Modal';
 import CompactSelect from '@/components/ui/CompactSelect';
 import DeleteModal from '@/components/common/DeleteModal';
 import StudentCard from '@/components/students/StudentCard';
-import StudentProfile from '@/components/students/StudentProfile';
-import StudentRegistrationWizard from '@/components/students/StudentRegistrationWizard';
 import { Plus, Search, Filter, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getModules, type ApiModule } from '@/lib/api';
@@ -24,6 +23,38 @@ import {
   MAX_MAIN_SUBJECTS,
   MAX_BASKET_SUBJECTS,
 } from '@/utils/studentPayload';
+
+// StudentProfile and StudentRegistrationWizard are only rendered
+// conditionally (profile modal / add-student modal), but were previously
+// statically imported at the top of this file — meaning both got bundled
+// into this route's initial JS on every page load, whether or not the user
+// ever opened either modal. Loading them via next/dynamic (ssr: false)
+// splits them into separate chunks that load only when actually needed,
+// while everything else in this file stays exactly as it was — same file,
+// no new files added.
+const StudentProfile = dynamic(
+  () => import('@/components/students/StudentProfile'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="rounded-2xl bg-white px-6 py-4 text-sm text-gray-500">
+          Loading profile…
+        </div>
+      </div>
+    ),
+  },
+);
+
+const StudentRegistrationWizard = dynamic(
+  () => import('@/components/students/StudentRegistrationWizard'),
+  {
+    ssr: false,
+    loading: () => (
+      <p className="p-4 text-sm text-gray-400">Loading registration form…</p>
+    ),
+  },
+);
 
 const emptyOL = {
   year: '',
@@ -542,10 +573,10 @@ export default function StudentsPage() {
         <StudentProfile
           student={currentViewStudent}
           onClose={() => setViewStudent(null)}
-          onPaymentAdd={(payment) =>
+          onPaymentAdd={(payment: Omit<PaymentRecord, 'id'>) =>
             handlePaymentAdd(currentViewStudent.id, payment)
           }
-          onAttendanceUpdate={(moduleId, date, status) =>
+          onAttendanceUpdate={(moduleId: string, date: string, status: 'present' | 'absent') =>
             handleAttendanceUpdate(currentViewStudent.id, moduleId, date, status)
           }
         />

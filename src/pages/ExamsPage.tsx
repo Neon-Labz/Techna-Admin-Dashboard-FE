@@ -13,7 +13,10 @@ import {
   Calendar,
   Search,
 } from 'lucide-react';
-import jsPDF from 'jspdf';
+// jsPDF is no longer statically imported here — it's dynamically
+// imported inside downloadTimetable() so it only loads when the
+// user actually clicks the "Timetable PDF" button, instead of
+// being bundled into this page's initial First Load JS.
 import toast from 'react-hot-toast';
 import { examApi } from '@/api/exam.api';
 import api from '@/lib/axios';
@@ -186,11 +189,15 @@ export default function ExamsPage() {
     }
   };
 
-  const downloadTimetable = () => {
+  const downloadTimetable = async () => {
     if (filtered.length === 0) {
       toast.error('No exams to export');
       return;
     }
+
+    // Dynamically import jsPDF only when the user actually requests
+    // the PDF — keeps it out of this page's initial bundle.
+    const { default: jsPDF } = await import('jspdf');
 
     const generatePdf = (
       img: HTMLImageElement | null,

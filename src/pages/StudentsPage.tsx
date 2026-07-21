@@ -1,18 +1,42 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useDataStore } from '../store/dataStore';
 import type { Student, PaymentRecord } from '../types';
 import Modal from '../components/ui/Modal';
 import StudentCard from '../components/students/StudentCard';
-import StudentProfile from '../components/students/StudentProfile';
-import StudentRegistrationWizard from '../components/students/StudentRegistrationWizard';
 import { Plus, Search, Filter, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { attendanceApi } from '../api/attendance.api';
 import { paymentApi } from '../api/payment.api';
 import { getModules, type ApiModule } from '../lib/api';
 import { cleanOlResults, OL_GRADE_OPTIONS } from '../utils/studentPayload';
+
+
+const StudentProfile = dynamic(
+  () => import('../components/students/StudentProfile'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-2xl px-6 py-4 text-sm text-gray-500">
+          Loading profile…
+        </div>
+      </div>
+    ),
+  },
+);
+
+const StudentRegistrationWizard = dynamic(
+  () => import('../components/students/StudentRegistrationWizard'),
+  {
+    ssr: false,
+    loading: () => (
+      <p className="text-sm text-gray-400 p-4">Loading registration form…</p>
+    ),
+  },
+);
 
 const DISTRICT_OPTIONS = [
   'Ampara', 'Anuradhapura', 'Badulla', 'Batticaloa', 'Colombo', 'Galle',
@@ -671,10 +695,10 @@ export default function StudentsPage() {
         <StudentProfile
           student={currentViewStudent}
           onClose={() => setViewStudent(null)}
-          onPaymentAdd={(payment) =>
+          onPaymentAdd={(payment: Omit<PaymentRecord, 'id'>) =>
             handlePaymentAdd(currentViewStudent.id, payment)
           }
-          onAttendanceUpdate={(moduleId, date, status) =>
+          onAttendanceUpdate={(moduleId: string, date: string, status: 'present' | 'absent') =>
             handleAttendanceUpdate(currentViewStudent.id, moduleId, date, status)
           }
         />

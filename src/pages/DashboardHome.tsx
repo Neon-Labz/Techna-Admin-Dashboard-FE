@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import {
   Users,
   GraduationCap,
@@ -11,73 +12,276 @@ import {
   UserCheck,
   Clock,
 } from 'lucide-react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-} from 'recharts';
 import { dashboardApi } from '@/api/dashboard.api';
 import { isPendingStudentId } from '@/utils/studentId';
 import { normalizeAlSubjects } from '@/utils/studentPayload';
 
 const COLORS = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'];
 
-const formatModuleAxisLabel = (name: unknown, maxLength = 18) => {
-  const label = String(name || 'Module').trim();
-  if (label.length <= maxLength) return label;
-  return `${label.slice(0, maxLength).trimEnd()}...`;
-};
-const splitModuleName = (name: unknown, maxLength = 11) => {
-  const words = String(name || 'Module').trim().split(/\s+/);
-  const lines: string[] = [];
-  let current = '';
+// ---------------------------------------------------------------------------
+// recharts is NOT statically imported at the top of this file anymore.
+// Previously `import { BarChart, ... } from 'recharts'` at the top meant the
+// entire (heavy) charting library got bundled into this page's initial JS,
+// even before there was any data to chart.
+//
+// Instead, next/dynamic is used with an inline loader that pulls in
+// 'recharts' only when this component mounts on the client, and the chart
+// component itself is built right here inside the .then() callback. This
+// keeps everything in this single file — no extra component files — while
+// still splitting recharts into its own chunk that loads after the page's
+// core JS, instead of blocking the initial bundle.
+// ---------------------------------------------------------------------------
 
-  words.forEach((word) => {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > maxLength && current) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = next;
-    }
-  });
+const ModuleEnrollmentChart = dynamic(
+  () =>
+    import('recharts').then((mod) => {
+      const {
+        BarChart,
+        Bar,
+        XAxis,
+        YAxis,
+        CartesianGrid,
+        Tooltip,
+        ResponsiveContainer,
+      } = mod;
 
-  if (current) lines.push(current);
-  return lines.length ? lines : ['Module'];
-};
+      const formatModuleAxisLabel = (name: unknown, maxLength = 18) => {
+        const label = String(name || 'Module').trim();
+        if (label.length <= maxLength) return label;
+        return `${label.slice(0, maxLength).trimEnd()}...`;
+      };
 
-const ModuleAxisTick = ({
-  x = 0,
-  y = 0,
-  payload,
-}: {
-  x?: number;
-  y?: number;
-  payload?: { value?: unknown };
-}) => {
-  const label = formatModuleAxisLabel(payload?.value);
+      const splitModuleName = (name: unknown, maxLength = 11) => {
+        const words = String(name || 'Module').trim().split(/\s+/);
+        const lines: string[] = [];
+        let current = '';
 
-  return (
-    <g transform={`translate(${x},${y})`}>
-      <text
-        transform="rotate(-38)"
-        textAnchor="end"
-        fill="#475569"
-        fontSize={11}
-        fontWeight={600}
-      >
-        {label}
-      </text>
-    </g>
-  );
-};
+        words.forEach((word) => {
+          const next = current ? `${current} ${word}` : word;
+          if (next.length > maxLength && current) {
+            lines.push(current);
+            current = word;
+          } else {
+            current = next;
+          }
+        });
+
+        if (current) lines.push(current);
+        return lines.length ? lines : ['Module'];
+      };
+
+      const ModuleAxisTick = ({
+        x = 0,
+        y = 0,
+        payload,
+      }: {
+        x?: number;
+        y?: number;
+        payload?: { value?: unknown };
+      }) => {
+        const label = formatModuleAxisLabel(payload?.value);
+
+        return (
+          <g transform={`translate(${x},${y})`}>
+            <text
+              transform="rotate(-38)"
+              textAnchor="end"
+              fill="#475569"
+              fontSize={11}
+              fontWeight={600}
+            >
+              {label}
+            </text>
+          </g>
+        );
+      };
+
+      return function ModuleEnrollmentChartInner({
+        data,
+      }: {
+        data: { name: string; students: number }[];
+      }) {
+        const maxModuleStudents = Math.max(1, ...data.map((item) => item.students));
+
+        const moduleChartTicks =
+          maxModuleStudents <= 4
+            ? Array.from({ length: maxModuleStudents + 1 }, (_, index) => index)
+            : [0, Math.ceil(maxModuleStudents / 2), maxModuleStudents];
+
+        const moduleChartHeight = 320;
+        const mobileModuleChartHeight = Math.max(220, data.length * 42);
+
+        return (
+          <>
+            <div className="sm:hidden" style={{ height: mobileModuleChartHeight }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={data}
+                  layout="vertical"
+                  margin={{ top: 6, right: 28, left: -18, bottom: 6 }}
+                  barCategoryGap={12}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="#eef2f7"
+                    horizontal={false}
+                  />
+                  <XAxis
+                    type="number"
+                    allowDecimals={false}
+                    domain={[0, maxModuleStudents]}
+                    ticks={moduleChartTicks}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: '#64748b' }}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={108}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: '#334155' }}
+                    tickFormatter={(name) => splitModuleName(name, 11).join(' ')}
+                  />
+                  <Tooltip
+                    cursor={{ fill: '#f8fafc' }}
+                    formatter={(value) => [`${value} students`, 'Enrolled']}
+                    labelFormatter={(label) => String(label)}
+                  />
+                  <Bar
+                    dataKey="students"
+                    fill="#6366f1"
+                    radius={[0, 7, 7, 0]}
+                    barSize={22}
+                    label={{
+                      position: 'right',
+                      fill: '#334155',
+                      fontSize: 11,
+                      fontWeight: 700,
+                    }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="hidden sm:block" style={{ height: moduleChartHeight }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={data}
+                  margin={{ top: 16, right: 18, left: -18, bottom: 50 }}
+                  barCategoryGap={18}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={<ModuleAxisTick />}
+                    interval={0}
+                    height={56}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    domain={[0, maxModuleStudents]}
+                    ticks={moduleChartTicks}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 12, fill: '#334155' }}
+                  />
+                  <Tooltip
+                    cursor={{ fill: '#f8fafc' }}
+                    formatter={(value) => [`${value} students`, 'Enrolled']}
+                    labelFormatter={(label) => String(label)}
+                  />
+                  <Bar
+                    dataKey="students"
+                    fill="#6366f1"
+                    radius={[8, 8, 0, 0]}
+                    maxBarSize={54}
+                    label={{
+                      position: 'top',
+                      fill: '#334155',
+                      fontSize: 12,
+                      fontWeight: 700,
+                    }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        );
+      };
+    }),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-56 items-center justify-center rounded-xl bg-gray-50 text-sm text-gray-400">
+        Loading chart…
+      </div>
+    ),
+  },
+);
+
+const RevenueByModuleChart = dynamic(
+  () =>
+    import('recharts').then((mod) => {
+      const { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } = mod;
+
+      return function RevenueByModuleChartInner({
+        data,
+      }: {
+        data: { name: string; value: number }[];
+      }) {
+        return (
+          <>
+            <div className="flex-1">
+              <ResponsiveContainer width="100%" height={160}>
+                <PieChart>
+                  <Pie
+                    data={data}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={62}
+                    paddingAngle={1}
+                    dataKey="value"
+                    stroke="#ffffff"
+                    strokeWidth={2}
+                  >
+                    {data.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+
+                  <Tooltip formatter={(v) => `LKR ${Number(v).toLocaleString()}`} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="mt-1 grid grid-cols-1 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-2">
+              {data.map((item, i) => (
+                <div key={item.name} className="flex min-w-0 items-center gap-2">
+                  <span
+                    className="h-2.5 w-2.5 flex-shrink-0 rounded-sm"
+                    style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                  />
+                  <span className="truncate text-gray-600">{item.name}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      };
+    }),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-40 items-center justify-center rounded-xl bg-gray-50 text-sm text-gray-400">
+        Loading chart…
+      </div>
+    ),
+  },
+);
 
 const toArray = (data: any) => {
   if (Array.isArray(data)) return data;
@@ -232,31 +436,38 @@ export default function DashboardHome() {
   const pending = students.filter((s) => s.status === 'pending').length;
 
   const moduleChartData = modules.map((m) => {
-  const moduleName = m.name || m.moduleName || 'Module';
+    const moduleName = m.name || m.moduleName || 'Module';
 
-  return {
-    name: moduleName,
-    students: students.filter((s) => {
-      const studentModules = [s.subjects, s.modules, s.subjectSelection?.subjects, s.subjectSelection?.enrolledModules, s.enrolledModules].flatMap((source) => (Array.isArray(source) ? source : []));
+    return {
+      name: moduleName,
+      students: students.filter((s) => {
+        const studentModules = [
+          s.subjects,
+          s.modules,
+          s.subjectSelection?.subjects,
+          s.subjectSelection?.enrolledModules,
+          s.enrolledModules,
+        ].flatMap((source) => (Array.isArray(source) ? source : []));
 
-      return studentModules.some((item: any) => {
-        const value =
-          typeof item === 'string'
-            ? item
-            : item?.name || item?.moduleName || item?.subject || item?._id || item?.id;
+        return studentModules.some((item: any) => {
+          const value =
+            typeof item === 'string'
+              ? item
+              : item?.name || item?.moduleName || item?.subject || item?._id || item?.id;
 
-        return (
-          value === m._id ||
-          value === m.id ||
-          value === moduleName ||
-          value === m.name ||
-          value === m.moduleName ||
-          normalizeAlSubjects([String(value || '')])[0] === normalizeAlSubjects([String(moduleName || '')])[0]
-        );
-      });
-    }).length,
-  };
-});
+          return (
+            value === m._id ||
+            value === m.id ||
+            value === moduleName ||
+            value === m.name ||
+            value === m.moduleName ||
+            normalizeAlSubjects([String(value || '')])[0] ===
+              normalizeAlSubjects([String(moduleName || '')])[0]
+          );
+        });
+      }).length,
+    };
+  });
 
   const paidPayments = payments.filter(isPaidPayment);
 
@@ -270,39 +481,25 @@ export default function DashboardHome() {
 
       return acc;
     }, {}),
-  ).filter((item: any) => item.value > 0);
+  ).filter((item: any) => item.value > 0) as { name: string; value: number }[];
 
-  const maxModuleStudents = Math.max(
-    1,
-    ...moduleChartData.map((item) => item.students),
-  );
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  const moduleChartTicks =
-    maxModuleStudents <= 4
-      ? Array.from({ length: maxModuleStudents + 1 }, (_, index) => index)
-      : [0, Math.ceil(maxModuleStudents / 2), maxModuleStudents];
+  const upcomingExams = exams
+    .filter((exam) => {
+      const examDate = toDate(exam.date);
+      return Boolean(examDate && examDate >= today);
+    })
+    .sort((a, b) => {
+      const firstDate = toDate(a.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const secondDate = toDate(b.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      return firstDate - secondDate;
+    })
+    .slice(0, 5);
 
-   const moduleChartHeight = 320;
-const mobileModuleChartHeight = Math.max(220, moduleChartData.length * 42);
+  const recentStudents = [...students].slice(-4).reverse();
 
-const today = new Date();
-today.setHours(0, 0, 0, 0);
-
-const upcomingExams = exams
-  .filter((exam) => {
-    const examDate = toDate(exam.date);
-    return Boolean(examDate && examDate >= today);
-  })
-  .sort((a, b) => {
-    const firstDate = toDate(a.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-    const secondDate = toDate(b.date)?.getTime() ?? Number.MAX_SAFE_INTEGER;
-    return firstDate - secondDate;
-  })
-  .slice(0, 5);
-
-const recentStudents = [...students].slice(-4).reverse();
-
-  
   const stats = [
     {
       label: 'Total Students',
@@ -415,116 +612,7 @@ const recentStudents = [...students].slice(-4).reverse();
               No module enrolments yet
             </div>
           ) : (
-            <>
-              <div
-                className="sm:hidden"
-                style={{ height: mobileModuleChartHeight }}
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={moduleChartData}
-                    layout="vertical"
-                    margin={{ top: 6, right: 28, left: -18, bottom: 6 }}
-                    barCategoryGap={12}
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#eef2f7"
-                      horizontal={false}
-                    />
-                    <XAxis
-                      type="number"
-                      allowDecimals={false}
-                      domain={[0, maxModuleStudents]}
-                      ticks={moduleChartTicks}
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 11, fill: '#64748b' }}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      width={108}
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 11, fill: '#334155' }}
-                      tickFormatter={(name) =>
-                        splitModuleName(name, 11).join(' ')
-                      }
-                    />
-                    <Tooltip
-                      cursor={{ fill: '#f8fafc' }}
-                      formatter={(value) => [`${value} students`, 'Enrolled']}
-                      labelFormatter={(label) => String(label)}
-                    />
-                    <Bar
-                      dataKey="students"
-                      fill="#6366f1"
-                      radius={[0, 7, 7, 0]}
-                      barSize={22}
-                      label={{
-                        position: 'right',
-                        fill: '#334155',
-                        fontSize: 11,
-                        fontWeight: 700,
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div
-                className="hidden sm:block"
-                style={{ height: moduleChartHeight }}
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={moduleChartData}
-                    margin={{ top: 16, right: 18, left: -18, bottom: 50 }}
-                    barCategoryGap={18}
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#eef2f7"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="name"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={<ModuleAxisTick />}
-                      interval={0}
-                      height={56}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      domain={[0, maxModuleStudents]}
-                      ticks={moduleChartTicks}
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 12, fill: '#334155' }}
-                    />
-                    <Tooltip
-                      cursor={{ fill: '#f8fafc' }}
-                      formatter={(value) => [`${value} students`, 'Enrolled']}
-                      labelFormatter={(label) => String(label)}
-                    />
-                    <Bar
-                      dataKey="students"
-                      fill="#6366f1"
-                      radius={[8, 8, 0, 0]}
-                      maxBarSize={54}
-                      label={{
-                        position: 'top',
-                        fill: '#334155',
-                        fontSize: 12,
-                        fontWeight: 700,
-                      }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </>
+            <ModuleEnrollmentChart data={moduleChartData} />
           )}
         </div>
 
@@ -539,47 +627,7 @@ const recentStudents = [...students].slice(-4).reverse();
               No revenue records yet
             </div>
           ) : (
-            <>
-              <div className="flex-1">
-                <ResponsiveContainer width="100%" height={160}>
-                  <PieChart>
-                    <Pie
-                      data={paymentByModule}
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={62}
-                      paddingAngle={1}
-                      dataKey="value"
-                      stroke="#ffffff"
-                      strokeWidth={2}
-                    >
-                      {paymentByModule.map((_: any, i: number) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                      ))}
-                    </Pie>
-
-                    <Tooltip
-                      formatter={(v) => `LKR ${Number(v).toLocaleString()}`}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="mt-1 grid grid-cols-1 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-2">
-                {paymentByModule.map((item: any, i: number) => (
-                  <div
-                    key={item.name}
-                    className="flex min-w-0 items-center gap-2"
-                  >
-                    <span
-                      className="h-2.5 w-2.5 flex-shrink-0 rounded-sm"
-                      style={{ backgroundColor: COLORS[i % COLORS.length] }}
-                    />
-                    <span className="truncate text-gray-600">{item.name}</span>
-                  </div>
-                ))}
-              </div>
-            </>
+            <RevenueByModuleChart data={paymentByModule} />
           )}
         </div>
       </div>

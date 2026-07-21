@@ -6,7 +6,6 @@ import {
   CheckCircle, Clock, AlertCircle, Loader2, RefreshCw, Plus, X,
   ChevronDown, ChevronUp, Users, Edit2,
 } from 'lucide-react';
-import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 import { paymentApi, PaymentRecord, CreatePaymentPayload } from '@/api/payment.api';
 import api from '@/lib/axios';
@@ -1461,7 +1460,8 @@ export default function PaymentsPage() {
   const totalPaid    = filtered.filter(p => p.status === 'paid').reduce((s, p) => s + p.amount, 0);
   const totalPending = filtered.filter(p => p.status !== 'paid').reduce((s, p) => s + p.amount, 0);
 
-  const generatePaymentSlip = (payment: PaymentRecord) => {
+  const generatePaymentSlip = async (payment: PaymentRecord) => {
+    const { default: jsPDF } = await import('jspdf');
     const drawPDF = (logoDataUrl?: string) => {
       const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const W   = pdf.internal.pageSize.getWidth();
@@ -1617,13 +1617,14 @@ export default function PaymentsPage() {
   };
 
   
-  const generateStudentAllSlip = (
+  const generateStudentAllSlip = async (
     studentPayments: PaymentRecord[],
     studentName: string,
     studentCode: string,
   ) => {
     if (studentPayments.length === 0) { toast.error('No records to export'); return; }
 
+    const { default: jsPDF } = await import('jspdf');
     const drawPDF = (logoDataUrl?: string) => {
       const pdf     = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const W       = pdf.internal.pageSize.getWidth();
@@ -1803,9 +1804,10 @@ export default function PaymentsPage() {
       });
   };
 
-  const generateAllPDF = () => {
+  const generateAllPDF = async () => {
     if (filtered.length === 0) { toast.error('No records to export'); return; }
 
+    const { default: jsPDF } = await import('jspdf');
     const drawPDF = (logoDataUrl?: string) => {
       const pdf    = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
       const W      = pdf.internal.pageSize.getWidth();
